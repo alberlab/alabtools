@@ -35,10 +35,10 @@ cimport cython
 def NormCSR_ByBiasVector(data,indices,indptr,bias):
     cdef int i,j,N,left,right
     
-    cdef np.int32[::1] Aj = indices
-    cdef np.int32[::1] Ap = indptr
-    cdef np.float32[::1] D = data
-    cdef np.float32[::1] B = bias
+    cdef int[::1] Aj = indices
+    cdef int[::1] Ap = indptr
+    cdef float[::1] D = data
+    cdef float[::1] B = bias
     N = len(indptr)-1
     for i in range(N):
         for j in range(Ap[i],Ap[i+1]):

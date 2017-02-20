@@ -10,7 +10,6 @@ install_requires = [
     'h5py>=2.5', 
     'matplotlib>=1.5',
     'cython',
-    'cooler'
 ]
 tests_require = [
     'mock'
@@ -22,6 +21,11 @@ extras_require = {
         'Sphinx>=1.1', 
     ]
 }
+    
+extensions = [
+    Extension("alabtools.numutils", ["src/numutils.pyx"])
+]
+
 setup(
         name = 'alabtools', 
         version = '1.0.0', 
@@ -30,10 +34,11 @@ setup(
         url = 'https://github.com/alberlab/alabtools', 
         description = 'Alber lab toolbox',
         packages=['alabtools'],
-        package_data={'src' : ['genomes/*']},
+        package_data={'alabtools' : ['genomes/*']},
+        package_dir={'alabtools': 'src'},
         install_requires=install_requires,
         tests_require=tests_require,
         extras_require=extras_require,
-        ext_modules=cythonize("alabtools/numutils.pyx"),
+        ext_modules=cythonize(extensions),
         include_dirs=[numpy.get_include()]
 )
