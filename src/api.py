@@ -189,7 +189,7 @@ class contactmatrix(object):
         """
         rowsum   = self.rowsum()
         self.mask= np.flatnonzero(rowsum < np.percentile(rowsum[rowsum > 0],cutoff))
-        print("{} bins are masked.".format(sum(self.mask)))
+        print("{} bins are masked.".format(len(self.mask)))
         
     def krnorm(self,mask = None, force = False, **kwargs):
         """
