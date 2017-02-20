@@ -41,10 +41,16 @@ class genome(object):
     ----------
     genomeName : str
         The name of the genome. e.g. "hg19" or "mm9"
+        
     chroms : array[str] like, optional
         List of chromosome names. e.g ['chr1','chr2' ... 'chrX']
+        
+    origin : array[int] like, optional
+        List of chr region start, default will be arry of zeros
+        
     length : array[int] like, optional
-        List of chromosome length. e.g [249250621, 243199373, ...]
+        List of chr region length. e.g [249250621, 243199373, ...]
+        
     usechr : array[str] like, optional
         Specified chromsome to use. e.g. ['#','X'] or ['1','2','3'..'10']
         '#' indicates all autosome chromosomes.
@@ -61,13 +67,16 @@ class genome(object):
         Name of genome
     chroms : np.array[str]
         chromosome name
+    origin : np.array[int]
+        chromosome region start
     length : np.array[int]
-        chromosome length
+        chromosome region length
         
     """
-    def __init__(self,genomeName,chroms=None,length=None,usechr=['#','X']):
+    def __init__(self,genomeName,chroms=None,origin=None,length=None,usechr=['#','X'],silence=False):
         if (chroms is None) or (length is None) :
-            print("chroms or length not given, reading from genomes info file.")
+            if not silence:
+                print("chroms or length not given, reading from genomes info file.")
             datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),'genomes/' + genomeName + '.info')
             
             f = loadstream(datafile)
@@ -75,11 +84,16 @@ class genome(object):
             f.close()
             chroms = info['chroms'].astype('S32')
             length = info['length'].astype(int)
+            origin = np.zeros(len(length),dtype=int)
         else :
-            if len(chroms) != len(length):
+            if origin is None:
+                origin = np.zeros(len(length),dtype=int)
+            if len(chroms) != len(length) or len(chroms) != len(origin):
                 raise RuntimeError, "Dimention of chroms and length not met."
             chroms = np.array(chroms).astype('S32')
             length = np.array(length).astype(int)
+            origin = np.array(origin).astype(int)
+            
         choices = np.zeros(len(chroms),dtype=bool)
         for chrnum in usechr:
             if chrnum == '#':
@@ -87,6 +101,7 @@ class genome(object):
             else:
                 choices = np.logical_or(chroms == ('chr'+str(chrnum)), choices)
         self.chroms = chroms[choices]
+        self.origin = origin[choices]
         self.length = length[choices]
         self.genome = genomeName
     #-
@@ -111,7 +126,7 @@ class genome(object):
         binLabel   = []
         for i in range(len(self.chroms)):
             chromList += [i for j in range(binSize[i])]
-            binLabel  += [j for j in range(binSize[i])]
+            binLabel  += [j+int(self.origin[i]/resolution) for j in range(binSize[i])]
    
         startList  = [binLabel[j]*resolution for j in range(sum(binSize))]
         endList    = [binLabel[j]*resolution + resolution for j in range(sum(binSize))]
@@ -178,7 +193,8 @@ class index(object):
     
     def __getitem__(self,key):
         return np.array([self.chrom[key],self.start[key],self.end[key]])
-    
+    def __len__(self):
+        return len(self.chrom)
 #--------------------
 def loadstream(filename):
     """
