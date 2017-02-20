@@ -191,16 +191,17 @@ class sss_matrix(object):
         bias : np.array column vector
         
         """
+        from numutils import NormCSR_ByBiasVector
         bias = bias.flatten()
         
         if len(bias) != self.shape[0] :
             raise ValueError("unrecognized input shape, should be array of length %s" % (self.shape[0]))
         
         self.diagonal *= bias*bias
-        
-        for i in xrange(len(self.indptr)-1):
-            for j in xrange(self.indptr[i],self.indptr[i+1]):
-                self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
+        NormCSR_ByBiasVector(data,indices,indptr,bias)
+        #for i in xrange(len(self.indptr)-1):
+            #for j in xrange(self.indptr[i],self.indptr[i+1]):
+                #self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
         
     #-
     

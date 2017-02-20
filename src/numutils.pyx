@@ -27,5 +27,20 @@ import numpy as np
 cimport numpy as np 
 cimport cython   
 
-#==============================from mirnylib numutils=====================
 #TODO
+@cython.boundscheck(False)
+@cython.wraparound(False)
+@cython.cdivision(True)
+@cython.nonecheck(False)
+def NormCSR_ByBiasVector(data,indices,indptr,bias):
+    cdef int i,j,N,left,right
+    
+    cdef np.int32[::1] Aj = indices
+    cdef np.int32[::1] Ap = indptr
+    cdef np.float32[::1] D = data
+    cdef np.float32[::1] B = bias
+    N = len(indptr)-1
+    for i in range(N):
+        for j in range(Ap[i],Ap[i+1]):
+            D[j] *= B[i] * B[Aj[j]]
+
