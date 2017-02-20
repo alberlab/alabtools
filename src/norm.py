@@ -15,6 +15,7 @@
 # 
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+from __future__ import division, print_function
 __author__  = "Nan Hua"
 
 __license__ = "GPL"
@@ -43,7 +44,7 @@ def bnewt(A, mask=[], tol = 1e-5, delta_lower = 0.1, delta_upper = 3, fl = 0, ch
     (n,m) = A.shape
     #np.seterr(divide='ignore')
   
-    e        = np.ones((n,1))
+    e        = np.ones((n,1),dtype=np.float32)
     e[mask]  = 0
     #res      = np.empty((n,1))
     
@@ -137,12 +138,12 @@ def bnewt(A, mask=[], tol = 1e-5, delta_lower = 0.1, delta_upper = 3, fl = 0, ch
         eta = max(min(eta,etamax),stop_tol/res_norm)
     
         if fl == 1:
-            print '%3d %6d %.3f \n' % (i,k,MVP)
+            print("{:4d} {:6d} {:.3f}".format(i,k,MVP))
       
         if MVP > 500:
             break
     #end outer
   
-    print 'Matrix vector products = %6d\n' % MVP
+    print("Matrix vector products = {:6d}".format(MVP))
 
     return x

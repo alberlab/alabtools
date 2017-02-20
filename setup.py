@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 from distutils.core import setup, Extension
 from Cython.Build import cythonize
+from Cython.Distutils import build_ext
 import numpy
-
+cmdclass = {}
 install_requires = [
     'numpy>=1.9', 
     'scipy>=0.16', 
@@ -25,7 +26,7 @@ extras_require = {
 extensions = [
     Extension("alabtools.numutils", ["src/numutils.pyx"])
 ]
-
+cmdclass.update({'build_ext': build_ext})
 setup(
         name = 'alabtools', 
         version = '1.0.0', 
@@ -33,12 +34,13 @@ setup(
         author_email = 'nhua@usc.edu', 
         url = 'https://github.com/alberlab/alabtools', 
         description = 'Alber lab toolbox',
+        cmdclass = cmdclass,
         packages=['alabtools'],
         package_data={'alabtools' : ['genomes/*']},
         package_dir={'alabtools': 'src'},
         install_requires=install_requires,
         tests_require=tests_require,
         extras_require=extras_require,
-        ext_modules=cythonize(extensions),
+        ext_modules=extensions,
         include_dirs=[numpy.get_include()]
 )

@@ -178,8 +178,19 @@ class contactmatrix(object):
             else:
                 raise TypeError, "Invalid argument type, numpy.ndarray is required"
     #-------------------
-    
-    
+    def maskLowCoverage(self,cutoff = 2):
+        """
+        Removes "cutoff" percent of bins with least counts
+
+        Parameters
+        ----------
+        cutoff : int, 0<cutoff<100
+            Percent of lowest-counts bins to be removed
+        """
+        rowsum   = self.rowsum()
+        self.mask= np.flatnonzero(rowsum < np.percentile(rowsum[rowsum > 0],cutoff))
+        print("{} bins are masked.".format(sum(self.mask)))
+        
     def krnorm(self,mask = None, force = False, **kwargs):
         """
         using krnorm balacing the matrix (overwriting the matrix!)

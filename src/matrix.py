@@ -198,7 +198,7 @@ class sss_matrix(object):
             raise ValueError("unrecognized input shape, should be array of length %s" % (self.shape[0]))
         
         self.diagonal *= bias*bias
-        NormCSR_ByBiasVector(data,indices,indptr,bias)
+        NormCSR_ByBiasVector(self.data,self.indices,self.indptr,bias)
         #for i in xrange(len(self.indptr)-1):
             #for j in xrange(self.indptr[i],self.indptr[i+1]):
                 #self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
