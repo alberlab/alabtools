@@ -52,7 +52,7 @@ class genome(object):
         List of chr region length. e.g [249250621, 243199373, ...]
         
     usechr : array[str] like, optional
-        Specified chromsome to use. e.g. ['#','X'] or ['1','2','3'..'10']
+        Specified chromsome to use. e.g. ['#','X'] or ['1','2','3'..'10']\
         '#' indicates all autosome chromosomes.
         
     Notes
