@@ -74,14 +74,14 @@ void TopmeanSummaryMatrix(int * Ap,
 #pragma omp parallel num_threads(THREADS)
 {
     #pragma omp for schedule(dynamic, 10)
-    for (int i = 0; i < DimB; ++i){
+    for (size_t i = 0; i < DimB; ++i){
         if ((i+1) % int(DimB/10) == 0){
             std::cout << "=";
             std::cout.flush();
         }
         
-        int thread = omp_get_thread_num();
-        for (int j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
+        size_t thread = omp_get_thread_num();
+        for (size_t j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
             int istart = mapping[i];
             int iend = mapping[i+1];
             int jstart = mapping[j];
@@ -95,8 +95,8 @@ void TopmeanSummaryMatrix(int * Ap,
             boxplotStats(data,dataSize,lowerFence,upperFence);
 
             float topSum = 0;
-            int topCount = 0;
-            for (int k = dataSize-1; k >= 0; --k){
+            size_t topCount = 0;
+            for (size_t k = dataSize-1; k >= 0; --k){
                 if (data[k] < upperFence){
                     topSum += data[k];
                     ++topCount;                    
@@ -111,9 +111,9 @@ void TopmeanSummaryMatrix(int * Ap,
     }
 }
     std::cout << std::endl;
-    int k = 0;
-    for (int i = 0; i < THREADS; ++i){
-        for (int j = 0; j < pBi[i].size(); ++j){
+    size_t k = 0;
+    for (size_t i = 0; i < THREADS; ++i){
+        for (size_t j = 0; j < pBi[i].size(); ++j){
             Bi[k] = pBi[i][j];
             Bj[k] = pBj[i][j];
             Bx[k] = pBx[i][j];
