@@ -1,4 +1,4 @@
-# Copyright (C) 2015 University of Southern California and
+# Copyright (C) 2017 University of Southern California and
 #                          Nan Hua
 # 
 # Authors: Nan Hua
