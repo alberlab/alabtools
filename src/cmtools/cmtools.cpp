@@ -2,6 +2,7 @@
 #include<algorithm>
 #include<omp.h>
 #include<iostream>
+#define THREADS 16
 float *fetchData(int * Ap,
                  int * Aj,
                  float * Ax,
@@ -63,14 +64,14 @@ void TopmeanSummaryMatrix(int * Ap,
                           float * Bx)
 
 {
-    std::vector<int> pBi[16],pBj[16];
-    std::vector<float> pBx[16];
+    std::vector<int> pBi[THREADS],pBj[THREADS];
+    std::vector<float> pBx[THREADS];
     int dataSize = 10*10;
     int top = 10;
     std::fill(Bi, Bi + DimB*(DimB+1)/2, 0);
     std::fill(Bj, Bj + DimB*(DimB+1)/2, 0);
     std::fill(Bx, Bx + DimB*(DimB+1)/2, 0);
-#pragma omp parallel num_threads(16)
+#pragma omp parallel num_threads(THREADS)
 {
     #pragma omp for schedule(dynamic, 10)
     for (int i = 0; i < DimB; ++i){
@@ -111,7 +112,7 @@ void TopmeanSummaryMatrix(int * Ap,
 }
     std::cout << std::endl;
     int k = 0;
-    for (int i = 0; i < 8; ++i){
+    for (int i = 0; i < THREADS; ++i){
         for (int j = 0; j < pBi[i].size(); ++j){
             Bi[k] = pBi[i][j];
             Bj[k] = pBj[i][j];
