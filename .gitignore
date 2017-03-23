@@ -94,3 +94,5 @@ ENV/
 *.cool
 *.png
 *.hcs
+numutils.c
+

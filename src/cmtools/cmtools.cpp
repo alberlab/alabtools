@@ -1,7 +1,7 @@
 #include<vector>
 #include<algorithm>
 #include<omp.h>
-
+#include<iostream>
 float *fetchData(int * Ap,
                  int * Aj,
                  float * Ax,
@@ -63,17 +63,22 @@ void TopmeanSummaryMatrix(int * Ap,
                           float * Bx)
 
 {
-    std::vector<int> pBi[8],pBj[8];
-    std::vector<float> pBx[8];
+    std::vector<int> pBi[16],pBj[16];
+    std::vector<float> pBx[16];
     int dataSize = 10*10;
     int top = 10;
     std::fill(Bi, Bi + DimB*(DimB+1)/2, 0);
     std::fill(Bj, Bj + DimB*(DimB+1)/2, 0);
     std::fill(Bx, Bx + DimB*(DimB+1)/2, 0);
-#pragma omp parallel num_threads(8)
+#pragma omp parallel num_threads(16)
 {
-    #pragma omp for schedule(dynamic, 1)
+    #pragma omp for schedule(dynamic, 10)
     for (int i = 0; i < DimB; ++i){
+        if (i % int(DimB/10) == 0){
+            std::cout << "=";
+            std::cout.flush();
+        }
+        
         int thread = omp_get_thread_num();
         for (int j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
             int istart = mapping[i];
@@ -97,14 +102,14 @@ void TopmeanSummaryMatrix(int * Ap,
                 }
                 if (topCount == top){break;}
             }
-            
+            delete[] data;
             pBi[thread].push_back(i);
             pBj[thread].push_back(j);
             pBx[thread].push_back(topSum/top);
         }
     }
 }
-    
+    std::cout << std::endl;
     int k = 0;
     for (int i = 0; i < 8; ++i){
         for (int j = 0; j < pBi[i].size(); ++j){

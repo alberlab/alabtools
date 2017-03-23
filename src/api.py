@@ -209,6 +209,44 @@ class contactmatrix(object):
         x = bnewt(self.matrix,mask=self.mask,check=0,**kwargs)*100
         self.matrix.norm(x) 
     
+    def makeSummaryMatrix(self,step=10):
+        """
+        Filter the matrix to get a lower resolution matrix. New resolution will be resolution/step
+        Parameters
+        ----------
+        step : int
+            The length of submatrix to be checked.
+        
+        Returns
+        -------
+        A contactmatrix instance of the lower resolution matrix.
+        """
+        from ._cmtools import TopmeanSummaryMatrix_func
+        DimA = len(self.idx)
+        
+        newMatrix = contactmatrix(filename=None,genome=self.genome.genome,resolution=self.resolution*step)
+        DimB = len(newMatrix.idx)
+        mapping = np.empty(DimB+1,dtype=np.int32)
+        mapping[0] = 0
+        
+        row = 0
+        for i in range(DimB):
+            row += step
+            if (row > DimA) or (newMatrix.idx.chrom[i] != self.idx.chrom[row]):
+                row = 1 + np.flatnonzero(self.idx.chrom == newMatrix.idx.chrom[i])[-1]
+            mapping[i+1] = row
+        
+        Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
+        Bj = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
+        Bx = np.empty(int(DimB*(DimB+1)/2),dtype=np.float32)
+        TopmeanSummaryMatrix_func(self.matrix.indptr,
+                                  self.matrix.indices,
+                                  self.matrix.data,
+                                  DimA,DimB,
+                                  mapping,
+                                  Bi,Bj,Bx)
+        newMatrix.matrix = matrix.sss_matrix((Bx,(Bi,Bj)))
+        return newMatrix
     #=============saveing method
     def save(self,filename,compression='gzip', compression_opts=6):
         """
