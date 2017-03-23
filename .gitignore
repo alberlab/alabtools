@@ -95,4 +95,5 @@ ENV/
 *.png
 *.hcs
 numutils.c
+*_wrap.c*
 
