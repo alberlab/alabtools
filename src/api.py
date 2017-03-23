@@ -70,14 +70,18 @@ class contactmatrix(object):
             else:
                 raise ValueError("unrecognized constructor constructor usage")
         else:
-            self._build_genome(genomeName=genome,usechr=usechr)
-            self._build_index(resolution=resolution)
+            if not genome is None:
+                self._build_genome(genomeName=genome,usechr=usechr)
+                if not resolution is None:
+                    self._build_index(resolution=resolution)
+            #-
         
     def _build_genome(self,genomeName,usechr=['#','X'],chroms=None,origin=None,length=None):
         self.genome = utils.genome(genomeName,chroms=chroms,origin=origin,length=length,usechr=usechr)
     
     def _build_index(self,resolution):
         self.idx = self.genome.bininfo(resolution)
+        self.resolution = resolution
         
     def _set_index(self,chrom,start,end,size):
         self.idx = utils.index(chrom=chrom,start=start,end=end,size=size)
@@ -177,6 +181,62 @@ class contactmatrix(object):
                 return 1
             else:
                 raise TypeError, "Invalid argument type, numpy.ndarray is required"
+    
+    def __len__(self):
+        return self.idx.__len__()
+    
+    def __getIntra(self,start,stop):
+        uniqueChroms = np.unique(self.idx.chrom[start:stop])
+        usechr = []
+        for c in uniqueChroms:
+            chrom = self.genome.getchrom(c)
+            usechr.append(chrom[3:])
+        
+        newMatrix = contactmatrix(filename=None,genome=None,resolution=None)
+        newMatrix._build_genome(self.genome.genome,
+                                usechr=usechr,
+                                chroms = self.genome.chroms,
+                                origin = self.genome.origin,
+                                length = self.genome.length)
+        
+        newMatrix._set_index(self.idx.chrom[start:stop],
+                             self.idx.start[start:stop],
+                             self.idx.end[start:stop],
+                             [])
+        for i in range(len(newMatrix.idx)):
+            chrom = self.genome.getchrom(newMatrix.idx.chrom[i])
+            newMatrix.idx.chrom[i] = newMatrix.genome.getchrnum(chrom)
+            
+        submat = self.matrix.csr[start:stop,start:stop]
+        
+        newMatrix.matrix = matrix.sss_matrix((submat.data,
+                                              submat.indices,
+                                              submat.indptr,
+                                              self.matrix.diagonal[start:stop]
+                                              ))
+        return newMatrix
+        
+    def __getitem__(self,key):
+        if isinstance(key,str) or isinstance(key,unicode):
+            chrnum = self.genome.getchrnum(key)
+            chrstart = np.flatnonzero(mm.idx.chrom == chrnum)[0]
+            chrend   = np.flatnonzero(mm.idx.chrom == chrnum)[-1]
+            return self.__getIntra(chrstart,chrend+1)
+        
+        elif isinstance(key,slice):
+            if key.step is None: step = 1
+            else: step = key.step
+            if key.start is None: start = 0
+            else: start = key.start
+            if key.stop is None: stop = len(self)
+            else: stop = key.stop
+
+            if start < 0: start += len(self)
+            if stop < 0: stop += len(self)
+            if start > len(self) or stop > len(self) :  raise IndexError, "The index out of range"
+            return self.__getIntra(start,stop)
+        else:
+            raise TypeError, "Invalid argument type"
     #-------------------
     def maskLowCoverage(self,cutoff = 2):
         """
@@ -211,7 +271,8 @@ class contactmatrix(object):
     
     def makeSummaryMatrix(self,step=10):
         """
-        Filter the matrix to get a lower resolution matrix. New resolution will be resolution/step
+        Filter the matrix to get a lower resolution matrix. New resolution will be resolution*step
+        
         Parameters
         ----------
         step : int
@@ -224,7 +285,14 @@ class contactmatrix(object):
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.idx)
         
-        newMatrix = contactmatrix(filename=None,genome=self.genome.genome,resolution=self.resolution*step)
+        newMatrix = contactmatrix(filename=None,genome=None,resolution=None)
+        newMatrix._build_genome(self.genome.genome,
+                                usechr=['#','X','Y'],
+                                chroms = self.genome.chroms,
+                                origin = self.genome.origin,
+                                length = self.genome.length)
+        newMatrix._build_index(self.resolution*step)
+        
         DimB = len(newMatrix.idx)
         mapping = np.empty(DimB+1,dtype=np.int32)
         mapping[0] = 0
@@ -247,6 +315,7 @@ class contactmatrix(object):
                                   Bi,Bj,Bx)
         newMatrix.matrix = matrix.sss_matrix((Bx,(Bi,Bj)))
         return newMatrix
+    
     #=============saveing method
     def save(self,filename,compression='gzip', compression_opts=6):
         """
