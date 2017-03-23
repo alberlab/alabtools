@@ -219,8 +219,8 @@ class contactmatrix(object):
     def __getitem__(self,key):
         if isinstance(key,str) or isinstance(key,unicode):
             chrnum = self.genome.getchrnum(key)
-            chrstart = np.flatnonzero(mm.idx.chrom == chrnum)[0]
-            chrend   = np.flatnonzero(mm.idx.chrom == chrnum)[-1]
+            chrstart = np.flatnonzero(self.idx.chrom == chrnum)[0]
+            chrend   = np.flatnonzero(self.idx.chrom == chrnum)[-1]
             return self.__getIntra(chrstart,chrend+1)
         
         elif isinstance(key,slice):

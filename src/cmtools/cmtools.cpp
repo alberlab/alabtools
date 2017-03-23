@@ -74,7 +74,7 @@ void TopmeanSummaryMatrix(int * Ap,
 {
     #pragma omp for schedule(dynamic, 10)
     for (int i = 0; i < DimB; ++i){
-        if (i+1 % int(DimB/10) == 0){
+        if ((i+1) % int(DimB/10) == 0){
             std::cout << "=";
             std::cout.flush();
         }
