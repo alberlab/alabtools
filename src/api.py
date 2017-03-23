@@ -199,14 +199,16 @@ class contactmatrix(object):
                                 origin = self.genome.origin,
                                 length = self.genome.length)
         
-        newMatrix._set_index(self.idx.chrom[start:stop],
+        newchrom = np.copy(self.idx.chrom[start:stop])
+        for i in range(len(newchrom)):
+            chrom = self.genome.getchrom(newchrom[i])
+            newchrom[i] = newMatrix.genome.getchrnum(chrom)
+            
+        newMatrix._set_index(newchrom,
                              self.idx.start[start:stop],
                              self.idx.end[start:stop],
                              [])
-        for i in range(len(newMatrix.idx)):
-            chrom = self.genome.getchrom(newMatrix.idx.chrom[i])
-            newMatrix.idx.chrom[i] = newMatrix.genome.getchrnum(chrom)
-            
+        
         submat = self.matrix.csr[start:stop,start:stop]
         
         newMatrix.matrix = matrix.sss_matrix((submat.data,
@@ -315,7 +317,19 @@ class contactmatrix(object):
                                   Bi,Bj,Bx)
         newMatrix.matrix = matrix.sss_matrix((Bx,(Bi,Bj)))
         return newMatrix
+    #=============plotting method
     
+    def plot(self,filename,log=False,**kwargs):
+        from .plots import plotmatrix,red
+        
+        mat = self.matrix.toarray()
+        if log:
+            mat = np.log(mat)
+        
+        cmap = kwargs.pop('cmap',red)
+        
+        plotmatrix(filename,mat,cmap=cmap,**kwargs)
+        
     #=============saveing method
     def save(self,filename,compression='gzip', compression_opts=6):
         """

@@ -96,7 +96,7 @@ void TopmeanSummaryMatrix(int * Ap,
 
             float topSum = 0;
             int topCount = 0;
-            for (size_t k = dataSize-1; k >= 0; --k){
+            for (int k = dataSize-1; k >= 0; --k){
                 if (data[k] < upperFence){
                     topSum += data[k];
                     ++topCount;                    
@@ -111,9 +111,9 @@ void TopmeanSummaryMatrix(int * Ap,
     }
 }
     std::cout << std::endl;
-    size_t k = 0;
-    for (size_t i = 0; i < THREADS; ++i){
-        for (size_t j = 0; j < pBi[i].size(); ++j){
+    int k = 0;
+    for (int i = 0; i < THREADS; ++i){
+        for (int j = 0; j < pBi[i].size(); ++j){
             Bi[k] = pBi[i][j];
             Bj[k] = pBj[i][j];
             Bx[k] = pBx[i][j];
