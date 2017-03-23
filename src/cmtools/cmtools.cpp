@@ -74,14 +74,14 @@ void TopmeanSummaryMatrix(int * Ap,
 #pragma omp parallel num_threads(THREADS)
 {
     #pragma omp for schedule(dynamic, 10)
-    for (size_t i = 0; i < DimB; ++i){
+    for (int i = 0; i < DimB; ++i){
         if ((i+1) % int(DimB/10) == 0){
             std::cout << "=";
             std::cout.flush();
         }
         
-        size_t thread = omp_get_thread_num();
-        for (size_t j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
+        int thread = omp_get_thread_num();
+        for (int j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
             int istart = mapping[i];
             int iend = mapping[i+1];
             int jstart = mapping[j];
@@ -95,7 +95,7 @@ void TopmeanSummaryMatrix(int * Ap,
             boxplotStats(data,dataSize,lowerFence,upperFence);
 
             float topSum = 0;
-            size_t topCount = 0;
+            int topCount = 0;
             for (size_t k = dataSize-1; k >= 0; --k){
                 if (data[k] < upperFence){
                     topSum += data[k];
