@@ -188,7 +188,7 @@ class index(object):
         else:
             self.size = np.array(size,dtype=int)
         
-        self.offset = np.array([sum(self.size[:i]) for i in range(len(self.size))])
+        self.offset = np.array([sum(self.size[:i]) for i in range(len(self.size)+1)])
     #-
     
     def __getitem__(self,key):

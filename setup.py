@@ -2,7 +2,15 @@
 from distutils.core import setup, Extension
 from Cython.Build import cythonize
 from Cython.Distutils import build_ext
+
 import numpy
+
+# Obtain the numpy include directory.  This logic works across numpy versions.
+try:
+    numpy_include = numpy.get_include()
+except AttributeError:
+    numpy_include = numpy.get_numpy_include()
+    
 cmdclass = {}
 install_requires = [
     'numpy>=1.9', 
@@ -24,7 +32,14 @@ extras_require = {
 }
     
 extensions = [
-    Extension("alabtools.numutils", ["src/numutils.pyx"])
+    Extension("alabtools.numutils", ["src/numutils.pyx"]),
+    Extension("alabtools._cmtools", ["src/cmtools/cmtools.i","src/cmtools/cmtools.cpp"],
+              swig_opts=['-c++'],
+              language="c++",
+              include_dirs = [numpy_include],
+              extra_compile_args=["-fopenmp"],
+              extra_link_args=["-fopenmp"]
+             )
 ]
 cmdclass.update({'build_ext': build_ext})
 setup(
