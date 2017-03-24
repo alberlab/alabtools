@@ -96,17 +96,23 @@ void TopmeanSummaryMatrix(int * Ap,
 
             float topSum = 0;
             int topCount = 0;
+            int topCut   = top;
+            if (upperFence == 0){
+                upperFence = 10;
+                topCut     = dataSize;
+            }
+            
             for (int k = dataSize-1; k >= 0; --k){
                 if (data[k] < upperFence){
                     topSum += data[k];
                     ++topCount;                    
                 }
-                if (topCount == top){break;}
+                if (topCount == topCut){break;}
             }
             delete[] data;
             pBi[thread].push_back(i);
             pBj[thread].push_back(j);
-            pBx[thread].push_back(topSum/top);
+            pBx[thread].push_back(topSum/topCut);
         }
     }
 }

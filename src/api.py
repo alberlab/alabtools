@@ -331,7 +331,7 @@ class contactmatrix(object):
             self.matrix.data = self.matrix.csr.data
             
         
-    def iterativeScaling(self,averageContact=24,tol=0.01):
+    def iterativeScaling(self,averageContact=24,theta=0.001,tol=0.01):
         average = 0
         originalData = np.copy(self.matrix.csr.data)
         originalDiag = np.copy(self.matrix.diagonal)
@@ -344,11 +344,16 @@ class contactmatrix(object):
             
             newMat = self.makeSummaryMatrix(step=10)
             
+            newMat.matrix.data[newMat.matrix.data < theta] = 0
+            
             rowsums = newMat.rowsum()
             rowsums = rowsums[rowsums > 0]
             average = rowsums.mean()
             fmax = fmax/averageContact*average
-
+        #==
+        
+        newMat = self.makeSummaryMatrix(step=10)
+        
         print("{} {}".format(fmax,average))
         return newMat
         
