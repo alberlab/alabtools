@@ -317,6 +317,33 @@ class contactmatrix(object):
                                   Bi,Bj,Bx)
         newMatrix.matrix = matrix.sss_matrix((Bx,(Bi,Bj)))
         return newMatrix
+    
+    def fmaxScaling(self,fmax,force=False):
+        """
+        use fmax to generate probability matrix
+        
+        """
+        if isinstance(fmax,float) or isinstance(fmax,np.float32) or isinstance(fmax,int):
+            self.matrix.data /= fmax
+            self.matrix.data = self.matrix.data.clip(max=1)
+    
+        
+    def iterativeScaling(self,averageContact=24,tol=0.001):
+        import copy
+        average = 0
+        originalMatrix = copy.deepcopy(self.matrix)
+        fmax = self.rowsum().sum()/(averageContact+0.2)
+        while abs(average - averageContact)/averageContact > tol :
+            print fmax
+            self.matrix = copy.deepcopy(originalMatrix)
+            self.fmaxScaling(fmax,force=True)
+            rowsums = self.rowsum()
+            rowsums = rowsums(rowsums > 0)
+            average = rowsums.mean()
+            fmax = fmax/averageContact*average
+
+        print fmax,average
+        
     #=============plotting method
     
     def plot(self,filename,log=False,**kwargs):

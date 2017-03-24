@@ -73,7 +73,7 @@ void TopmeanSummaryMatrix(int * Ap,
     std::fill(Bx, Bx + DimB*(DimB+1)/2, 0);
 #pragma omp parallel num_threads(THREADS)
 {
-    #pragma omp for schedule(dynamic, 10)
+    #pragma omp for schedule(dynamic, 5)
     for (int i = 0; i < DimB; ++i){
         if ((i+1) % int(DimB/10) == 0){
             std::cout << "=";
