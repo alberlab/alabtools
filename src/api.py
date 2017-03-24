@@ -324,25 +324,33 @@ class contactmatrix(object):
         
         """
         if isinstance(fmax,float) or isinstance(fmax,np.float32) or isinstance(fmax,int):
-            self.matrix.data /= fmax
-            self.matrix.data = self.matrix.data.clip(max=1)
-    
+            self.matrix.csr.data /= fmax
+            self.matrix.diagonal /= fmax
+            self.matrix.csr.data = self.matrix.csr.data.clip(max=1)
+            self.matrix.diagonal = self.matrix.diagonal.clip(max=1)
+            self.matrix.data = self.matrix.csr.data
+            
         
-    def iterativeScaling(self,averageContact=24,tol=0.001):
-        import copy
+    def iterativeScaling(self,averageContact=24,tol=0.01):
         average = 0
-        originalMatrix = copy.deepcopy(self.matrix)
-        fmax = self.rowsum().sum()/(averageContact+0.2)
+        originalData = np.copy(self.matrix.csr.data)
+        originalDiag = np.copy(self.matrix.diagonal)
+        fmax = self.rowsum().mean()/(averageContact+0.2)
         while abs(average - averageContact)/averageContact > tol :
-            print fmax
-            self.matrix = copy.deepcopy(originalMatrix)
+            print(fmax,average)
+            self.matrix.csr.data = np.copy(originalData)
+            self.matrix.diagonal = np.copy(originalDiag)
             self.fmaxScaling(fmax,force=True)
-            rowsums = self.rowsum()
-            rowsums = rowsums(rowsums > 0)
+            
+            newMat = self.makeSummaryMatrix(step=10)
+            
+            rowsums = newMat.rowsum()
+            rowsums = rowsums[rowsums > 0]
             average = rowsums.mean()
             fmax = fmax/averageContact*average
 
-        print fmax,average
+        print("{} {}".format(fmax,average))
+        return newMat
         
     #=============plotting method
     
