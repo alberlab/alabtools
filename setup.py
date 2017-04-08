@@ -39,6 +39,13 @@ extensions = [
               include_dirs = [numpy_include],
               extra_compile_args=["-fopenmp"],
               extra_link_args=["-fopenmp"]
+             ),
+    Extension("alabtools._geotools", ["src/geotools/geotools.i","src/geotools/geotools.cpp"],
+              swig_opts=['-c++'],
+              language="c++",
+              include_dirs = [numpy_include],
+              extra_compile_args=["-lCGAL","-lmpfr","-lgmp"],
+              extra_link_args=["-lCGAL","-lmpfr","-lgmp"]
              )
 ]
 cmdclass.update({'build_ext': build_ext})
