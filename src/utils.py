@@ -39,7 +39,7 @@ class genome(object):
     
     Parameters
     ----------
-    genomeName : str
+    assembly : str
         The name of the genome. e.g. "hg19" or "mm9"
         
     chroms : array[str] like, optional
@@ -63,26 +63,26 @@ class genome(object):
     Attributes
     ----------
     
-    genome : str
+    assembly : str
         Name of genome
-    chroms : np.array[str]
+    chroms : np.array[string10]
         chromosome name
-    origin : np.array[int]
+    origin : np.array[int64]
         chromosome region start
-    length : np.array[int]
+    length : np.array[int64]
         chromosome region length
         
     """
-    def __init__(self,genomeName,chroms=None,origin=None,length=None,usechr=['#','X'],silence=False):
+    def __init__(self,assembly,chroms=None,origin=None,length=None,usechr=['#','X'],silence=False):
         if (chroms is None) or (length is None) :
             if not silence:
                 print("chroms or length not given, reading from genomes info file.")
-            datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),'genomes/' + genomeName + '.info')
+            datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),'genomes/' + assembly + '.info')
             
             f = loadstream(datafile)
-            info = np.genfromtxt(f,dtype=[('chroms','S32'),('length',int)])
+            info = np.genfromtxt(f,dtype=[('chroms','S10'),('length',int)])
             f.close()
-            chroms = info['chroms'].astype('S32')
+            chroms = info['chroms'].astype('S10')
             length = info['length'].astype(int)
             origin = np.zeros(len(length),dtype=int)
         else :
@@ -103,7 +103,7 @@ class genome(object):
         self.chroms = chroms[choices]
         self.origin = origin[choices]
         self.length = length[choices]
-        self.genome = genomeName
+        self.assembly = assembly
     #-
     
     def bininfo(self,resolution):
@@ -159,12 +159,16 @@ class index(object):
     
     Parameters
     ----------
-    chrom : list[int]
+    chrom : list[int32]
         chromosome index starting from 0 (which is chr1)
-    start : list[int]
+    start : list[int64]
         bin start
-    end : list[int]
+    end : list[int64]
         bin end
+    label : list[string10]
+        label for each bin
+    chrom_sizes : list[int32]
+        number of bins of each chromosome
     """
     def __init__(self,chrom,start,end,**kwargs):
         if not(len(chrom) == len(start) and len(start) == len(end)):
@@ -175,24 +179,36 @@ class index(object):
             raise RuntimeError, "start should be list of integers."
         if not isinstance(end[0],int):
             raise RuntimeError, "end should be list of integers."
-        self.chrom = np.array(chrom,dtype=int)
+        self.chrom = np.array(chrom,dtype=np.int32)
         self.start = np.array(start,dtype=int)
         self.end   = np.array(end,dtype=int)
         
-        size = kwargs.pop('size',[])
-        if len(size) != len(self.chrom):
+        chrom_sizes = kwargs.pop('chrom_sizes',[])
+        if len(chrom_sizes) != len(self.chrom):
             chromList = np.unique(self.chrom)
-            self.size = np.zeros(len(chromList),dtype=int)
+            self.chrom_sizes = np.zeros(len(chromList),dtype=np.int32)
             for i in chromList:
-                self.size[i] = sum(self.chrom == i)
+                self.chrom_sizes[i] = sum(self.chrom == i)
         else:
-            self.size = np.array(size,dtype=int)
+            self.chrom_sizes = np.array(chrom_sizes,dtype=np.int32)
         
-        self.offset = np.array([sum(self.size[:i]) for i in range(len(self.size)+1)])
+        label = kwargs.pop('label',[])
+        if len(label) != len(self.chrom):
+            self.label = np.array(['']*len(self.chrom),dtype='S10')
+        else:
+            self.label = np.array(label,dtype='S10')
+        
+        copy = kwargs.pop('copy',[])
+        if len(copy) != len(self.chrom):
+            self.copy = np.zeros(len(self.chrom),dtype=np.int32)
+        else:
+            self.copy= np.array(copy,dtype=np.int32)
+            
+        self.offset = np.array([sum(self.chrom_sizes[:i]) for i in range(len(self.chrom_sizes)+1)])
     #-
     
     def __getitem__(self,key):
-        return np.array([self.chrom[key],self.start[key],self.end[key]])
+        return np.array([self.chrom[key],self.start[key],self.end[key],self.label[key]])
     def __len__(self):
         return len(self.chrom)
 #--------------------

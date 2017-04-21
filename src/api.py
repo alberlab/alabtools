@@ -49,12 +49,11 @@ class contactmatrix(object):
     Attributes
     ----------
     matrix : sparse skyline matrix sss_matrix
-    idx : utils.genome
-    genome : string, for the genome
+    index : utils.index
+    genome : utils.genome, for the genome
     resolution : resolution for the contact matrix
     
     """
-    
     def __init__(self,filename=None,genome='hg19',resolution=100000,usechr=['#','X']):
         if isinstance(filename,str):
             if not os.path.isfile(filename):
@@ -71,33 +70,34 @@ class contactmatrix(object):
                 raise ValueError("unrecognized constructor constructor usage")
         else:
             if not genome is None:
-                self._build_genome(genomeName=genome,usechr=usechr)
+                self._build_genome(assembly=genome,usechr=usechr)
                 if not resolution is None:
                     self._build_index(resolution=resolution)
             #-
         
-    def _build_genome(self,genomeName,usechr=['#','X'],chroms=None,origin=None,length=None):
-        self.genome = utils.genome(genomeName,chroms=chroms,origin=origin,length=length,usechr=usechr)
+    def _build_genome(self,assembly,usechr=['#','X'],chroms=None,origin=None,length=None):
+        self.genome = utils.genome(assembly,chroms=chroms,origin=origin,length=length,usechr=usechr)
     
     def _build_index(self,resolution):
-        self.idx = self.genome.bininfo(resolution)
+        self.index = self.genome.bininfo(resolution)
         self.resolution = resolution
         
-    def _set_index(self,chrom,start,end,size):
-        self.idx = utils.index(chrom=chrom,start=start,end=end,size=size)
+    def _set_index(self,chrom,start,end,label,chrom_sizes):
+        self.index = utils.index(chrom=chrom,start=start,end=end,label=label,chrom_sizes=chrom_sizes)
         
     def _load_hcs(self,filename):
         h5 = h5py.File(filename)
         self.resolution = h5.attrs["resolution"]
-        self._build_genome(h5.attrs["genome"],usechr=['#','X','Y'],
+        self._build_genome(h5["genome"]["assembly"],usechr=['#','X','Y'],
                            chroms = h5["genome"]["chroms"],
                            origin = h5["genome"]["origin"],
                            length = h5["genome"]["length"])
         
-        self._set_index(h5["idx"]["chrom"],
-                        h5["idx"]["start"],
-                        h5["idx"]["end"],
-                        h5["idx"]["size"])
+        self._set_index(h5["index"]["chrom"],
+                        h5["index"]["start"],
+                        h5["index"]["end"],
+                        h5["index"]["label"],
+                        h5["index"]["chrom_sizes"])
         
         self.matrix = matrix.sss_matrix((h5["matrix"]["data"],
                                          h5["matrix"]["indices"],
@@ -107,13 +107,13 @@ class contactmatrix(object):
         
     def _load_cool(self,filename,usechr=['#','X']):        
         h5 = h5py.File(filename)
-        genome = h5.attrs['genome-assembly']
+        assembly = h5.attrs['genome-assembly']
         nbins = h5.attrs['nbins']
         self.resolution = h5.attrs['bin-size']
-        self._build_genome(genome,usechr=usechr,chroms=h5['chroms']['name'][:],length=h5['chroms']['length'][:])
+        self._build_genome(assembly,usechr=usechr,chroms=h5['chroms']['name'][:],length=h5['chroms']['length'][:])
         self._build_index(self.resolution)
         
-        origenome = utils.genome(genome,usechr=['#','X','Y'],silence=True)
+        origenome = utils.genome(assembly,usechr=['#','X','Y'],silence=True)
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0],allChrId[0]+1]]
         for i in allChrId[1:]:
@@ -122,7 +122,7 @@ class contactmatrix(object):
             else:
                 chrIdRange.append([i,i+1])
         
-        indptr = np.empty(len(self.idx)+1,np.int32)
+        indptr = np.empty(len(self.index)+1,np.int32)
         indptr[0] = 0
         indices = []
         data = []
@@ -142,7 +142,7 @@ class contactmatrix(object):
                     if cjl < cil:
                         continue
                     j0,j1 = (h5['indexes']['chrom_offset'][cjl],h5['indexes']['chrom_offset'][cjh])
-                    chroffset = self.idx.offset[self.genome.getchrnum(origenome[cjl])]
+                    chroffset = self.index.offset[self.genome.getchrnum(origenome[cjl])]
                     mask = (rowind >= j0) & (rowind < j1)
                     newind.append(rowind[mask] - j0 + chroffset)
                     newdata.append(rowdata[mask])
@@ -159,7 +159,7 @@ class contactmatrix(object):
         indices = np.concatenate(indices)
         data    = np.concatenate(data)
         
-        self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.idx),len(self.idx)))
+        self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.index),len(self.index)))
         h5.close()
     #-------------------
     def rowsum(self):
@@ -183,10 +183,10 @@ class contactmatrix(object):
                 raise TypeError, "Invalid argument type, numpy.ndarray is required"
     
     def __len__(self):
-        return self.idx.__len__()
+        return self.index.__len__()
     
     def __getIntra(self,start,stop):
-        uniqueChroms = np.unique(self.idx.chrom[start:stop])
+        uniqueChroms = np.unique(self.index.chrom[start:stop])
         usechr = []
         for c in uniqueChroms:
             chrom = self.genome.getchrom(c)
@@ -199,14 +199,14 @@ class contactmatrix(object):
                                 origin = self.genome.origin,
                                 length = self.genome.length)
         
-        newchrom = np.copy(self.idx.chrom[start:stop])
+        newchrom = np.copy(self.index.chrom[start:stop])
         for i in range(len(newchrom)):
             chrom = self.genome.getchrom(newchrom[i])
             newchrom[i] = newMatrix.genome.getchrnum(chrom)
             
         newMatrix._set_index(newchrom,
-                             self.idx.start[start:stop],
-                             self.idx.end[start:stop],
+                             self.index.start[start:stop],
+                             self.index.end[start:stop],
                              [])
         
         submat = self.matrix.csr[start:stop,start:stop]
@@ -221,8 +221,8 @@ class contactmatrix(object):
     def __getitem__(self,key):
         if isinstance(key,str) or isinstance(key,unicode):
             chrnum = self.genome.getchrnum(key)
-            chrstart = np.flatnonzero(self.idx.chrom == chrnum)[0]
-            chrend   = np.flatnonzero(self.idx.chrom == chrnum)[-1]
+            chrstart = np.flatnonzero(self.index.chrom == chrnum)[0]
+            chrend   = np.flatnonzero(self.index.chrom == chrnum)[-1]
             return self.__getIntra(chrstart,chrend+1)
         
         elif isinstance(key,slice):
@@ -285,25 +285,25 @@ class contactmatrix(object):
         A contactmatrix instance of the lower resolution matrix.
         """
         from ._cmtools import TopmeanSummaryMatrix_func
-        DimA = len(self.idx)
+        DimA = len(self.index)
         
         newMatrix = contactmatrix(filename=None,genome=None,resolution=None)
-        newMatrix._build_genome(self.genome.genome,
+        newMatrix._build_genome(self.genome.assembly,
                                 usechr=['#','X','Y'],
                                 chroms = self.genome.chroms,
                                 origin = self.genome.origin,
                                 length = self.genome.length)
         newMatrix._build_index(self.resolution*step)
         
-        DimB = len(newMatrix.idx)
+        DimB = len(newMatrix.index)
         mapping = np.empty(DimB+1,dtype=np.int32)
         mapping[0] = 0
         
         row = 0
         for i in range(DimB):
             row += step
-            if (row > DimA) or (newMatrix.idx.chrom[i] != self.idx.chrom[row]):
-                row = 1 + np.flatnonzero(self.idx.chrom == newMatrix.idx.chrom[i])[-1]
+            if (row > DimA) or (newMatrix.index.chrom[i] != self.index.chrom[row]):
+                row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
             mapping[i+1] = row
         
         Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
@@ -380,18 +380,21 @@ class contactmatrix(object):
             filename += '.hcs'
             
         h5f = h5py.File(filename, 'w')
-        h5f.attrs["genome"] = self.genome.genome
         h5f.attrs["resolution"] = self.resolution
+        h5f.attrs["version"] = __version__
+        h5f.attrs["nbins"] = len(self.index)
         ggrp = h5f.create_group("genome")
+        ggrp.create_dataset("assembly",data=self.genome.assembly)
         ggrp.create_dataset("chroms",data=self.genome.chroms, compression=compression,compression_opts=compression_opts)
         ggrp.create_dataset("origin",data=self.genome.origin, compression=compression,compression_opts=compression_opts)
         ggrp.create_dataset("length",data=self.genome.length, compression=compression,compression_opts=compression_opts)
         
-        igrp = h5f.create_group("idx")
-        igrp.create_dataset("chrom",data=self.idx.chrom, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("start",data=self.idx.start, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("end",  data=self.idx.end,   compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("size", data=self.idx.size,  compression=compression,compression_opts=compression_opts)
+        igrp = h5f.create_group("index")
+        igrp.create_dataset("chrom",data=self.index.chrom, compression=compression,compression_opts=compression_opts)
+        igrp.create_dataset("start",data=self.index.start, compression=compression,compression_opts=compression_opts)
+        igrp.create_dataset("end",  data=self.index.end,   compression=compression,compression_opts=compression_opts)
+        igrp.create_dataset("label",data=self.index.label, compression=compression,compression_opts=compression_opts)
+        igrp.create_dataset("chrom_sizes", data=self.index.chrom_sizes,  compression=compression,compression_opts=compression_opts)
         
         mgrp = h5f.create_group("matrix")
         mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)

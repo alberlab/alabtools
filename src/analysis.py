@@ -49,6 +49,9 @@ def PolarizationIndex(PointsA, PointsB):
     PointsI = np.array(PointsI)
     PointsI = PointsI.reshape((int(len(PointsI)/3), 3))
     
+    if len(PointsI) < 4:
+        return 1
+    
     Ich = ConvexHull(PointsI)
     
     return ((1-Ich.volume/Ach.volume) * (1-Ich.volume/Bch.volume)) ** 0.5
