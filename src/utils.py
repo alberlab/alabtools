@@ -181,7 +181,7 @@ class index(object):
             raise RuntimeError("start should be a list of integers.")
         if not isinstance(end[0],int):
             raise RuntimeError("end should be list of integers.")
-        self.chrom = np.array(chrom,dtype=int32)
+        self.chrom = np.array(chrom,dtype=np.int32)
         self.start = np.array(start,dtype=int)
         self.end   = np.array(end,dtype=int)
         
