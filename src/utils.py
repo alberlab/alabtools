@@ -30,8 +30,10 @@ import math
 import numpy as np
 import subprocess
 import warnings
-from cStringIO import StringIO
-
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 class genome(object):
     """
@@ -89,7 +91,7 @@ class genome(object):
             if origin is None:
                 origin = np.zeros(len(length),dtype=int)
             if len(chroms) != len(length) or len(chroms) != len(origin):
-                raise RuntimeError, "Dimention of chroms and length not met."
+                raise RuntimeError("Dimension of chroms and length do not match.")
             chroms = np.array(chroms).astype('S32')
             length = np.array(length).astype(int)
             origin = np.array(origin).astype(int)
@@ -172,14 +174,14 @@ class index(object):
     """
     def __init__(self,chrom,start,end,**kwargs):
         if not(len(chrom) == len(start) and len(start) == len(end)):
-            raise RuntimeError, "Dimention not met."
+            raise RuntimeError("Dimensions do not match.")
         if not isinstance(chrom[0],int):
-            raise RuntimeError, "chrom should be list of integers."
+            raise RuntimeError("chrom should be a list of integers.")
         if not isinstance(start[0],int):
-            raise RuntimeError, "start should be list of integers."
+            raise RuntimeError("start should be a list of integers.")
         if not isinstance(end[0],int):
-            raise RuntimeError, "end should be list of integers."
-        self.chrom = np.array(chrom,dtype=np.int32)
+            raise RuntimeError("end should be list of integers.")
+        self.chrom = np.array(chrom,dtype=int32)
         self.start = np.array(start,dtype=int)
         self.end   = np.array(end,dtype=int)
         
@@ -218,7 +220,7 @@ def loadstream(filename):
     zipped file are automaticaly unzipped using stream
     """
     if not os.path.isfile(filename):
-        raise IOError,"File %s doesn't exist!\n" % (filename)
+        raise IOError("File %s doesn't exist!\n" % (filename))
     if os.path.splitext(filename)[1] == '.gz':
         p = subprocess.Popen(["zcat", filename], stdout = subprocess.PIPE)
         f = StringIO(p.communicate()[0])
