@@ -32,8 +32,8 @@ try:
 except:
    import pickle
 import warnings
-import utils
-import matrix
+from . import utils
+from . import matrix
 
 class contactmatrix(object):
     """
@@ -180,7 +180,7 @@ class contactmatrix(object):
                 self.mask = mask
                 return 1
             else:
-                raise TypeError, "Invalid argument type, numpy.ndarray is required"
+                raise TypeError("Invalid argument type, numpy.ndarray is required")
     
     def __len__(self):
         return self.idx.__len__()
@@ -235,10 +235,10 @@ class contactmatrix(object):
 
             if start < 0: start += len(self)
             if stop < 0: stop += len(self)
-            if start > len(self) or stop > len(self) :  raise IndexError, "The index out of range"
+            if start > len(self) or stop > len(self) :  raise IndexError("The index out of range")
             return self.__getIntra(start,stop)
         else:
-            raise TypeError, "Invalid argument type"
+            raise TypeError("Invalid argument type")
     #-------------------
     def maskLowCoverage(self,cutoff = 2):
         """
