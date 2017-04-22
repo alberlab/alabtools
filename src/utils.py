@@ -145,11 +145,11 @@ class genome(object):
             return findidx[0]
   
     def getchrom(self,chromNum):
-        assert isinstance(chromNum,int)
+        assert isinstance(chromNum,(int,np.int32,np.int64))
         return self.chroms[chromNum]
     
     def __getitem__(self,key):
-        if isinstance(key,int):
+        if isinstance(key,(int,np.int32,np.int64)):
             return self.getchrom(key)
     def __len__(self):
         return len(self.chroms)
