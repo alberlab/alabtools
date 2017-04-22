@@ -193,7 +193,7 @@ class contactmatrix(object):
             usechr.append(chrom[3:])
         
         newMatrix = contactmatrix(filename=None,genome=None,resolution=None)
-        newMatrix._build_genome(self.genome.genome,
+        newMatrix._build_genome(self.genome.assembly,
                                 usechr=usechr,
                                 chroms = self.genome.chroms,
                                 origin = self.genome.origin,
