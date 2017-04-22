@@ -88,7 +88,7 @@ class contactmatrix(object):
     def _load_hcs(self,filename):
         h5 = h5py.File(filename)
         self.resolution = h5.attrs["resolution"]
-        self._build_genome(h5["genome"]["assembly"],usechr=['#','X','Y'],
+        self._build_genome(h5["genome"]["assembly"].value,usechr=['#','X','Y'],
                            chroms = h5["genome"]["chroms"],
                            origin = h5["genome"]["origin"],
                            length = h5["genome"]["length"])
@@ -384,7 +384,7 @@ class contactmatrix(object):
         h5f.attrs["version"] = __version__
         h5f.attrs["nbins"] = len(self.index)
         ggrp = h5f.create_group("genome")
-        ggrp.create_dataset("assembly",data=self.genome.assembly)
+        ggrp.create_dataset("assembly",data=self.genome.assembly, compression=compression,compression_opts=compression_opts)
         ggrp.create_dataset("chroms",data=self.genome.chroms, compression=compression,compression_opts=compression_opts)
         ggrp.create_dataset("origin",data=self.genome.origin, compression=compression,compression_opts=compression_opts)
         ggrp.create_dataset("length",data=self.genome.length, compression=compression,compression_opts=compression_opts)
