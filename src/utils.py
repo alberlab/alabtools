@@ -175,11 +175,11 @@ class index(object):
     def __init__(self,chrom,start,end,**kwargs):
         if not(len(chrom) == len(start) and len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
-        if not isinstance(chrom[0],int):
+        if not isinstance(chrom[0],(int,np.int32,np.int64)):
             raise RuntimeError("chrom should be a list of integers.")
-        if not isinstance(start[0],int):
+        if not isinstance(start[0],(int,np.int32,np.int64)):
             raise RuntimeError("start should be a list of integers.")
-        if not isinstance(end[0],int):
+        if not isinstance(end[0],(int,np.int32,np.int64)):
             raise RuntimeError("end should be list of integers.")
         self.chrom = np.array(chrom,dtype=np.int32)
         self.start = np.array(start,dtype=int)
