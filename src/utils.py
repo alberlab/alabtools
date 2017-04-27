@@ -99,13 +99,13 @@ class Genome(object):
         if (chroms is None) or (lengths is None) :
             if not silence:
                 print("chroms or lengths not given, reading from genomes info file.")
-            datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),'genomes/' + assembly + '.info')
+            datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),"genomes/" + assembly + ".info")
             
             f = loadstream(datafile)
-            info = np.genfromtxt(f,dtype=[('chroms',CHROMS_DTYPE),('lengths',LENGTHS_DTYPE)])
+            info = np.genfromtxt(f,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
             f.close()
-            chroms = info['chroms'].astype(CHROMS_DTYPE)
-            lengths = info['lengths'].astype(LENGTHS_DTYPE)
+            chroms = info["chroms"].astype(CHROMS_DTYPE)
+            lengths = info["lengths"].astype(LENGTHS_DTYPE)
             origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
         else :
             if origins is None:
@@ -120,9 +120,9 @@ class Genome(object):
         choices = np.zeros(len(chroms),dtype=bool)
         for chrnum in usechr:
             if chrnum == '#':
-                choices = np.logical_or([re.search('chr[0-9]',c) != None for c in chroms],choices)
+                choices = np.logical_or([re.search("chr[0-9]",c) != None for c in chroms],choices)
             else:
-                choices = np.logical_or(chroms == ('chr'+str(chrnum)), choices)
+                choices = np.logical_or(chroms == ("chr"+str(chrnum)), choices)
         self.chroms = chroms[choices]
         self.origins = origins[choices]
         self.lengths = lengths[choices]
@@ -174,8 +174,13 @@ class Genome(object):
             return self.getchrom(key)
     def __len__(self):
         return len(self.chroms)
-    
-    def save(self,h5f,compression='gzip', compression_opts=6):
+    def __repr__(self):
+        represent = "Genome Assembly: " + self.assembly + '\n'
+        for i in range(len(self.chroms)):
+            represent += self.chroms[i] + '\t' + str(self.origins[i]) + '-' + str(self.origins[i]+self.lengths[i]) + '\n'
+        return represent
+        
+    def save(self,h5f,compression="gzip", compression_opts=6):
         """
         Save genome information into a hd5f file handle. The information will be saved as a group of datasets:
         genome/
@@ -189,7 +194,7 @@ class Genome(object):
         h5f : h5py.File object
         
         compression : string
-            'gzip' as default
+            "gzip" as default
         
         compression_opts : int
             compression level, higher the better
@@ -198,12 +203,12 @@ class Genome(object):
         try:
             ggrp = h5f.create_group("genome")
         except:
-            ggrp = h5f['genome']
+            ggrp = h5f["genome"]
             
         ggrp.create_dataset("assembly",data=self.assembly)
         ggrp.create_dataset("chroms",data=self.chroms, compression=compression,compression_opts=compression_opts)
-        ggrp.create_dataset("origin",data=self.origins, compression=compression,compression_opts=compression_opts)
-        ggrp.create_dataset("length",data=self.lengths, compression=compression,compression_opts=compression_opts)
+        ggrp.create_dataset("origins",data=self.origins, compression=compression,compression_opts=compression_opts)
+        ggrp.create_dataset("lengths",data=self.lengths, compression=compression,compression_opts=compression_opts)
         
 #--------------------
 class Index(object):
@@ -250,7 +255,7 @@ class Index(object):
         self.start = np.array(start,dtype=START_DTYPE)
         self.end   = np.array(end,dtype=END_DTYPE)
         
-        chrom_sizes = kwargs.pop('chrom_sizes',chrom_sizes)
+        chrom_sizes = kwargs.pop("chrom_sizes",chrom_sizes)
         if len(chrom_sizes) != len(self.chrom):
             chromList = np.unique(self.chrom)
             self.chrom_sizes = np.zeros(len(chromList),dtype=CHROM_SIZES_DTYPE)
@@ -259,13 +264,13 @@ class Index(object):
         else:
             self.chrom_sizes = np.array(chrom_sizes,dtype=CHROM_SIZES_DTYPE)
         
-        label = kwargs.pop('label',label)
+        label = kwargs.pop("label",label)
         if len(label) != len(self.chrom):
-            self.label = np.array(['']*len(self.chrom),dtype=LABEL_DTYPE)
+            self.label = np.array([""]*len(self.chrom),dtype=LABEL_DTYPE)
         else:
             self.label = np.array(label,dtype=LABEL_DTYPE)
         
-        copy = kwargs.pop('copy',copy)
+        copy = kwargs.pop("copy",copy)
         if len(copy) != len(self.chrom):
             self.copy = np.zeros(len(self.chrom),dtype=COPY_DTYPE)
         else:
@@ -275,12 +280,15 @@ class Index(object):
     #-
     
     def __getitem__(self,key):
-        return np.column_stack([self.chrom[key],self.start[key],self.end[key],self.label[key]],dtype=None)
+        return np.rec.fromarrays((self.chrom[key],self.start[key],self.end[key],self.label[key]),
+                                 dtype=[("chrom",CHROM_DTYPE),("start",START_DTYPE),("end",END_DTYPE),("label",LABEL_DTYPE)])
     
     def __len__(self):
         return len(self.chrom)
+    def __repr__(self):
+        return self.chrom_sizes.__repr__()
     
-    def save(self,h5f,compression='gzip', compression_opts=6):
+    def save(self,h5f,compression="gzip", compression_opts=6):
         """
         Save index information into a hd5f file handle. The information will be saved as a group of datasets:
         index/
@@ -305,7 +313,7 @@ class Index(object):
         try:
             igrp = h5f.create_group("index")
         except:
-            igrp = h5f['index']
+            igrp = h5f["index"]
             
         igrp.create_dataset("chrom",data=self.chrom, compression=compression,compression_opts=compression_opts)
         igrp.create_dataset("start",data=self.start, compression=compression,compression_opts=compression_opts)
