@@ -184,7 +184,7 @@ class Contactmatrix(object):
             chrom = self.genome.getchrom(c)
             usechr.append(chrom[3:])
         
-        newMatrix = contactmatrix(filename=None,genome=None,resolution=None)
+        newMatrix = Contactmatrix(filename=None,genome=None,resolution=None)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=usechr,
                                 chroms = self.genome.chroms,
@@ -281,7 +281,7 @@ class Contactmatrix(object):
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.index)
         
-        newMatrix = contactmatrix(filename=None,genome=None,resolution=None)
+        newMatrix = Contactmatrix(filename=None,genome=None,resolution=None)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=['#','X','Y'],
                                 chroms = self.genome.chroms,
