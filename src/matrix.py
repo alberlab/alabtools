@@ -27,6 +27,11 @@ import numpy as np
 from scipy.sparse import coo_matrix, csr_matrix, dia_matrix, isspmatrix_csr
 from scipy.sparse.sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
+
+DATA_DTYPE = np.float32
+INDPTR_DTYPE = np.int32
+INDICIES_DTYPE = np.int32
+
 class sss_matrix(object):
     """
     Sparse Skyline Format
@@ -45,7 +50,7 @@ class sss_matrix(object):
     
     
     """
-    def __init__(self,arg1,shape=None,dtype=np.float32,copy=False,mem=True):
+    def __init__(self,arg1,shape=None,dtype=DATA_DTYPE,copy=False,mem=True):
         if isinstance(arg1,str):
             pass
         elif isinstance(arg1, tuple):
@@ -73,13 +78,13 @@ class sss_matrix(object):
                         M, N = shape
                         shape = (M, N)
                         
-                    row = np.array(row,dtype=np.int32)
-                    col = np.array(col,dtype=np.int32)
+                    row = np.array(row,dtype=INDICIES_DTYPE)
+                    col = np.array(col,dtype=INDICIES_DTYPE)
                     obj = np.array(obj,dtype=dtype)
                     nnz = len(obj)
                     
-                    indptr = np.empty(M+1,dtype=np.int32)
-                    indices = np.empty_like(col,dtype=np.int32)
+                    indptr = np.empty(M+1,dtype=INDPTR_DTYPE)
+                    indices = np.empty_like(col,dtype=INDICIES_DTYPE)
                     data = np.empty_like(obj,dtype=dtype)
                     
                     coo_tocsr(M, N, nnz, row, col, obj,
@@ -89,19 +94,19 @@ class sss_matrix(object):
                     
                 elif len(arg1) == 3:
                     (data, indices, indptr) = arg1
-                    data    = np.array(data,dtype=np.float32)
-                    indices = np.array(indices,dtype=np.int32)
-                    indptr  = np.array(indptr,dtype=np.int32)
+                    data    = np.array(data,dtype=dtype)
+                    indices = np.array(indices,dtype=INDICIES_DTYPE)
+                    indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
                     
                     self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
                     self._pop_diag()
                     
                 elif len(arg1) == 4:
                     (data, indices, indptr, diag) = arg1
-                    data    = np.array(data,dtype=np.float32)
-                    indices = np.array(indices,dtype=np.int32)
-                    indptr  = np.array(indptr,dtype=np.int32)
-                    diag    = np.array(diag,dtype=np.float32)
+                    data    = np.array(data,dtype=dtype)
+                    indices = np.array(indices,dtype=INDICIES_DTYPE)
+                    indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
+                    diag    = np.array(diag,dtype=dtype)
                     if shape is None:
                         shape = (len(diag),len(diag))
                     else:

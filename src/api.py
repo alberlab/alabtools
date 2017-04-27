@@ -35,7 +35,7 @@ import warnings
 from . import utils
 from . import matrix
 
-class contactmatrix(object):
+class Contactmatrix(object):
     """
     A flexible matrix instant that supports various methods for processing HiC contacts
     
@@ -49,8 +49,8 @@ class contactmatrix(object):
     Attributes
     ----------
     matrix : sparse skyline matrix sss_matrix
-    index : utils.index
-    genome : utils.genome, for the genome
+    index : utils.Index
+    genome : utils.Genome, for the genome
     resolution : resolution for the contact matrix
     
     """
@@ -75,29 +75,21 @@ class contactmatrix(object):
                     self._build_index(resolution=resolution)
             #-
         
-    def _build_genome(self,assembly,usechr=['#','X'],chroms=None,origin=None,length=None):
-        self.genome = utils.genome(assembly,chroms=chroms,origin=origin,length=length,usechr=usechr)
+    def _build_genome(self,assembly,usechr=['#','X'],chroms=None,origins=None,lengths=None):
+        self.genome = utils.Genome(assembly,chroms=chroms,origins=origins,lengths=lengths,usechr=usechr)
     
     def _build_index(self,resolution):
         self.index = self.genome.bininfo(resolution)
         self.resolution = resolution
         
-    def _set_index(self,chrom,start,end,label,chrom_sizes):
-        self.index = utils.index(chrom=chrom,start=start,end=end,label=label,chrom_sizes=chrom_sizes)
+    def _set_index(self,chrom,start,end,label=None,copy=None,chrom_sizes=None):
+        self.index = utils.Index(chrom=chrom,start=start,end=end,label=label,copy=copy,chrom_sizes=chrom_sizes)
         
     def _load_hcs(self,filename):
         h5 = h5py.File(filename)
         self.resolution = h5.attrs["resolution"]
-        self._build_genome(h5["genome"]["assembly"].value,usechr=['#','X','Y'],
-                           chroms = h5["genome"]["chroms"],
-                           origin = h5["genome"]["origin"],
-                           length = h5["genome"]["length"])
-        
-        self._set_index(h5["index"]["chrom"],
-                        h5["index"]["start"],
-                        h5["index"]["end"],
-                        h5["index"]["label"],
-                        h5["index"]["chrom_sizes"])
+        self.genome = utils.Genome(h5)
+        self.index = utils.Index(h5)
         
         self.matrix = matrix.sss_matrix((h5["matrix"]["data"],
                                          h5["matrix"]["indices"],
@@ -113,7 +105,7 @@ class contactmatrix(object):
         self._build_genome(assembly,usechr=usechr,chroms=h5['chroms']['name'][:],length=h5['chroms']['length'][:])
         self._build_index(self.resolution)
         
-        origenome = utils.genome(assembly,usechr=['#','X','Y'],silence=True)
+        origenome = utils.Genome(assembly,usechr=['#','X','Y'],silence=True)
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0],allChrId[0]+1]]
         for i in allChrId[1:]:
@@ -383,19 +375,10 @@ class contactmatrix(object):
         h5f = h5py.File(filename, 'w')
         h5f.attrs["resolution"] = self.resolution
         h5f.attrs["version"] = __version__
-        h5f.attrs["nbins"] = len(self.index)
-        ggrp = h5f.create_group("genome")
-        ggrp.create_dataset("assembly",data=self.genome.assembly)
-        ggrp.create_dataset("chroms",data=self.genome.chroms, compression=compression,compression_opts=compression_opts)
-        ggrp.create_dataset("origin",data=self.genome.origin, compression=compression,compression_opts=compression_opts)
-        ggrp.create_dataset("length",data=self.genome.length, compression=compression,compression_opts=compression_opts)
+        h5f.attrs["nbin"] = len(self.index)
+        self.genome.save(h5,compression=compression,compression_opts=compression_opts)
         
-        igrp = h5f.create_group("index")
-        igrp.create_dataset("chrom",data=self.index.chrom, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("start",data=self.index.start, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("end",  data=self.index.end,   compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("label",data=self.index.label, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("chrom_sizes", data=self.index.chrom_sizes,  compression=compression,compression_opts=compression_opts)
+        self.index.save(h5,compression=compression,compression_opts=compression_opts)
         
         mgrp = h5f.create_group("matrix")
         mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)
