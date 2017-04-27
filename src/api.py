@@ -188,8 +188,8 @@ class Contactmatrix(object):
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=usechr,
                                 chroms = self.genome.chroms,
-                                origin = self.genome.origin,
-                                length = self.genome.length)
+                                origins = self.genome.origins,
+                                lengths = self.genome.lengths)
         
         newchrom = np.copy(self.index.chrom[start:stop])
         for i in range(len(newchrom)):
@@ -284,8 +284,8 @@ class Contactmatrix(object):
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=['#','X','Y'],
                                 chroms = self.genome.chroms,
-                                origin = self.genome.origin,
-                                length = self.genome.length)
+                                origins = self.genome.origins,
+                                lengths = self.genome.lengths)
         newMatrix._build_index(self.resolution*step)
         
         DimB = len(newMatrix.index)
