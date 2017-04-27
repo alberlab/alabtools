@@ -102,7 +102,7 @@ class Contactmatrix(object):
         assembly = h5.attrs['genome-assembly']
         nbins = h5.attrs['nbins']
         self.resolution = h5.attrs['bin-size']
-        self._build_genome(assembly,usechr=usechr,chroms=h5['chroms']['name'][:],length=h5['chroms']['length'][:])
+        self._build_genome(assembly,usechr=usechr,chroms=h5['chroms']['name'][:],lengths=h5['chroms']['length'][:])
         self._build_index(self.resolution)
         
         origenome = utils.Genome(assembly,usechr=['#','X','Y'],silence=True)
