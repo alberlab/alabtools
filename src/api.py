@@ -200,6 +200,7 @@ class Contactmatrix(object):
                              self.index.start[start:stop],
                              self.index.end[start:stop],
                              self.index.label[start:stop],
+                             self.index.copy[start:stop],
                              [])
         
         submat = self.matrix.csr[start:stop,start:stop]
