@@ -20,7 +20,7 @@ from __future__ import division, print_function
 __author__  = "Nan Hua"
 
 __license__ = "GPL"
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
@@ -377,9 +377,9 @@ class Contactmatrix(object):
         h5f.attrs["resolution"] = self.resolution
         h5f.attrs["version"] = __version__
         h5f.attrs["nbin"] = len(self.index)
-        self.genome.save(h5,compression=compression,compression_opts=compression_opts)
+        self.genome.save(h5f,compression=compression,compression_opts=compression_opts)
         
-        self.index.save(h5,compression=compression,compression_opts=compression_opts)
+        self.index.save(h5f,compression=compression,compression_opts=compression_opts)
         
         mgrp = h5f.create_group("matrix")
         mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)
