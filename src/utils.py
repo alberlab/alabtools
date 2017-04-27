@@ -230,7 +230,7 @@ class Index(object):
     chrom_sizes : list[int32]
         number of bins of each chromosome
     """
-    def __init__(self,chrom,start,end,**kwargs):
+    def __init__(self,chrom,start=None,end=None,**kwargs):
         if isinstance(chrom,h5py.File):
             start = chrom["index"]["start"]
             end   = chrom["index"]["end"]
