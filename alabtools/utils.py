@@ -199,7 +199,7 @@ class Genome(object):
         compression_opts : int
             compression level, higher the better
         """
-        assert(h5f,h5py.File)
+        assert isinstance(h5f,h5py.File)
         try:
             ggrp = h5f.create_group("genome")
         except:
@@ -309,7 +309,7 @@ class Index(object):
         compression_opts : int
             compression level, higher the better
         """
-        assert(h5f,h5py.File)
+        assert isinstance(h5f,h5py.File)
         try:
             igrp = h5f.create_group("index")
         except:

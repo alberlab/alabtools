@@ -32,15 +32,15 @@ extras_require = {
 }
     
 extensions = [
-    Extension("alabtools.numutils", ["src/numutils.pyx"]),
-    Extension("alabtools._cmtools", ["src/cmtools/cmtools.i","src/cmtools/cmtools.cpp"],
+    Extension("alabtools.numutils", ["alabtools/numutils.pyx"]),
+    Extension("alabtools._cmtools", ["alabtools/cmtools/cmtools.i","alabtools/cmtools/cmtools.cpp"],
               swig_opts=['-c++'],
               language="c++",
               include_dirs = [numpy_include],
               extra_compile_args=["-fopenmp"],
               extra_link_args=["-fopenmp"]
              ),
-    Extension("alabtools._geotools", ["src/geotools/geotools.i","src/geotools/geotools.cpp"],
+    Extension("alabtools._geotools", ["alabtools/geotools/geotools.i","alabtools/geotools/geotools.cpp"],
               swig_opts=['-c++'],
               language="c++",
               include_dirs = [numpy_include],
@@ -59,7 +59,6 @@ setup(
         cmdclass = cmdclass,
         packages=['alabtools'],
         package_data={'alabtools' : ['genomes/*']},
-        package_dir={'alabtools': 'src'},
         install_requires=install_requires,
         tests_require=tests_require,
         extras_require=extras_require,
