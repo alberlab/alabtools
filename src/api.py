@@ -27,11 +27,14 @@ import numpy as np
 import os.path
 import re
 import h5py
+import scipy.sparse
 try:
    import cPickle as pickle
 except:
    import pickle
 import warnings
+from six import string_types
+
 from . import utils
 from . import matrix
 
@@ -41,7 +44,9 @@ class Contactmatrix(object):
     
     Parameters
     ----------
-    filename : 
+    mat : str or matrix or None
+        read matrix from filename, or initialize the matrix from a scipy
+        sparse matrix, or a numpy dense matrix, or with an empty matrix
     genome : string for a genome e.g.'hg19','mm9'
     resolution : int, the resolution for the hic matrix e.g. 100000
     usechr : list, containing the chromosomes used for generating the matrix
@@ -54,28 +59,58 @@ class Contactmatrix(object):
     resolution : resolution for the contact matrix
     
     """
-    def __init__(self,filename=None,genome='hg19',resolution=100000,usechr=['#','X']):
-        if isinstance(filename,str):
-            if not os.path.isfile(filename):
-                raise IOError("File %s doesn't exist!\n" % (filename))
-            if os.path.splitext(filename)[1] == '.hdf5' or os.path.splitext(filename)[1] == '.hmat':
-                self._load_hmat(filename)
-            elif os.path.splitext(filename)[1] == '.hcs':
-                self._load_hcs(filename)
-            elif os.path.splitext(filename)[1] == '.cool':
-                self._load_cool(filename,usechr=usechr)
-            elif os.path.splitext(filename)[1] == '.hic':
-                self._load_hic(filename,resolution=resolution,usechr=usechr)
+    def __init__(self, mat=None, genome='hg19', resolution=100000, usechr=['#','X']):
+        # matrix from file
+        if isinstance(mat, string_types):
+            if not os.path.isfile(mat):
+                raise IOError("File %s doesn't exist!\n" % (mat))
+            if os.path.splitext(mat)[1] == '.hdf5' or os.path.splitext(mat)[1] == '.hmat':
+                self._load_hmat(mat)
+            elif os.path.splitext(mat)[1] == '.hcs':
+                self._load_hcs(mat)
+            elif os.path.splitext(mat)[1] == '.cool':
+                self._load_cool(mat,usechr=usechr)
+            elif os.path.splitext(mat)[1] == '.hic':
+                self._load_hic(mat,resolution=resolution,usechr=usechr)
             else:
                 raise ValueError("unrecognized constructor constructor usage")
         else:
-            if not genome is None:
-                self._build_genome(assembly=genome,usechr=usechr)
-                if not resolution is None:
+            # build genome/index
+            if genome is not None:
+                self._build_genome(assembly=genome, usechr=usechr)
+                if resolution is not None:
                     self._build_index(resolution=resolution)
+                elif isinstance(resolution, utils.Index):
+                    self.index = resolution
+
+            # matrix from scipy sparse matrix
+            if isinstance(mat, scipy.sparse.base.spmatrix):
+                mm = mat.tocsr()
+                diag = mm.diagonal()
+                mm.setdiag(0)
+                mm.eliminate_zeros()
+                self.matrix = matrix.sss_matrix((mm.data, mm.indices, 
+                                                 mm.indptr, diag))
+            # matrix from numpy dense matrix
+            elif isinstance(mat, np.ndarray):
+                mm = scipy.sparse.csr_matrix(mat)
+                diag = mm.diagonal()
+                mm.setdiag(0)
+                mm.eliminate_zeros()
+                self.matrix = matrix.sss_matrix((mm.data, mm.indices, 
+                                                 mm.indptr, diag))
+            # empty matrix
+            elif mat is None:
+                self.matrix = matrix.sss_matrix(([], [],
+                                                 [0] * len(genome),
+                                                 [0] * len(genome)))
+            else:
+                raise(ValueError, 'Invalid mat argument')
+            assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index)) 
             #-
         
-    def _build_genome(self,assembly,usechr=['#','X'],chroms=None,origins=None,lengths=None):
+    def _build_genome(self, assembly, usechr=['#','X'], chroms=None, 
+                      origins=None, lengths=None):
         self.genome = utils.Genome(assembly,chroms=chroms,origins=origins,lengths=lengths,usechr=usechr)
     
     def _build_index(self,resolution):
