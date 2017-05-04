@@ -101,12 +101,13 @@ class Contactmatrix(object):
                                                  mm.indptr, diag))
             # empty matrix
             elif mat is None:
-                self.matrix = matrix.sss_matrix(([], [],
-                                                 [0] * len(genome),
-                                                 [0] * len(genome)))
+                if hasattr(self,"index"):
+                    self.matrix = matrix.sss_matrix(([], [],
+                                                    [0] * (len(self.index)+1),
+                                                    [0] * len(self.index)))
             else:
                 raise(ValueError, 'Invalid mat argument')
-            assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index)) 
+            #assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index)) 
             #-
         
     def _build_genome(self, assembly, usechr=['#','X'], chroms=None, 
