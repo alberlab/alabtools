@@ -219,7 +219,7 @@ class Contactmatrix(object):
             chrom = self.genome.getchrom(c)
             usechr.append(chrom[3:])
         
-        newMatrix = Contactmatrix(filename=None,genome=None,resolution=None)
+        newMatrix = Contactmatrix(None,genome=None,resolution=None)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=usechr,
                                 chroms = self.genome.chroms,
@@ -248,7 +248,7 @@ class Contactmatrix(object):
         return newMatrix
         
     def __getitem__(self,key):
-        if isinstance(key,str) or isinstance(key,unicode):
+        if isinstance(key,string_types):
             chrnum = self.genome.getchrnum(key)
             chrstart = np.flatnonzero(self.index.chrom == chrnum)[0]
             chrend   = np.flatnonzero(self.index.chrom == chrnum)[-1]
