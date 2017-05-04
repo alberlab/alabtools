@@ -96,4 +96,6 @@ ENV/
 *.hcs
 numutils.c
 *_wrap.c*
+cmtools.py
+geotools.py
 
