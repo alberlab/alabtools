@@ -550,9 +550,18 @@ class HssFile(h5py.File):
         index.save(self)
 
     def set_coordinates(self, coord):
-        assert (len(coord.shape) == 3) and (coord.shape[2] == 3), \
-               'Coordinates should have dimensions ' \
-               '(nstruct x nbeads x 3), got %s' % repr(coord.shape)
+        assert isinstance(coord, np.ndarray)
+        if (len(coord.shape) != 3) or (coord.shape[2] != 3):
+            raise ValueError('Coordinates should have dimensions ' 
+                             '(nstruct x nbeads x 3), '
+                             'got %s' % repr(coord.shape))
+        if self._nstruct != 0 and self._nstruct != len(coord):
+            raise ValueError('Coord first axis does not match number of '
+                             'structures')
+        if self._nbead != 0 and self._nbead != coord.shape[1]:
+            raise ValueError('Coord second axis does not match number of '
+                             'beads')
+
         if 'coordinates' in self:
             self['coordinates'][...] = coord
         else:
@@ -563,6 +572,11 @@ class HssFile(h5py.File):
         
     def set_radii(self, radii):
         assert isinstance(radii, np.ndarray)
+        if len(radii.shape) != 1:
+            raise ValueError('radii should be a one dimensional array')
+        if self._nbead != 0 and self._nbead != len(radii):
+            raise ValueError('Length of radii does not match number of beads')
+        
         if 'radii' in self:
             self['radii'][...] = radii
         else:
