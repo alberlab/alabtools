@@ -8,7 +8,7 @@ Alberlab API Reference
 alabtools
 ---------
 
-.. autoclass:: alabtools.contactmatrix
+.. autoclass:: alabtools.Contactmatrix
     :members:
     :undoc-members:
 
@@ -19,8 +19,8 @@ alabtools.matrix
  
 alabtools.utils
 ---------------
-.. autoclass:: alabtools.utils.genome
+.. autoclass:: alabtools.utils.Genome
     :members:
 
-.. autoclass:: alabtools.utils.index
+.. autoclass:: alabtools.utils.Index
     :members:
