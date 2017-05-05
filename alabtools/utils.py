@@ -36,6 +36,9 @@ try:
 except ImportError:
     from io import StringIO
 
+
+__hss_version__ = 1
+
 CHROMS_DTYPE = np.dtype('S10')
 ORIGINS_DTYPE = np.int32
 LENGTHS_DTYPE = np.int32
@@ -46,6 +49,9 @@ END_DTYPE = np.int32
 COPY_DTYPE = np.int32
 LABEL_DTYPE = np.dtype('S10')
 CHROM_SIZES_DTYPE = np.int32
+
+COORD_DTYPE = np.float32
+RADII_DTYPE = np.float32
 
 class Genome(object):
     """
@@ -200,10 +206,9 @@ class Genome(object):
             compression level, higher the better
         """
         assert isinstance(h5f,h5py.File)
-        try:
-            ggrp = h5f.create_group("genome")
-        except:
-            ggrp = h5f["genome"]
+        if 'genome' in h5f:
+            del h5f["genome"]
+        ggrp = h5f.create_group("genome")
             
         ggrp.create_dataset("assembly",data=self.assembly)
         ggrp.create_dataset("chroms",data=self.chroms, compression=compression,compression_opts=compression_opts)
@@ -230,7 +235,8 @@ class Index(object):
     chrom_sizes : list[int32]
         number of bins of each chromosome
     """
-    def __init__(self,chrom,start=None,end=None,**kwargs):
+    def __init__(self, chrom=[], start=[], end=[], **kwargs):
+        
         if isinstance(chrom,h5py.File):
             start = chrom["index"]["start"]
             end   = chrom["index"]["end"]
@@ -243,40 +249,41 @@ class Index(object):
             copy = []
             chrom_sizes = []
         
-        if not(len(chrom) == len(start) and len(start) == len(end)):
+        if not(len(chrom) == len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
-        if not isinstance(chrom[0],(int,np.int32,np.int64)):
+        if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64)):
             raise RuntimeError("chrom should be a list of integers.")
-        if not isinstance(start[0],(int,np.int32,np.int64)):
+        if len(start) and not isinstance(start[0], (int, np.int32, np.int64)):
             raise RuntimeError("start should be a list of integers.")
-        if not isinstance(end[0],(int,np.int32,np.int64)):
+        if len(end) and not isinstance(end[0], (int, np.int32, np.int64)):
             raise RuntimeError("end should be list of integers.")
-        self.chrom = np.array(chrom,dtype=CHROM_DTYPE)
-        self.start = np.array(start,dtype=START_DTYPE)
-        self.end   = np.array(end,dtype=END_DTYPE)
+        self.chrom = np.array(chrom, dtype=CHROM_DTYPE)
+        self.start = np.array(start, dtype=START_DTYPE)
+        self.end   = np.array(end, dtype=END_DTYPE)
         
         chrom_sizes = kwargs.pop("chrom_sizes",chrom_sizes)
         if len(chrom_sizes) != len(self.chrom):
             chromList = np.unique(self.chrom)
-            self.chrom_sizes = np.zeros(len(chromList),dtype=CHROM_SIZES_DTYPE)
+            self.chrom_sizes = np.zeros(len(chromList), dtype=CHROM_SIZES_DTYPE)
             for i in chromList:
                 self.chrom_sizes[i] = sum(self.chrom == i)
         else:
-            self.chrom_sizes = np.array(chrom_sizes,dtype=CHROM_SIZES_DTYPE)
+            self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
         
         label = kwargs.pop("label",label)
         if len(label) != len(self.chrom):
-            self.label = np.array([""]*len(self.chrom),dtype=LABEL_DTYPE)
+            self.label = np.array([""] * len(self.chrom), dtype=LABEL_DTYPE)
         else:
-            self.label = np.array(label,dtype=LABEL_DTYPE)
+            self.label = np.array(label, dtype=LABEL_DTYPE)
         
-        copy = kwargs.pop("copy",copy)
+        copy = kwargs.pop("copy", copy)
         if len(copy) != len(self.chrom):
-            self.copy = np.zeros(len(self.chrom),dtype=COPY_DTYPE)
+            self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
         else:
-            self.copy= np.array(copy,dtype=COPY_DTYPE)
+            self.copy= np.array(copy, dtype=COPY_DTYPE)
             
-        self.offset = np.array([sum(self.chrom_sizes[:i]) for i in range(len(self.chrom_sizes)+1)])
+        self.offset = np.array([sum(self.chrom_sizes[:i]) 
+                                for i in range(len(self.chrom_sizes) + 1)])
     #-
     
     def __getitem__(self,key):
@@ -309,11 +316,10 @@ class Index(object):
         compression_opts : int
             compression level, higher the better
         """
-        assert isinstance(h5f,h5py.File)
-        try:
-            igrp = h5f.create_group("index")
-        except:
-            igrp = h5f["index"]
+        assert isinstance(h5f, h5py.File)
+        if 'index' in h5f:
+            del h5f['index']
+        igrp = h5f.create_group("index")
             
         igrp.create_dataset("chrom",data=self.chrom, compression=compression,compression_opts=compression_opts)
         igrp.create_dataset("start",data=self.start, compression=compression,compression_opts=compression_opts)
@@ -338,3 +344,169 @@ def loadstream(filename):
     else:
         f = open(filename,'r')
     return f
+
+
+class HssFile(h5py.File):
+    '''
+    h5py.File like object for .hss population files.
+    Directly inherit from h5py.File, and keeps in memory only version, 
+    number of beads and number of structures. Methods are provided to 
+    get/set data.
+
+    Attributes
+    ----------
+        version : int
+            File version
+        nstruct : int 
+            Number of structures
+        nbead : int
+            Number of beads in each structure
+    '''
+    def __init__(self, *args, **kwargs):
+        '''
+        See h5py.File constructor.
+        '''
+        h5py.File.__init__(self, *args, **kwargs)
+        try:
+            self.version = self.attrs['version']
+        except(KeyError):
+            self.version = __hss_version__
+            self.attrs.create('version', __hss_version__, dtype='int32')
+        try:
+            self.nbead = self.attrs['nbead']
+        except(KeyError):
+            self.nbead = 0
+            self.attrs.create('nbead', 0, dtype='int32')
+        try:
+            self.nstruct = self.attrs['nstruct']
+        except(KeyError):
+            self.nstruct = -1
+            self.attrs.create('nstruct', 0, dtype='int32')
+
+        if 'genome' not in self:
+            self.set_genome(Genome('hg19', silence=True))
+        if 'index' not in self:
+            self.set_index(Index())
+        if 'coordinates' not in self:
+            self.set_coordinates(np.empty(shape=(0, 0, 3), dtype='float32'))
+        if 'radii' not in self:
+            self.set_radii(np.empty(shape=(0,), dtype='float32'))
+
+        self._check_consistency()
+        
+
+    def _assert_warn(self, expr, msg):
+        if not expr:
+            warnings.warn('Hss consistency warning: ' + msg, RuntimeWarning)
+
+
+    def _check_consistency(self):
+        self._assert_warn(self.attrs['nstruct'] == self['coordinates'].len(),
+                          'nstruct != coordinates length')
+        n_bead  = self.attrs['nbead']
+        self._assert_warn(n_bead == self['coordinates'].shape[1],
+                          'nbead != coordinates second axis size')
+        self._assert_warn(n_bead == self['index/chrom'].len(),
+                          'nbead != index.chrom length')
+        self._assert_warn(n_bead == self['index/copy'].len(),
+                          'nbead != index.copy length')
+        self._assert_warn(n_bead == self['index/start'].len(),
+                          'nbead != index.start length')
+        self._assert_warn(n_bead == self['index/end'].len(),
+                          'nbead != index.end length')
+        self._assert_warn(n_bead == self['index/label'].len(),
+                          'nbead != index.label length')
+        self._assert_warn(n_bead == self['radii'].len(),
+                          'nbead != radii length')
+
+
+    def get_genome(self):
+        '''
+        Returns
+        -------
+            alabtools.Genome
+        '''
+        return Genome(self)
+
+
+    def get_index(self):
+        '''
+        Returns
+        -------
+            alabtools.Index
+        '''
+        return Index(self)
+
+
+    def get_coordinates(self, read_to_memory=True):
+        '''
+        Parameters
+        ----------
+            read_to_memory : bool
+                If True (default), the coordinates will be read and returned
+                as a numpy.ndarray. If False, a h5py dataset object
+        '''
+        if read_to_memory:
+            return self['coordinates'][:]
+        return self['coordinates']
+
+
+    def get_radii(self):
+        return self['radii'][:]
+
+
+    def set_genome(self, genome):
+        '''
+        Parameters
+        ----------
+            genome : alabtools.Genome
+        '''
+        genome.save(self)
+
+
+    def set_index(self, index):
+        '''
+        Parameters
+        ----------
+            index : alabtools.Index
+        '''
+        index.save(self)
+
+
+    def set_coordinates(self, coord):
+        '''
+        Parameters
+        ----------
+            coord : np.ndarray
+                The coordinates of the population. Should be a 3-dimensional
+                numpy array with shape (nstruct, nbead, 3).
+                The nstruct and nbead attributes are updated accordingly.
+        '''
+        assert(len(coord.shape) == 3)
+        assert(coord.shape[2] == 3)
+        self.attrs['nstruct'] = self.nstruct = coord.shape[0]
+        self.attrs['nbead'] = self.nbead = coord.shape[1]
+        try:
+            del self['coordinates']
+        except KeyError: 
+            pass
+        self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
+                            chunks=True, compression="gzip")
+
+
+    def set_radii(self, radii):
+        '''
+        Set the radii. Updates the nbead attribute.
+        Parameters
+        ----------
+            radii : np.ndarray
+        '''
+        try:
+            del self['radii']
+        except KeyError: 
+            pass
+        self.attrs['nbead'] = self.nbead = radii.shape[0]
+        self.create_dataset('radii', data=radii, dtype=RADII_DTYPE, 
+                            chunks=True, compression="gzip")
+
+
