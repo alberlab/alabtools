@@ -163,7 +163,7 @@ class Genome(object):
         binInfo    = Index(chromList,startList,endList,chrom_sizes=binSize)
         return binInfo
     
-    def getchrnum(self,chrom):
+    def getchrnum(self, chrom):
         findidx = np.flatnonzero(self.chroms==chrom)
     
         if len(findidx) == 0:
@@ -171,22 +171,23 @@ class Genome(object):
         else:
             return findidx[0]
   
-    def getchrom(self,chromNum):
+    def getchrom(self, chromNum):
         assert isinstance(chromNum,(int,np.int32,np.int64))
         return self.chroms[chromNum]
     
-    def __getitem__(self,key):
-        if isinstance(key,(int,np.int32,np.int64)):
+    def __getitem__(self, key):
+        if isinstance(key, (int, np.int32, np.int64)):
             return self.getchrom(key)
     def __len__(self):
         return len(self.chroms)
     def __repr__(self):
         represent = "Genome Assembly: " + self.assembly + '\n'
         for i in range(len(self.chroms)):
-            represent += self.chroms[i] + '\t' + str(self.origins[i]) + '-' + str(self.origins[i]+self.lengths[i]) + '\n'
+            represent += (self.chroms[i] + '\t' + str(self.origins[i]) + '-' 
+                          + str(self.origins[i]+self.lengths[i]) + '\n')
         return represent
         
-    def save(self,h5f,compression="gzip", compression_opts=6):
+    def save(self, h5f, compression="gzip", compression_opts=6):
         """
         Save genome information into a hd5f file handle. The information will be saved as a group of datasets:
         genome/
@@ -207,13 +208,35 @@ class Genome(object):
         """
         assert isinstance(h5f,h5py.File)
         if 'genome' in h5f:
-            del h5f["genome"]
-        ggrp = h5f.create_group("genome")
+            ggrp = h5f["genome"]
+        else:
+            ggrp = h5f.create_group("genome")
             
-        ggrp.create_dataset("assembly",data=self.assembly)
-        ggrp.create_dataset("chroms",data=self.chroms, compression=compression,compression_opts=compression_opts)
-        ggrp.create_dataset("origins",data=self.origins, compression=compression,compression_opts=compression_opts)
-        ggrp.create_dataset("lengths",data=self.lengths, compression=compression,compression_opts=compression_opts)
+        try:
+            ggrp.create_dataset("assembly", data=self.assembly)
+        except(RuntimeError):
+            ggrp['assembly'] = self.assembly
+
+        try:
+            ggrp.create_dataset("chroms", data=self.chroms, 
+                                compression=compression, 
+                                compression_opts=compression_opts)
+        except(RuntimeError): 
+            ggrp['chroms'] = self.chroms
+
+        try:
+            ggrp.create_dataset("origins", data=self.origins, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+        except(RuntimeError):
+            ggrp['origins'] = self.origins
+
+        try:
+            ggrp.create_dataset("lengths", data=self.lengths, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+        except(RuntimeError):
+            ggrp['lengths'] = self.lengths
         
 #--------------------
 class Index(object):
@@ -318,8 +341,9 @@ class Index(object):
         """
         assert isinstance(h5f, h5py.File)
         if 'index' in h5f:
-            del h5f['index']
-        igrp = h5f.create_group("index")
+            igrp = h5f['index']
+        else:
+            igrp = h5f.create_group("index")
             
         igrp.create_dataset("chrom",data=self.chrom, compression=compression,compression_opts=compression_opts)
         igrp.create_dataset("start",data=self.start, compression=compression,compression_opts=compression_opts)
@@ -368,29 +392,30 @@ class HssFile(h5py.File):
         '''
         h5py.File.__init__(self, *args, **kwargs)
         try:
-            self.version = self.attrs['version']
+            self._version = self.attrs['version']
         except(KeyError):
-            self.version = __hss_version__
+            self._version = __hss_version__
             self.attrs.create('version', __hss_version__, dtype='int32')
         try:
-            self.nbead = self.attrs['nbead']
+            self._nbead = self.attrs['nbead']
         except(KeyError):
-            self.nbead = 0
+            self._nbead = 0
             self.attrs.create('nbead', 0, dtype='int32')
         try:
-            self.nstruct = self.attrs['nstruct']
+            self._nstruct = self.attrs['nstruct']
         except(KeyError):
-            self.nstruct = -1
+            self._nstruct = 0
             self.attrs.create('nstruct', 0, dtype='int32')
 
-        if 'genome' not in self:
-            self.set_genome(Genome('hg19', silence=True))
-        if 'index' not in self:
-            self.set_index(Index())
-        if 'coordinates' not in self:
-            self.set_coordinates(np.empty(shape=(0, 0, 3), dtype='float32'))
-        if 'radii' not in self:
-            self.set_radii(np.empty(shape=(0,), dtype='float32'))
+        if self.mode == "r":
+            if 'genome' not in self:
+                warnings.warn('Read-only HssFile is missing genome')
+            if 'index' not in self:
+                warnings.warn('Read-only HssFile is missing index')
+            if 'coordinates' not in self:
+                warnings.warn('Read-only HssFile is missing coordinates')
+            if 'radii' not in self:
+                warnings.warn('Read-only HssFile is missing radii')
 
         self._check_consistency()
         
@@ -401,23 +426,40 @@ class HssFile(h5py.File):
 
 
     def _check_consistency(self):
-        self._assert_warn(self.attrs['nstruct'] == self['coordinates'].len(),
-                          'nstruct != coordinates length')
         n_bead  = self.attrs['nbead']
-        self._assert_warn(n_bead == self['coordinates'].shape[1],
-                          'nbead != coordinates second axis size')
-        self._assert_warn(n_bead == self['index/chrom'].len(),
-                          'nbead != index.chrom length')
-        self._assert_warn(n_bead == self['index/copy'].len(),
-                          'nbead != index.copy length')
-        self._assert_warn(n_bead == self['index/start'].len(),
-                          'nbead != index.start length')
-        self._assert_warn(n_bead == self['index/end'].len(),
-                          'nbead != index.end length')
-        self._assert_warn(n_bead == self['index/label'].len(),
-                          'nbead != index.label length')
-        self._assert_warn(n_bead == self['radii'].len(),
-                          'nbead != radii length')
+        
+        if 'coordinates' in self:
+            self._assert_warn(self.attrs['nstruct'] == self['coordinates'].len(),
+                              'nstruct != coordinates length')
+            self._assert_warn(n_bead == self['coordinates'].shape[1],
+                              'nbead != coordinates second axis size')
+        if 'index' in self:
+            self._assert_warn(n_bead == self['index/chrom'].len(),
+                              'nbead != index.chrom length')
+            self._assert_warn(n_bead == self['index/copy'].len(),
+                              'nbead != index.copy length')
+            self._assert_warn(n_bead == self['index/start'].len(),
+                              'nbead != index.start length')
+            self._assert_warn(n_bead == self['index/end'].len(),
+                              'nbead != index.end length')
+            self._assert_warn(n_bead == self['index/label'].len(),
+                              'nbead != index.label length')
+        
+        if 'radii' in self:
+            self._assert_warn(n_bead == self['radii'].len(),
+                              'nbead != radii length')
+
+
+    def get_version(self):
+        return self._version
+
+
+    def get_nbead(self):
+        return self._nbead
+
+
+    def get_nstruct(self):
+        return self._nstruct
 
 
     def get_genome(self):
@@ -482,17 +524,17 @@ class HssFile(h5py.File):
                 numpy array with shape (nstruct, nbead, 3).
                 The nstruct and nbead attributes are updated accordingly.
         '''
-        assert(len(coord.shape) == 3)
-        assert(coord.shape[2] == 3)
-        self.attrs['nstruct'] = self.nstruct = coord.shape[0]
-        self.attrs['nbead'] = self.nbead = coord.shape[1]
-        try:
-            del self['coordinates']
-        except KeyError: 
-            pass
-        self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
-                            chunks=True, compression="gzip")
-
+        assert (len(coord.shape) == 3) and (coord.shape[2] == 3), \
+               'Coordinates should have dimensions ' \
+               '(nstruct x nbeads x 3), got %s' % repr(coord.shape)
+        if 'coordinates' in self:
+            self['coordinates'][...] = coord
+        else:
+            self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
+                                chunks=True, compression="gzip")
+        self.attrs['nstruct'] = self._nstruct = coord.shape[0]
+        self.attrs['nbead'] = self._nbead = coord.shape[1]
+        
 
     def set_radii(self, radii):
         '''
@@ -501,12 +543,17 @@ class HssFile(h5py.File):
         ----------
             radii : np.ndarray
         '''
-        try:
-            del self['radii']
-        except KeyError: 
-            pass
-        self.attrs['nbead'] = self.nbead = radii.shape[0]
-        self.create_dataset('radii', data=radii, dtype=RADII_DTYPE, 
-                            chunks=True, compression="gzip")
+        if 'radii' in self:
+            self['radii'][...] = radii
+        else:
+            self.create_dataset('radii', data=radii, dtype=RADII_DTYPE, 
+                                chunks=True, compression="gzip")
+        self.attrs['nbead'] = self._nbead = radii.shape[0]
 
+    coordinates = property(get_coordinates, set_coordinates)
+    radii = property(set_radii, get_radii)
+    index = property(get_index, set_index)
+    genome = property(get_genome, set_genome)
+    nbead = property(get_nbead)
+    nstruct = property(get_nstruct)
 
