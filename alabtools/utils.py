@@ -53,6 +53,7 @@ CHROM_SIZES_DTYPE = np.int32
 COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
 
+
 class Genome(object):
     """
     And instance which holds genome information
@@ -91,7 +92,6 @@ class Genome(object):
         chromosome region start
     lengths : np.array[int32]
         chromosome region length
-        
     """
     
     def __init__(self,assembly,chroms=None,origins=None,lengths=None,usechr=['#','X'],silence=False):
@@ -136,6 +136,7 @@ class Genome(object):
     #-
     
     def bininfo(self,resolution):
+        
         """
         Bin the genome by resolution
         
@@ -149,6 +150,7 @@ class Genome(object):
         utils.Index instance
         
         """
+        
         binSize    = [int(math.ceil(float(x)/resolution)) for x in self.lengths]
         
         chromList  = []
@@ -188,6 +190,7 @@ class Genome(object):
         return represent
         
     def save(self, h5f, compression="gzip", compression_opts=6):
+
         """
         Save genome information into a hd5f file handle. The information will be saved as a group of datasets:
         genome/
@@ -206,40 +209,43 @@ class Genome(object):
         compression_opts : int
             compression level, higher the better
         """
-        assert isinstance(h5f,h5py.File)
+        
+        assert isinstance(h5f, h5py.File)
         if 'genome' in h5f:
             ggrp = h5f["genome"]
         else:
             ggrp = h5f.create_group("genome")
             
-        try:
+        if 'assembly' in ggrp:
+            ggrp['assembly'][...] = self.assembly
+        else:
             ggrp.create_dataset("assembly", data=self.assembly)
-        except(RuntimeError):
-            ggrp['assembly'] = self.assembly
-
-        try:
+        
+        if 'chroms' in ggrp:
+            ggrp['chroms'][...] = self.chroms
+        else:
             ggrp.create_dataset("chroms", data=self.chroms, 
                                 compression=compression, 
                                 compression_opts=compression_opts)
-        except(RuntimeError): 
-            ggrp['chroms'] = self.chroms
-
-        try:
+    
+        if 'origins' in ggrp:
+            ggrp['origins'][...] = self.origins
+        else:
             ggrp.create_dataset("origins", data=self.origins, 
                                 compression=compression,
                                 compression_opts=compression_opts)
-        except(RuntimeError):
-            ggrp['origins'] = self.origins
-
-        try:
+            
+        if 'lengths' in ggrp:
+            ggrp['lengths'][...] = self.lengths
+        else:
             ggrp.create_dataset("lengths", data=self.lengths, 
                                 compression=compression,
                                 compression_opts=compression_opts)
-        except(RuntimeError):
-            ggrp['lengths'] = self.lengths
-        
 #--------------------
+
+
 class Index(object):
+    
     """
     Matrix indexes
     
@@ -258,6 +264,7 @@ class Index(object):
     chrom_sizes : list[int32]
         number of bins of each chromosome
     """
+
     def __init__(self, chrom=[], start=[], end=[], **kwargs):
         
         if isinstance(chrom,h5py.File):
@@ -319,6 +326,7 @@ class Index(object):
         return self.chrom_sizes.__repr__()
     
     def save(self,h5f,compression="gzip", compression_opts=6):
+
         """
         Save index information into a hd5f file handle. The information will be saved as a group of datasets:
         index/
@@ -339,24 +347,64 @@ class Index(object):
         compression_opts : int
             compression level, higher the better
         """
+        
         assert isinstance(h5f, h5py.File)
         if 'index' in h5f:
             igrp = h5f['index']
         else:
             igrp = h5f.create_group("index")
             
-        igrp.create_dataset("chrom",data=self.chrom, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("start",data=self.start, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("end",  data=self.end,   compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("label",data=self.label, compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("copy", data=self.copy,  compression=compression,compression_opts=compression_opts)
-        igrp.create_dataset("chrom_sizes", data=self.chrom_sizes,  compression=compression,compression_opts=compression_opts)
+        if 'chrom' in igrp:
+            igrp['chrom'][...] = self.chrom
+        else:
+            igrp.create_dataset("chrom", data=self.chrom, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+        
+        if 'start' in igrp:
+            igrp['start'][...] = self.start
+        else:
+            igrp.create_dataset("start", data=self.start, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+        
+        if 'end' in igrp:
+            igrp['end'][...] = self.end
+        else:
+            igrp.create_dataset("end", data=self.end, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+        
+        if 'label' in igrp:
+            igrp['label'][...] = self.label
+        else:
+            igrp.create_dataset("label", data=self.label, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+        
+        if 'copy' in igrp:
+            igrp['copy'][...] = self.copy
+        else:
+            igrp.create_dataset("copy", data=self.copy, 
+                                compression=compression,
+                                compression_opts=compression_opts)
+
+        if 'chrom_sizes' in igrp:
+            igrp['chrom_sizes'][...] = self.chrom_sizes
+        else:
+            igrp.create_dataset("chrom_sizes", data=self.chrom_sizes, 
+                                compression=compression,
+                                compression_opts=compression_opts)
 #--------------------
+
+
 def loadstream(filename):
+
     """
     Convert a file location, return a file handle
     zipped file are automaticaly unzipped using stream
     """
+    
     if not os.path.isfile(filename):
         raise IOError("File %s doesn't exist!\n" % (filename))
     if os.path.splitext(filename)[1] == '.gz':
@@ -371,6 +419,7 @@ def loadstream(filename):
 
 
 class HssFile(h5py.File):
+
     '''
     h5py.File like object for .hss population files.
     Directly inherit from h5py.File, and keeps in memory only version, 
@@ -386,10 +435,13 @@ class HssFile(h5py.File):
         nbead : int
             Number of beads in each structure
     '''
+
     def __init__(self, *args, **kwargs):
+
         '''
         See h5py.File constructor.
         '''
+
         h5py.File.__init__(self, *args, **kwargs)
         try:
             self._version = self.attrs['version']
@@ -419,11 +471,9 @@ class HssFile(h5py.File):
 
         self._check_consistency()
         
-
     def _assert_warn(self, expr, msg):
         if not expr:
             warnings.warn('Hss consistency warning: ' + msg, RuntimeWarning)
-
 
     def _check_consistency(self):
         n_bead  = self.attrs['nbead']
@@ -449,18 +499,14 @@ class HssFile(h5py.File):
             self._assert_warn(n_bead == self['radii'].len(),
                               'nbead != radii length')
 
-
     def get_version(self):
         return self._version
-
 
     def get_nbead(self):
         return self._nbead
 
-
     def get_nstruct(self):
         return self._nstruct
-
 
     def get_genome(self):
         '''
@@ -470,7 +516,6 @@ class HssFile(h5py.File):
         '''
         return Genome(self)
 
-
     def get_index(self):
         '''
         Returns
@@ -479,8 +524,8 @@ class HssFile(h5py.File):
         '''
         return Index(self)
 
-
     def get_coordinates(self, read_to_memory=True):
+
         '''
         Parameters
         ----------
@@ -488,42 +533,23 @@ class HssFile(h5py.File):
                 If True (default), the coordinates will be read and returned
                 as a numpy.ndarray. If False, a h5py dataset object
         '''
+        
         if read_to_memory:
             return self['coordinates'][:]
         return self['coordinates']
 
-
     def get_radii(self):
         return self['radii'][:]
 
-
     def set_genome(self, genome):
-        '''
-        Parameters
-        ----------
-            genome : alabtools.Genome
-        '''
+        assert isinstance(genome, Genome)
         genome.save(self)
 
-
     def set_index(self, index):
-        '''
-        Parameters
-        ----------
-            index : alabtools.Index
-        '''
+        assert isinstance(index, Index)
         index.save(self)
 
-
     def set_coordinates(self, coord):
-        '''
-        Parameters
-        ----------
-            coord : np.ndarray
-                The coordinates of the population. Should be a 3-dimensional
-                numpy array with shape (nstruct, nbead, 3).
-                The nstruct and nbead attributes are updated accordingly.
-        '''
         assert (len(coord.shape) == 3) and (coord.shape[2] == 3), \
                'Coordinates should have dimensions ' \
                '(nstruct x nbeads x 3), got %s' % repr(coord.shape)
@@ -535,14 +561,8 @@ class HssFile(h5py.File):
         self.attrs['nstruct'] = self._nstruct = coord.shape[0]
         self.attrs['nbead'] = self._nbead = coord.shape[1]
         
-
     def set_radii(self, radii):
-        '''
-        Set the radii. Updates the nbead attribute.
-        Parameters
-        ----------
-            radii : np.ndarray
-        '''
+        assert isinstance(radii, np.ndarray)
         if 'radii' in self:
             self['radii'][...] = radii
         else:
@@ -552,8 +572,9 @@ class HssFile(h5py.File):
 
     coordinates = property(get_coordinates, set_coordinates)
     radii = property(set_radii, get_radii)
-    index = property(get_index, set_index)
-    genome = property(get_genome, set_genome)
+    index = property(get_index, set_index, doc='a alabtools.Index instance')
+    genome = property(get_genome, set_genome, 
+                      doc='a alabtools.Genome instance')
     nbead = property(get_nbead)
     nstruct = property(get_nstruct)
 
