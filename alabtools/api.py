@@ -280,7 +280,7 @@ class Contactmatrix(object):
             Percent of lowest-counts bins to be removed
         """
         rowsum   = self.rowsum()
-        self.mask= np.flatnonzero(rowsum < np.percentile(rowsum[rowsum > 0],cutoff))
+        self.mask= np.flatnonzero(rowsum <= np.percentile(rowsum[rowsum > 0],cutoff))
         print("{} bins are masked.".format(len(self.mask)))
         
     def krnorm(self,mask = None, force = False, **kwargs):
