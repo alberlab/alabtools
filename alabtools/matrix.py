@@ -187,9 +187,9 @@ class sss_matrix(object):
         """
         return SpMV_SM_viaMKL(self.csr, other) + np.array([self.diagonal]).T*other
     
-    def norm(self,bias):
+    def normalize(self,bias):
         """
-        norm matrix by bias vector
+        normalize matrix by bias vector
         
         Parameters
         ----------

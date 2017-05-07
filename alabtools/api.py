@@ -270,6 +270,7 @@ class Contactmatrix(object):
         else:
             raise TypeError("Invalid argument type")
     #-------------------
+    
     def maskLowCoverage(self,cutoff = 2):
         """
         Removes "cutoff" percent of bins with least counts
@@ -282,24 +283,57 @@ class Contactmatrix(object):
         rowsum   = self.rowsum()
         self.mask= np.flatnonzero(rowsum <= np.percentile(rowsum[rowsum > 0],cutoff))
         print("{} bins are masked.".format(len(self.mask)))
-        
-    def krnorm(self,mask = None, force = False, **kwargs):
+    
+    def normalize(self,bias):
         """
-        using krnorm balacing the matrix (overwriting the matrix!)
+        norm matrix by bias vector
+        
         Parameters
         ----------
-        mask: list/array 
+        bias : np.array column vector
+        
+        """
+        self.matrix.normalize(np.array(bias))
+        
+    #-
+    
+    def getKRnormBias(self, mask = None, **kwargs):
+        """
+        using KR balancing algorithm to calculate bias vector 
+        
+        Parameters
+        ----------
+        mask : list/array 
             mask is a 1-D vector with the same length as the matrix where 1s specify the row/column to be ignored\
             or a 1-D vector specifing the indexes of row/column to be ignored\
             if no mask is given, row/column with rowsum==0 will be automatically detected and ignored
-        force: bool
-            force to normalize the matrix  
+            
+        Returns
+        -------
+        out : numpy column array
+            vector of bias
         """
         from norm import bnewt
         if not hasattr(self,"mask"):
             self._getMask(mask)
-        x = bnewt(self.matrix,mask=self.mask,check=0,**kwargs)*100
-        self.matrix.norm(x) 
+        x = bnewt(self.matrix, mask=self.mask, check=0, **kwargs) * 100
+        return x
+        
+    def krnorm(self, mask = None, force = False, **kwargs):
+        """
+        using krnorm balacing the matrix (overwriting the matrix!)
+        
+        Parameters
+        ----------
+        mask : list/array 
+            mask is a 1-D vector with the same length as the matrix where 1s specify the row/column to be ignored\
+            or a 1-D vector specifing the indexes of row/column to be ignored\
+            if no mask is given, row/column with rowsum==0 will be automatically detected and ignored
+        force : bool
+            force to normalize the matrix  
+        """
+        x = self.getKRnormBias(mask, **kwargs)
+        self.normalize()
     
     def makeSummaryMatrix(self,step=10):
         """
@@ -312,7 +346,8 @@ class Contactmatrix(object):
         
         Returns
         -------
-        A contactmatrix instance of the lower resolution matrix.
+        out : contactmatrix instance
+            A contactmatrix instance of the lower resolution matrix.
         """
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.index)
