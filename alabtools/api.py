@@ -354,7 +354,7 @@ class Contactmatrix(object):
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.index)
         
-        newMatrix = Contactmatrix(filename=None,genome=None,resolution=None)
+        newMatrix = Contactmatrix(None,genome=None,resolution=None)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=['#','X','Y'],
                                 chroms = self.genome.chroms,
