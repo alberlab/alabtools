@@ -358,17 +358,36 @@ class Contactmatrix(object):
                                 chroms = self.genome.chroms,
                                 origins = self.genome.origins,
                                 lengths = self.genome.lengths)
-        newMatrix._build_index(self.resolution*step)
         
+        if isinstance(step, string_types):
+            tadDef = np.genfromtxt(step,dtype = None)
+            chrom  = tadDef['f0']
+            start  = tadDef['f1']
+            end    = tadDef['f2']
+            label  = tadDef['f3']
+            nchrom = np.array([newMatrix.genome.getchrnum(x) for x in chrom])
+            
+            f_tadDef = np.sort(np.rec.fromarrays([nchrom,start,end,label]),order=['f0','f1'])
+            chrom  = f_tadDef['f0']
+            start  = f_tadDef['f1']
+            end    = f_tadDef['f2']
+            label  = f_tadDef['f3']
+            newMatrix._set_index(chrom,start,end,label)
+        else:
+            newMatrix._build_index(self.resolution*step)
+            
         DimB = len(newMatrix.index)
         mapping = np.empty(DimB+1,dtype=np.int32)
         mapping[0] = 0
         
         row = 0
         for i in range(DimB):
-            row += step
+            incStep = (newMatrix.end[i] - newMatrix.start[i]) / self.resolution
+            row += incStep
+            
             if (row > DimA) or (newMatrix.index.chrom[i] != self.index.chrom[row]):
-                row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
+                #row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
+                row = self.index.offset[self.index.chrom[row-incStep]]
             mapping[i+1] = row
         
         Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
