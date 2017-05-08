@@ -384,14 +384,14 @@ class Contactmatrix(object):
         
         row = 0
         for i in range(DimB):
-            incStep = (newMatrix.end[i] - newMatrix.start[i]) / self.resolution
+            incStep = int((newMatrix.index.end[i] - newMatrix.index.start[i]) / self.resolution)
             row += incStep
             
             if (row > DimA) or (newMatrix.index.chrom[i] != self.index.chrom[row]):
                 #row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
-                row = self.index.offset[self.index.chrom[row-incStep]]
+                row = self.index.offset[self.index.chrom[row-incStep]+1]
             mapping[i+1] = row
-        
+
         Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
         Bj = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
         Bx = np.empty(int(DimB*(DimB+1)/2),dtype=np.float32)
