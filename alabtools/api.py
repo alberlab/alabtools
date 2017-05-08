@@ -333,7 +333,7 @@ class Contactmatrix(object):
             force to normalize the matrix  
         """
         x = self.getKRnormBias(mask, **kwargs)
-        self.normalize()
+        self.normalize(x)
     
     def makeSummaryMatrix(self,step=10):
         """

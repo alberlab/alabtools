@@ -66,7 +66,6 @@ void TopmeanSummaryMatrix(int * Ap,
 {
     std::vector<int> pBi[THREADS],pBj[THREADS];
     std::vector<float> pBx[THREADS];
-    int dataSize = 10*10;
     int top = 10;
     std::fill(Bi, Bi + DimB*(DimB+1)/2, 0);
     std::fill(Bj, Bj + DimB*(DimB+1)/2, 0);
@@ -77,7 +76,7 @@ void TopmeanSummaryMatrix(int * Ap,
     for (int i = 0; i < DimB; ++i){
         if ((i+1) % int(DimB/10) == 0){
             std::cout << "=";
-            std::cout.flush();
+            std::cout.flush(); //process bar
         }
         
         int thread = omp_get_thread_num();
@@ -86,17 +85,18 @@ void TopmeanSummaryMatrix(int * Ap,
             int iend = mapping[i+1];
             int jstart = mapping[j];
             int jend = mapping[j+1];
+            int dataSize = (iend - istart) * (jend - jstart);
             
             float *data = fetchData(Ap,Aj,Ax,istart,iend,jstart,jend,dataSize);
             
-            std::sort(data,data+dataSize);
+            std::sort(data,data + dataSize);
             
             float lowerFence,upperFence;
             boxplotStats(data,dataSize,lowerFence,upperFence);
 
             float topSum = 0;
             int topCount = 0;
-            int topCut   = top;
+            int topCut   = dataSize / top;
             if (upperFence == 0){
                 upperFence = 10;
                 topCut     = dataSize;
@@ -112,7 +112,7 @@ void TopmeanSummaryMatrix(int * Ap,
             delete[] data;
             pBi[thread].push_back(i);
             pBj[thread].push_back(j);
-            pBx[thread].push_back(topSum/topCut);
+            pBx[thread].push_back(topSum / topCut);
         }
     }
 }
