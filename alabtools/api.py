@@ -341,13 +341,15 @@ class Contactmatrix(object):
         
         Parameters
         ----------
-        step : int
-            The length of submatrix to be checked.
-        
+        step : int/string
+            int : The length of submatrix to be checked.
+            string : Bed file defining the TAD (fields required:[chrom, start, end, label])
+            
         Returns
         -------
         out : contactmatrix instance
             A contactmatrix instance of the lower resolution matrix.
+            
         """
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.index)
@@ -415,7 +417,32 @@ class Contactmatrix(object):
             self.matrix.data = self.matrix.csr.data
             
         
-    def iterativeScaling(self,averageContact=24,theta=0.001,tol=0.01):
+    def iterativeScaling(self,domain=10,averageContact=24,theta=0.001,tol=0.01):
+        """
+        Iterative Scale the matrix to probability matrix at lower resolution, such that the average contact for each bin matches the Parameters.
+        
+        Parameters
+        ----------
+        domain : int/string
+            int : The length of submatrix to be checked.
+            string : Bed file defining the TAD (fields required:[chrom, start, end, label])
+        
+        averageContact : int
+            Target average contact for each bin.
+            
+        theta : float
+            Target theta value expected in modeling step.
+        
+        tol : float
+            average contact tolarance in order to converge.
+            
+        Returns
+        -------
+        
+        out : Contactmatrix instance
+            A probability matrix at given resolution
+            
+        """
         average = 0
         originalData = np.copy(self.matrix.csr.data)
         originalDiag = np.copy(self.matrix.diagonal)
@@ -426,7 +453,7 @@ class Contactmatrix(object):
             self.matrix.diagonal = np.copy(originalDiag)
             self.fmaxScaling(fmax,force=True)
             
-            newMat = self.makeSummaryMatrix(step=10)
+            newMat = self.makeSummaryMatrix(domain)
             
             newMat.matrix.data[newMat.matrix.data < theta] = 0
             
@@ -436,7 +463,7 @@ class Contactmatrix(object):
             fmax = fmax/averageContact*average
         #==
         
-        newMat = self.makeSummaryMatrix(step=10)
+        newMat = self.makeSummaryMatrix(domain)
         
         print("{} {}".format(fmax,average))
         return newMat
