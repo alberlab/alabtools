@@ -585,7 +585,7 @@ class HssFile(h5py.File):
         self.attrs['nbead'] = self._nbead = radii.shape[0]
 
     coordinates = property(get_coordinates, set_coordinates)
-    radii = property(set_radii, get_radii)
+    radii = property(get_radii, set_radii)
     index = property(get_index, set_index, doc='a alabtools.Index instance')
     genome = property(get_genome, set_genome, 
                       doc='a alabtools.Genome instance')
