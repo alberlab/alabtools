@@ -221,7 +221,7 @@ class Contactmatrix(object):
             
             start1 = index.start[i]
             end1   = index.end[i]
-            print chrom1,start1,end1
+            print(chrom1,start1,end1)
             for j in range(i,len(index)):
                 chrom2 = self.genome.getchrom(index.chrom[j])
                 start2 = index.start[j]
