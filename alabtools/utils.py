@@ -1,7 +1,7 @@
 # Copyright (C) 2017 University of Southern California and
 #                          Nan Hua
 # 
-# Authors: Nan Hua
+# Authors: Nan Hua, Guido Polles
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -53,6 +53,7 @@ CHROM_SIZES_DTYPE = np.int32
 COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
 
+COORD_CHUNKSIZE = (100, 100, 3)
 
 class Genome(object):
     """
@@ -291,7 +292,7 @@ class Index(object):
         self.start = np.array(start, dtype=START_DTYPE)
         self.end   = np.array(end, dtype=END_DTYPE)
         
-        chrom_sizes = kwargs.pop("chrom_sizes",chrom_sizes)
+        chrom_sizes = kwargs.pop("chrom_sizes", chrom_sizes)
         if len(chrom_sizes) != len(self.chrom):
             chromList = np.unique(self.chrom)
             self.chrom_sizes = np.zeros(len(chromList), dtype=CHROM_SIZES_DTYPE)
@@ -300,7 +301,7 @@ class Index(object):
         else:
             self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
         
-        label = kwargs.pop("label",label)
+        label = kwargs.pop("label", label)
         if len(label) != len(self.chrom):
             self.label = np.array([""] * len(self.chrom), dtype=LABEL_DTYPE)
         else:
@@ -317,8 +318,14 @@ class Index(object):
     #-
     
     def __getitem__(self,key):
-        return np.rec.fromarrays((self.chrom[key],self.start[key],self.end[key],self.label[key]),
-                                 dtype=[("chrom",CHROM_DTYPE),("start",START_DTYPE),("end",END_DTYPE),("label",LABEL_DTYPE)])
+        return np.rec.fromarrays((self.chrom[key], 
+                                  self.start[key],
+                                  self.end[key],
+                                  self.label[key]),
+                                 dtype=[("chrom",CHROM_DTYPE),
+                                        ("start",START_DTYPE),
+                                        ("end",END_DTYPE),
+                                        ("label",LABEL_DTYPE)])
     
     def __len__(self):
         return len(self.chrom)
@@ -328,7 +335,8 @@ class Index(object):
     def save(self,h5f,compression="gzip", compression_opts=6):
 
         """
-        Save index information into a hd5f file handle. The information will be saved as a group of datasets:
+        Save index information into a hd5f file handle. The information will 
+        be saved as a group of datasets:
         index/
             |- chrom
             |- start
@@ -541,6 +549,12 @@ class HssFile(h5py.File):
     def get_radii(self):
         return self['radii'][:]
 
+    def set_nbead(self, n):
+        self.attrs['nbead'] = self._nbead = n
+
+    def set_nstruct(self, n):
+        self.attrs['nstruct'] = self._nstruct = n
+
     def set_genome(self, genome):
         assert isinstance(genome, Genome)
         genome.save(self)
@@ -566,7 +580,7 @@ class HssFile(h5py.File):
             self['coordinates'][...] = coord
         else:
             self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
-                                chunks=True, compression="gzip")
+                                chunks=COORD_CHUNKSIZE, compression="gzip")
         self.attrs['nstruct'] = self._nstruct = coord.shape[0]
         self.attrs['nbead'] = self._nbead = coord.shape[1]
         
@@ -585,10 +599,10 @@ class HssFile(h5py.File):
         self.attrs['nbead'] = self._nbead = radii.shape[0]
 
     coordinates = property(get_coordinates, set_coordinates)
-    radii = property(set_radii, get_radii)
+    radii = property(get_radii, set_radii)
     index = property(get_index, set_index, doc='a alabtools.Index instance')
     genome = property(get_genome, set_genome, 
                       doc='a alabtools.Genome instance')
-    nbead = property(get_nbead)
-    nstruct = property(get_nstruct)
+    nbead = property(get_nbead, set_nbead)
+    nstruct = property(get_nstruct, set_nstruct)
 
