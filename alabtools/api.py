@@ -72,6 +72,8 @@ class Contactmatrix(object):
                 self._load_cool(mat,usechr=usechr)
             elif os.path.splitext(mat)[1] == '.hic':
                 self._load_hic(mat,resolution=resolution,usechr=usechr)
+            elif os.path.splitext(mat)[1] == '.gz' and os.path.splitext(os.path.splitext(mat)[0])[1] == '.pairs':
+                self._load_pairs_bgzip(mat,resolution,usechr=['#','X'])
             else:
                 raise ValueError("unrecognized constructor constructor usage")
         else:
@@ -189,6 +191,54 @@ class Contactmatrix(object):
         
         self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.index),len(self.index)))
         h5.close()
+        
+    def _load_pairs_bgzip(self,filename,resolution,usechr=['#','X']):
+        import pypairx
+        tb = pypairix.open(filename)
+        self.resolution = resolution
+        
+        header = tb.get_header()
+
+        chroms = []
+        length = []
+        assembly = ''
+        for line in header:
+            s = line.split()
+            if s[0] == "#chromsize:":
+                chroms.append(s[1])
+                length.append(int(s[2]))
+            if s[0] == "#genome_assembly:":
+                assembly = s[1]
+
+        self.genome = utils.Genome(assembly,chroms=chroms,lengths=length)
+        self.index = self.genome.bininfo(resolution)
+
+        indptr = np.zeros(len(index)+1,dtype=np.int32)
+        indices = []
+        data = []
+        for i in range(len(index)):
+            chrom1 = self.genome.getchrom(index.chrom[i])
+            
+            start1 = index.start[i]
+            end1   = index.end[i]
+            print chrom1,start1,end1
+            for j in range(i,len(index)):
+                chrom2 = self.genome.getchrom(index.chrom[j])
+                start2 = index.start[j]
+                end2   = index.end[j]
+                querystr='{}:{}-{}|{}:{}-{}'.format(chrom1, start1, end1, chrom2, start2, end2)
+                it = tb.querys2D(querystr)
+                
+                n = len([x for x in it])
+                
+                if n > 0:
+                    indices.append(j)
+                    data.append(n)
+            #-
+            indptr[i+1] = len(indices)
+        #-
+        self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.index),len(self.index)))
+      
     #-------------------
     def rowsum(self):
         return self.matrix.sum(axis=1)
