@@ -193,7 +193,7 @@ class Contactmatrix(object):
         h5.close()
         
     def _load_pairs_bgzip(self,filename,resolution,usechr=['#','X']):
-        import pypairx
+        import pypairix
         tb = pypairix.open(filename)
         self.resolution = resolution
         
@@ -210,25 +210,25 @@ class Contactmatrix(object):
             if s[0] == "#genome_assembly:":
                 assembly = s[1]
 
-        self.genome = utils.Genome(assembly,chroms=chroms,lengths=length)
+        self.genome = utils.Genome(assembly,chroms=chroms,lengths=length,usechr=usechr)
         self.index = self.genome.bininfo(resolution)
 
-        indptr = np.zeros(len(index)+1,dtype=np.int32)
+        indptr = np.zeros(len(self.index)+1,dtype=np.int32)
         indices = []
         data = []
-        for i in range(len(index)):
-            chrom1 = self.genome.getchrom(index.chrom[i])
+        for i in range(len(self.index)):
+            chrom1 = self.genome.getchrom(self.index.chrom[i])
             
-            start1 = index.start[i]
-            end1   = index.end[i]
+            start1 = self.index.start[i]
+            end1   = self.index.end[i]
             print(chrom1,start1,end1)
-            for j in range(i,len(index)):
-                chrom2 = self.genome.getchrom(index.chrom[j])
-                start2 = index.start[j]
-                end2   = index.end[j]
-                querystr='{}:{}-{}|{}:{}-{}'.format(chrom1, start1, end1, chrom2, start2, end2)
-                it = tb.querys2D(querystr)
-                
+            for j in range(i,len(self.index)):
+                chrom2 = self.genome.getchrom(self.index.chrom[j])
+                start2 = self.index.start[j]
+                end2   = self.index.end[j]
+                #querystr='{}:{}-{}|{}:{}-{}'.format(chrom1, start1, end1, chrom2, start2, end2)
+                #it = tb.querys2D(querystr)
+                it = tb.query2D(chrom1, start1, end1, chrom2, start2, end2, 1)
                 n = len([x for x in it])
                 
                 if n > 0:
