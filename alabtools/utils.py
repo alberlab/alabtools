@@ -40,15 +40,15 @@ except ImportError:
 __hss_version__ = 1
 
 CHROMS_DTYPE = np.dtype('S10')
-ORIGINS_DTYPE = np.int32
-LENGTHS_DTYPE = np.int32
+ORIGINS_DTYPE = np.uint32
+LENGTHS_DTYPE = np.uint32
 
-CHROM_DTYPE = np.int32
-START_DTYPE = np.int32
-END_DTYPE = np.int32
-COPY_DTYPE = np.int32
+CHROM_DTYPE = np.uint32
+START_DTYPE = np.uint32
+END_DTYPE = np.uint32
+COPY_DTYPE = np.uint32
 LABEL_DTYPE = np.dtype('S10')
-CHROM_SIZES_DTYPE = np.int32
+CHROM_SIZES_DTYPE = np.uint32
 
 COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
@@ -282,11 +282,11 @@ class Index(object):
         
         if not(len(chrom) == len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
-        if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64)):
+        if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("chrom should be a list of integers.")
-        if len(start) and not isinstance(start[0], (int, np.int32, np.int64)):
+        if len(start) and not isinstance(start[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("start should be a list of integers.")
-        if len(end) and not isinstance(end[0], (int, np.int32, np.int64)):
+        if len(end) and not isinstance(end[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("end should be list of integers.")
         self.chrom = np.array(chrom, dtype=CHROM_DTYPE)
         self.start = np.array(start, dtype=START_DTYPE)
