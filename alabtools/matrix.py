@@ -29,8 +29,8 @@ from scipy.sparse.sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
 
 DATA_DTYPE = np.float32
-INDPTR_DTYPE = np.uint32
-INDICIES_DTYPE = np.uint32
+INDPTR_DTYPE = np.int32
+INDICIES_DTYPE = np.int32
 
 class sss_matrix(object):
     """

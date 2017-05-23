@@ -40,15 +40,15 @@ except ImportError:
 __hss_version__ = 1
 
 CHROMS_DTYPE = np.dtype('S10')
-ORIGINS_DTYPE = np.uint32
-LENGTHS_DTYPE = np.uint32
+ORIGINS_DTYPE = np.int32
+LENGTHS_DTYPE = np.int32
 
-CHROM_DTYPE = np.uint32
-START_DTYPE = np.uint32
-END_DTYPE = np.uint32
-COPY_DTYPE = np.uint32
+CHROM_DTYPE = np.int32
+START_DTYPE = np.int32
+END_DTYPE = np.int32
+COPY_DTYPE = np.int32
 LABEL_DTYPE = np.dtype('S10')
-CHROM_SIZES_DTYPE = np.uint32
+CHROM_SIZES_DTYPE = np.int32
 
 COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
