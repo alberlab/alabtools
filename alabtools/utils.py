@@ -30,6 +30,7 @@ import math
 import numpy as np
 import subprocess
 import warnings
+import itertools
 import h5py
 try:
     from cStringIO import StringIO
@@ -293,13 +294,11 @@ class Index(object):
         self.end   = np.array(end, dtype=END_DTYPE)
         
         chrom_sizes = kwargs.pop("chrom_sizes", chrom_sizes)
-        if len(chrom_sizes) != len(self.chrom):
-            chromList = np.unique(self.chrom)
-            self.chrom_sizes = np.zeros(len(chromList), dtype=CHROM_SIZES_DTYPE)
-            for i in chromList:
-                self.chrom_sizes[i] = sum(self.chrom == i)
-        else:
-            self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
+
+        if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
+            chrom_sizes = [len(list(g)) for _, g in itertools.groupby(self.chrom)]
+        
+        self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
         
         label = kwargs.pop("label", label)
         if len(label) != len(self.chrom):
