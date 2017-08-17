@@ -30,6 +30,7 @@ import math
 import numpy as np
 import subprocess
 import warnings
+import itertools
 import h5py
 try:
     from cStringIO import StringIO
@@ -282,24 +283,22 @@ class Index(object):
         
         if not(len(chrom) == len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
-        if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64)):
+        if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("chrom should be a list of integers.")
-        if len(start) and not isinstance(start[0], (int, np.int32, np.int64)):
+        if len(start) and not isinstance(start[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("start should be a list of integers.")
-        if len(end) and not isinstance(end[0], (int, np.int32, np.int64)):
+        if len(end) and not isinstance(end[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("end should be list of integers.")
         self.chrom = np.array(chrom, dtype=CHROM_DTYPE)
         self.start = np.array(start, dtype=START_DTYPE)
         self.end   = np.array(end, dtype=END_DTYPE)
         
         chrom_sizes = kwargs.pop("chrom_sizes", chrom_sizes)
-        if len(chrom_sizes) != len(self.chrom):
-            chromList = np.unique(self.chrom)
-            self.chrom_sizes = np.zeros(len(chromList), dtype=CHROM_SIZES_DTYPE)
-            for i in chromList:
-                self.chrom_sizes[i] = sum(self.chrom == i)
-        else:
-            self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
+
+        if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
+            chrom_sizes = [len(list(g)) for _, g in itertools.groupby(self.chrom)]
+        
+        self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
         
         label = kwargs.pop("label", label)
         if len(label) != len(self.chrom):
