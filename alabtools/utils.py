@@ -606,3 +606,36 @@ class HssFile(h5py.File):
     nbead = property(get_nbead, set_nbead)
     nstruct = property(get_nstruct, set_nstruct)
 
+
+def make_diploid(index):
+    didx = {}
+    for k in ['chrom', 'start', 'end']:
+        didx[k] = np.concatenate([index.__dict__[k], index.__dict__[k]])
+    didx['copy'] = np.concatenate([index.__dict__['copy'], 
+                                   index.__dict__['copy'] + 1 ])
+    return Index(didx['chrom'], didx['start'], didx['end'], copy=didx['copy'])
+
+
+def natural_sort(l): 
+    convert = lambda text: int(text) if text.isdigit() else text.lower() 
+    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
+    return sorted(l, key=alphanum_key)
+
+
+def get_index_from_bed(file):
+    bed = np.genfromtxt(file, usecols=(0,1,2),
+                        dtype=[('chr', 'S5'), ('start', int), ('end', int)])
+    cnames = natural_sort(np.unique(bed['chr']))
+    ucm = {c : i for i, c in enumerate(cnames)}
+    return Index([ucm[c] for c in bed['chr']], bed['start'], bed['end'])
+
+
+_ftpi = 4./3. * np.pi
+DEFAULT_NUCLEAR_VOLUME = _ftpi * (5000**3)
+def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
+    sizes = [b.end - b.start for b in index]
+    totsize = sum(sizes)
+    prefactor = volume * occupancy / (_ftpi * totsize)
+    rr = [(prefactor*sz)**(1./3.) for sz in sizes]
+    return np.array(rr, dtype=RADII_DTYPE)
+
