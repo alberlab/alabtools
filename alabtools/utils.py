@@ -129,7 +129,7 @@ class Genome(object):
             if chrnum == '#':
                 choices = np.logical_or([re.search("chr[0-9]",c) != None for c in chroms],choices)
             else:
-                choices = np.logical_or(chroms == ("chr"+str(chrnum)), choices)
+                choices = np.logical_or(chroms == ("chr"+str(chrnum)).encode(), choices)
         self.chroms = chroms[choices]
         self.origins = origins[choices]
         self.lengths = lengths[choices]
