@@ -30,6 +30,7 @@ import math
 import numpy as np
 import subprocess
 import warnings
+import itertools
 import h5py
 try:
     from cStringIO import StringIO
@@ -293,13 +294,11 @@ class Index(object):
         self.end   = np.array(end, dtype=END_DTYPE)
         
         chrom_sizes = kwargs.pop("chrom_sizes", chrom_sizes)
-        if len(chrom_sizes) != len(self.chrom):
-            chromList = np.unique(self.chrom)
-            self.chrom_sizes = np.zeros(len(chromList), dtype=CHROM_SIZES_DTYPE)
-            for i in chromList:
-                self.chrom_sizes[i] = sum(self.chrom == i)
-        else:
-            self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
+
+        if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
+            chrom_sizes = [len(list(g)) for _, g in itertools.groupby(self.chrom)]
+        
+        self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
         
         label = kwargs.pop("label", label)
         if len(label) != len(self.chrom):
@@ -605,4 +604,37 @@ class HssFile(h5py.File):
                       doc='a alabtools.Genome instance')
     nbead = property(get_nbead, set_nbead)
     nstruct = property(get_nstruct, set_nstruct)
+
+
+def make_diploid(index):
+    didx = {}
+    for k in ['chrom', 'start', 'end']:
+        didx[k] = np.concatenate([index.__dict__[k], index.__dict__[k]])
+    didx['copy'] = np.concatenate([index.__dict__['copy'], 
+                                   index.__dict__['copy'] + 1 ])
+    return Index(didx['chrom'], didx['start'], didx['end'], copy=didx['copy'])
+
+
+def natural_sort(l): 
+    convert = lambda text: int(text) if text.isdigit() else text.lower() 
+    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
+    return sorted(l, key=alphanum_key)
+
+
+def get_index_from_bed(file):
+    bed = np.genfromtxt(file, usecols=(0,1,2),
+                        dtype=[('chr', 'S5'), ('start', int), ('end', int)])
+    cnames = natural_sort(np.unique(bed['chr']))
+    ucm = {c : i for i, c in enumerate(cnames)}
+    return Index([ucm[c] for c in bed['chr']], bed['start'], bed['end'])
+
+
+_ftpi = 4./3. * np.pi
+DEFAULT_NUCLEAR_VOLUME = _ftpi * (5000**3)
+def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
+    sizes = [b.end - b.start for b in index]
+    totsize = sum(sizes)
+    prefactor = volume * occupancy / (_ftpi * totsize)
+    rr = [(prefactor*sz)**(1./3.) for sz in sizes]
+    return np.array(rr, dtype=RADII_DTYPE)
 
