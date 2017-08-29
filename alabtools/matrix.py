@@ -196,7 +196,7 @@ class sss_matrix(object):
         bias : np.array column vector
         
         """
-        from numutils import NormCSR_ByBiasVector
+        from .numutils import NormCSR_ByBiasVector
         bias = bias.flatten()
         
         if len(bias) != self.shape[0] :
@@ -225,9 +225,9 @@ def SpMV_viaMKL( A, x ,Atranspose=False):
     from ctypes import POINTER,c_void_p,c_int,c_char,c_float,byref,cdll
     mkl = cdll.LoadLibrary("libmkl_rt.so")
     if Atranspose:
-        tras = 'N'
+        tras = b'N'
     else :
-        tras = 'T'
+        tras = b'T'
     SpMV = mkl.mkl_cspblas_scsrgemv
     # Dissecting the "cspblas_dcsrgemv" name:
     # "c" - for "c-blas" like interface (as opposed to fortran)
@@ -336,13 +336,13 @@ def SpMV_SM_viaMKL( A, x ):
         np_x = x.ctypes.data_as(POINTER(c_float))
         np_y = y.ctypes.data_as(POINTER(c_float))
         # now call MKL. This returns the answer in np_y, which links to y
-        SpMV(byref(c_char("U")), byref(c_int(m)),data ,indptr, indices, np_x, np_y ) 
+        SpMV(byref(c_char(b"U")), byref(c_int(m)),data ,indptr, indices, np_x, np_y ) 
     else:
         for columns in xrange(nVectors):
             xx = x[:,columns]
             yy = y[:,columns]
             np_x = xx.ctypes.data_as(POINTER(c_float))
             np_y = yy.ctypes.data_as(POINTER(c_float))
-            SpMV(byref(c_char("U")), byref(c_int(m)),data,indptr, indices, np_x, np_y ) 
+            SpMV(byref(c_char(b"U")), byref(c_int(m)),data,indptr, indices, np_x, np_y ) 
 
     return y

@@ -268,7 +268,7 @@ class Contactmatrix(object):
         usechr = []
         for c in uniqueChroms:
             chrom = self.genome.getchrom(c)
-            usechr.append(chrom[3:])
+            usechr.append(chrom[3:].decode())
         
         newMatrix = Contactmatrix(None,genome=None,resolution=None)
         newMatrix._build_genome(self.genome.assembly,
@@ -299,8 +299,11 @@ class Contactmatrix(object):
         return newMatrix
         
     def __getitem__(self,key):
-        if isinstance(key,string_types):
-            chrnum = self.genome.getchrnum(key)
+        if isinstance(key,(string_types,bytes)):
+            if isinstance(key,str):
+                chrnum = self.genome.getchrnum(key.encode())
+            else:
+                chrnum = self.genome.getchrnum(key)
             chrstart = np.flatnonzero(self.index.chrom == chrnum)[0]
             chrend   = np.flatnonzero(self.index.chrom == chrnum)[-1]
             return self.__getIntra(chrstart,chrend+1)
@@ -363,7 +366,7 @@ class Contactmatrix(object):
         out : numpy column array
             vector of bias
         """
-        from norm import bnewt
+        from .norm import bnewt
         if not hasattr(self,"mask"):
             self._getMask(mask)
         x = bnewt(self.matrix, mask=self.mask, check=0, **kwargs) * 100
