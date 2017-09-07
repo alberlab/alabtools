@@ -577,8 +577,12 @@ class HssFile(h5py.File):
         if 'coordinates' in self:
             self['coordinates'][...] = coord
         else:
+            chunksz = list(COORD_CHUNKSIZE)
+            for i in range(2):
+                if coord.shape[i] < COORD_CHUNKSIZE[i]:
+                    chunksz[i] = coord.shape[i]
             self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
-                                chunks=COORD_CHUNKSIZE, compression="gzip")
+                                chunks=tuple(chunksz), compression="gzip")
         self.attrs['nstruct'] = self._nstruct = coord.shape[0]
         self.attrs['nbead'] = self._nbead = coord.shape[1]
         
