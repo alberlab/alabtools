@@ -120,7 +120,7 @@ class Contactmatrix(object):
         self.index = self.genome.bininfo(resolution)
         self.resolution = resolution
         
-    def _set_index(self,chrom,start,end,label=None,copy=None,chrom_sizes=None):
+    def _set_index(self,chrom,start,end,label=[],copy=[],chrom_sizes=[]):
         self.index = utils.Index(chrom=chrom,start=start,end=end,label=label,copy=copy,chrom_sizes=chrom_sizes)
         
     def _load_hcs(self,filename):
