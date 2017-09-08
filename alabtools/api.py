@@ -455,6 +455,7 @@ class Contactmatrix(object):
                                   mapping,
                                   Bi,Bj,Bx)
         newMatrix.matrix = matrix.sss_matrix((Bx,(Bi,Bj)))
+        newMatrix.resolution = -1
         return newMatrix
     
     def fmaxScaling(self,fmax,force=False):
