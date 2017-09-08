@@ -29,6 +29,9 @@ float *fetchData(int * Ap,
         int dup  = up - Aj;
         for (int j = dlow; j != dup; ++j){
             data[pd] = Ax[j];
+            if (istart==jstart) && (iend=jend){//duplicate item for diagonal
+                data[++pd] = Ax[j];
+            }
             ++pd;            
         }
     }
@@ -97,6 +100,8 @@ void TopmeanSummaryMatrix(int * Ap,
             float topSum = 0;
             int topCount = 0;
             int topCut   = dataSize / top;
+            
+            if (topCut == 0){topCut = dataSize;}
             if (upperFence == 0){
                 upperFence = 10;
                 topCut     = dataSize;
