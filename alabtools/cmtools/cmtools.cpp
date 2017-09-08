@@ -29,7 +29,7 @@ float *fetchData(int * Ap,
         int dup  = up - Aj;
         for (int j = dlow; j != dup; ++j){
             data[pd] = Ax[j];
-            if (istart==jstart) && (iend=jend){//duplicate item for diagonal
+            if ((istart==jstart) && (iend==jend)){//duplicate item for diagonal
                 data[++pd] = Ax[j];
             }
             ++pd;            
