@@ -71,9 +71,43 @@ def CenterOfMass(xyz,mass):
         numpy array, (x,y,z) coordinate of center of mass
         
     """
+    try:
+        np.array(mass).shape[1]
+    except:
+        mass = np.array(mass)[:,None]
+        
     if len(xyz) != len(mass):
-        raise RuntimeError("Dimension not agree")
+        raise(RuntimeError,"Dimension not agree")
 
     return np.sum(xyz*mass,axis=0)/sum(mass)
+
+def RadiusOfGyration(xyz,r):
+    """
+        Calculate radius of gyration of particles
+        rg^2 = sum(massi*(ri - rcom)^2)/sum(massi)
+        
+        Parameters
+        ----------
+        xyz : numpy 2D array, N*3 2D array of coordinates
+        r : 1D array, radii of each beads
+        
+        Returns
+        -------
+        float, radius of gyration
+        
+    """
+    try:
+        np.array(r).shape[1]
+    except:
+        r = np.array(r)[:,None]
+        
+    if len(xyz) != len(r):
+        raise(RuntimeError,"Dimension not agree")
+    
+    mass = r**3
+    
+    r0 = CenterOfMass(xyz,mass)
+    
+    return np.sum(((xyz - r0)**2) * mass)/np.sum(mass)
 
     
