@@ -24,38 +24,193 @@ __version__ = "0.0.3"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
+import warnings
+from .utils import Genome,Index
 
-def PolarizationIndex(PointsA, PointsB):
-    """
-        Calculate Polarization Index defined by \sqrt{(1-V_s/V_a)(1-V_s/V_b)}
+
+class HssFile(h5py.File):
+
+    '''
+    h5py.File like object for .hss population files.
+    Directly inherit from h5py.File, and keeps in memory only version, 
+    number of beads and number of structures. Methods are provided to 
+    get/set data.
+
+    Attributes
+    ----------
+        version : int
+            File version
+        nstruct : int 
+            Number of structures
+        nbead : int
+            Number of beads in each structure
+    '''
+
+    def __init__(self, *args, **kwargs):
+
+        '''
+        See h5py.File constructor.
+        '''
+
+        h5py.File.__init__(self, *args, **kwargs)
+        try:
+            self._version = self.attrs['version']
+        except(KeyError):
+            self._version = __hss_version__
+            self.attrs.create('version', __hss_version__, dtype='int32')
+        try:
+            self._nbead = self.attrs['nbead']
+        except(KeyError):
+            self._nbead = 0
+            self.attrs.create('nbead', 0, dtype='int32')
+        try:
+            self._nstruct = self.attrs['nstruct']
+        except(KeyError):
+            self._nstruct = 0
+            self.attrs.create('nstruct', 0, dtype='int32')
+
+        if self.mode == "r":
+            if 'genome' not in self:
+                warnings.warn('Read-only HssFile is missing genome')
+            if 'index' not in self:
+                warnings.warn('Read-only HssFile is missing index')
+            if 'coordinates' not in self:
+                warnings.warn('Read-only HssFile is missing coordinates')
+            if 'radii' not in self:
+                warnings.warn('Read-only HssFile is missing radii')
+
+        self._check_consistency()
         
-        Parameters
-        ----------
-        PointsA, PointsB : numpy 2D array (float)
+    def _assert_warn(self, expr, msg):
+        if not expr:
+            warnings.warn('Hss consistency warning: ' + msg, RuntimeWarning)
+
+    def _check_consistency(self):
+        n_bead  = self.attrs['nbead']
         
+        if 'coordinates' in self:
+            self._assert_warn(self.attrs['nstruct'] == self['coordinates'].len(),
+                              'nstruct != coordinates length')
+            self._assert_warn(n_bead == self['coordinates'].shape[1],
+                              'nbead != coordinates second axis size')
+        if 'index' in self:
+            self._assert_warn(n_bead == self['index/chrom'].len(),
+                              'nbead != index.chrom length')
+            self._assert_warn(n_bead == self['index/copy'].len(),
+                              'nbead != index.copy length')
+            self._assert_warn(n_bead == self['index/start'].len(),
+                              'nbead != index.start length')
+            self._assert_warn(n_bead == self['index/end'].len(),
+                              'nbead != index.end length')
+            self._assert_warn(n_bead == self['index/label'].len(),
+                              'nbead != index.label length')
+        
+        if 'radii' in self:
+            self._assert_warn(n_bead == self['radii'].len(),
+                              'nbead != radii length')
+
+    def get_version(self):
+        return self._version
+
+    def get_nbead(self):
+        return self._nbead
+
+    def get_nstruct(self):
+        return self._nstruct
+
+    def get_genome(self):
+        '''
         Returns
         -------
-        Polarization index of 2 ConvexHulls defined by 2 point sets
-        
-    """
-    from scipy.spatial import ConvexHull
-    from ._geotools import ConvexHullIntersection
-    
-    Ach = ConvexHull(PointsA)
-    Bch = ConvexHull(PointsB)
-    
-    PointsI = ConvexHullIntersection(PointsA[Ach.vertices].reshape(len(Ach.vertices)*3),
-                                     PointsB[Bch.vertices].reshape(len(Bch.vertices)*3))
-    PointsI = np.array(PointsI)
-    PointsI = PointsI.reshape((int(len(PointsI)/3), 3))
-    
-    if len(PointsI) < 4:
-        return 1
-    
-    Ich = ConvexHull(PointsI)
-    
-    return ((1-Ich.volume/Ach.volume) * (1-Ich.volume/Bch.volume)) ** 0.5
+            alabtools.Genome
+        '''
+        return Genome(self)
 
+    def get_index(self):
+        '''
+        Returns
+        -------
+            alabtools.Index
+        '''
+        return Index(self)
+
+    def get_coordinates(self, read_to_memory=True):
+
+        '''
+        Parameters
+        ----------
+            read_to_memory : bool
+                If True (default), the coordinates will be read and returned
+                as a numpy.ndarray. If False, a h5py dataset object
+        '''
+        
+        if read_to_memory:
+            return self['coordinates'][:]
+        return self['coordinates']
+
+    def get_radii(self):
+        return self['radii'][:]
+
+    def set_nbead(self, n):
+        self.attrs['nbead'] = self._nbead = n
+
+    def set_nstruct(self, n):
+        self.attrs['nstruct'] = self._nstruct = n
+
+    def set_genome(self, genome):
+        assert isinstance(genome, Genome)
+        genome.save(self)
+
+    def set_index(self, index):
+        assert isinstance(index, Index)
+        index.save(self)
+
+    def set_coordinates(self, coord):
+        assert isinstance(coord, np.ndarray)
+        if (len(coord.shape) != 3) or (coord.shape[2] != 3):
+            raise ValueError('Coordinates should have dimensions ' 
+                             '(nstruct x nbeads x 3), '
+                             'got %s' % repr(coord.shape))
+        if self._nstruct != 0 and self._nstruct != len(coord):
+            raise ValueError('Coord first axis does not match number of '
+                             'structures')
+        if self._nbead != 0 and self._nbead != coord.shape[1]:
+            raise ValueError('Coord second axis does not match number of '
+                             'beads')
+
+        if 'coordinates' in self:
+            self['coordinates'][...] = coord
+        else:
+            chunksz = list(COORD_CHUNKSIZE)
+            for i in range(2):
+                if coord.shape[i] < COORD_CHUNKSIZE[i]:
+                    chunksz[i] = coord.shape[i]
+            self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
+                                chunks=tuple(chunksz), compression="gzip")
+        self.attrs['nstruct'] = self._nstruct = coord.shape[0]
+        self.attrs['nbead'] = self._nbead = coord.shape[1]
+        
+    def set_radii(self, radii):
+        assert isinstance(radii, np.ndarray)
+        if len(radii.shape) != 1:
+            raise ValueError('radii should be a one dimensional array')
+        if self._nbead != 0 and self._nbead != len(radii):
+            raise ValueError('Length of radii does not match number of beads')
+        
+        if 'radii' in self:
+            self['radii'][...] = radii
+        else:
+            self.create_dataset('radii', data=radii, dtype=RADII_DTYPE, 
+                                chunks=True, compression="gzip")
+        self.attrs['nbead'] = self._nbead = radii.shape[0]
+
+    coordinates = property(get_coordinates, set_coordinates)
+    radii = property(get_radii, set_radii)
+    index = property(get_index, set_index, doc='a alabtools.Index instance')
+    genome = property(get_genome, set_genome, 
+                      doc='a alabtools.Genome instance')
+    nbead = property(get_nbead, set_nbead)
+    nstruct = property(get_nstruct, set_nstruct)
     
     
     
