@@ -109,9 +109,7 @@ class Genome(object):
                 print("chroms or lengths not given, reading from genomes info file.")
             datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),"genomes/" + assembly + ".info")
             
-            f = loadstream(datafile)
-            info = np.genfromtxt(f,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
-            f.close()
+            info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
             chroms = info["chroms"].astype(CHROMS_DTYPE)
             lengths = info["lengths"].astype(LENGTHS_DTYPE)
             origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
