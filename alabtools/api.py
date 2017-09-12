@@ -160,7 +160,7 @@ class Contactmatrix(object):
         #loop through all used chromosomes
         for cil,cih in chrIdRange:
             i0,i1 = (h5['indexes']['chrom_offset'][cil],h5['indexes']['chrom_offset'][cih])
-            for r in xrange(i0,i1):
+            for r in range(i0,i1):
                 edge    = h5['indexes']['bin1_offset'][r:r+2]
                 #print(edge)
                 rowind  = h5['pixels']['bin2_id'][edge[0]:edge[1]]
@@ -183,7 +183,7 @@ class Contactmatrix(object):
                 data.append(rowdata)
             #--
         #--
-        for r in xrange(len(indices)):
+        for r in range(len(indices)):
             indptr[r+1] = indptr[r] + len(indices[r])
         
         indices = np.concatenate(indices)
