@@ -108,6 +108,6 @@ def RadiusOfGyration(xyz,r):
     
     r0 = CenterOfMass(xyz,mass)
     
-    return np.sum(((xyz - r0)**2) * mass)/np.sum(mass)
+    return np.sqrt(np.sum(((xyz - r0)**2) * mass)/np.sum(mass))
 
     
