@@ -17,7 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
 
-__author__  = "Nan Hua"
+__author__  = "Nan Hua and Guido Polles"
 
 __license__ = "GPL"
 __version__ = "0.0.3"
@@ -29,16 +29,12 @@ import re
 import math
 import numpy as np
 import subprocess
-import warnings
 import itertools
 import h5py
 try:
     from cStringIO import StringIO
 except ImportError:
     from io import StringIO
-
-
-__hss_version__ = 1
 
 CHROMS_DTYPE = np.dtype('S10')
 ORIGINS_DTYPE = np.int32
@@ -53,8 +49,6 @@ CHROM_SIZES_DTYPE = np.int32
 
 COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
-
-COORD_CHUNKSIZE = (100, 100, 3)
 
 class Genome(object):
     """
@@ -248,33 +242,48 @@ class Genome(object):
 class Index(object):
     
     """
-    Matrix indexes
+    Matrix/System indexes. Maps matrix bins or model beads to
+    genomic regions.
     
     Parameters
     ----------
     chrom : list[int32]
-        chromosome index starting from 0 (which is chr1)
+        numeric chromosome id (starting from 0) for each bin/bead.
+        Es.: 0 -> chr1, 1 -> chr2, ..., 22 -> chrX  
     start : list[int32]
-        bin start
+        genomic starting positions of each bin (in bp, with respect to the 
+        chromosome start)
     end : list[int32]
-        bin end
-    copy : list[int32]
-        ploidy of each bin
+        genomic ending positions of each bin (in bp, with respect to the 
+        chromosome start) 
     label : list[string10]
-        label for each bin
-    chrom_sizes : list[int32]
-        number of bins of each chromosome
+        label for each bin (usually, 'CEN', 'gap', 'domain', although it 
+        can be any string of less than 10 characters)
+    copy : list[int32], optional
+        In systems of beads, there may be multiple indistinguishable 
+        copies of the same chromosome in the system. The copy vector specifies
+        which copy of the chromosome each bead maps to. If not specified,
+        is computed assuming non-contiguous groups of beads with the same
+        `chrom` value belong to different copies.
+        Each bead mapping to the same (chrom, start, end) tuple should,
+        in general, have a different copy value. 
+    chrom_sizes : list[int32], optional
+        number of bins/beads in each chromosome. It is useful to specify it if 
+        two copies of the same chromosome appear as contiguous in the index.
+        If not specified, it is automatically computed assuming non-contiguous 
+        groups of beads with the same `chrom` value belong to different copies. 
     """
 
     def __init__(self, chrom=[], start=[], end=[], **kwargs):
         
-        if isinstance(chrom,h5py.File):
+        if isinstance(chrom, h5py.File):
             start = chrom["index"]["start"]
             end   = chrom["index"]["end"]
             label = chrom["index"]["label"]
             copy  = chrom["index"]["copy"]
             chrom_sizes = chrom["index"]["chrom_sizes"]
             chrom = chrom["index"]["chrom"]
+            self._compute_copy_index()
         else:
             label = []
             copy = []
@@ -308,11 +317,13 @@ class Index(object):
         copy = kwargs.pop("copy", copy)
         if len(copy) != len(self.chrom):
             self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
+            self._compute_copy_vec()
         else:
             self.copy= np.array(copy, dtype=COPY_DTYPE)
             
         self.offset = np.array([sum(self.chrom_sizes[:i]) 
                                 for i in range(len(self.chrom_sizes) + 1)])
+        self._compute_copy_index()
     #-
     
     def __getitem__(self,key):
@@ -327,9 +338,42 @@ class Index(object):
     
     def __len__(self):
         return len(self.chrom)
+
     def __repr__(self):
         return self.chrom_sizes.__repr__()
-    
+
+    def _compute_copy_vec(self):
+        if len(self.copy) == 0:
+            return
+        chrom_ids = set(self.chrom)
+        copy_no = { c: -1 for c in chrom_ids}
+        copy_no[self.chrom[0]] = 0
+        self.copy[0] = 0
+        for i in range(1, len(self.chrom)):
+            cc = self.chrom[i]
+            if self.chrom[i - 1] != cc:
+                copy_no[cc] += 1
+            self.copy[i] = copy_no[cc]
+
+    def _compute_copy_index(self):
+        '''
+        Return a index of the copies of the same genomic region in form of a 
+        dictionary. The key of each unique region is the id of the first
+        bin/bead mapping to it. The values are lists of all the bead id's 
+        (including the key) which map to that particular region.
+        In the case of an haploid system, or a contact map, this dictionary
+        is completely trivial, i.e. {i : i for i in range(len(index))}.
+        '''
+        tmp_index = {}
+        for i, v in enumerate(self):
+            locus = (int(v.chrom), int(v.start), int(v.end))
+            if locus not in tmp_index:
+                tmp_index[locus] = [i]
+            else:
+                tmp_index[locus] += [i]
+        # use first index as a key
+        self.copy_index = {ii[0]: ii for locus, ii in tmp_index.items()}
+        
     def save(self,h5f,compression="gzip", compression_opts=6):
 
         """
@@ -432,6 +476,59 @@ def make_diploid(index):
                                    index.__dict__['copy'] + 1 ])
     return Index(didx['chrom'], didx['start'], didx['end'], copy=didx['copy'])
 
+def make_multiploid(index, chroms, copies):
+    '''
+    Returns a multiploid index mapping based on the input index.
+    The index is ordered by the copy id and then by the input chrom order.
+
+    Parameters
+    ----------
+    index (alabtools.utils.Index): Haploid input index
+    chroms (array[int] like): the chromosomes ids to be included
+        in the output index 
+    copy_number (array[int] like): the number of copies for each
+        of the chromosomes in `chrom`
+
+    Returns
+    -------
+    alabtools.utils.Index: a index with `copies[i]` copies of the
+        `chroms[i]` chromosome, for each element in `chroms`.
+
+    Examples
+    --------
+    # human genome assembly
+    g = Genome('hg19', usechr=['#', 'X', 'Y'])
+
+    # get the index at 1MB resolution
+    idx = g.bininfo(1000000)
+
+    # obtain the index for a 1MB resolution male diploid cell
+    # i.e. 2 copies for chromosomes 1-22 and 1 each for chromosomes X and Y
+    num_copies = [2]*22 + [1, 1]
+    idx = make_multiploid(idx, range(24), num_copies)
+    '''
+    nchrom = []
+    nstart = []
+    nend = []
+    ncopy = []
+    csizes = []
+    for z in range(max(copies)):
+        for cid, cnum in zip(chroms, copies):
+            if z < cnum:
+                idxs = np.where(index.chrom == cid)[0]
+                nchrom.append(index.chrom[idxs])
+                nstart.append(index.start[idxs])
+                nend.append(index.end[idxs])
+                ncopy.append(np.array([z]*len(idxs)))
+                csizes.append(len(idxs))
+
+    nchrom = np.concatenate(nchrom)
+    nstart = np.concatenate(nstart)
+    nend = np.concatenate(nend)
+    ncopy = np.concatenate(ncopy)
+    
+    return Index(nchrom, nstart, nend, copy=ncopy, chrom_sizes=csizes)
+
 
 def natural_sort(l): 
     convert = lambda text: int(text) if text.isdigit() else text.lower() 
@@ -455,4 +552,3 @@ def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
     prefactor = volume * occupancy / (_ftpi * totsize)
     rr = [(prefactor*sz)**(1./3.) for sz in sizes]
     return np.array(rr, dtype=RADII_DTYPE)
-
