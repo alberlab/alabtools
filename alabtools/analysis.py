@@ -17,16 +17,19 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
 
-__author__  = "Nan Hua"
+__author__  = "Guido Polles"
 
 __license__ = "GPL"
 __version__ = "0.0.3"
-__email__   = "nhua@usc.edu"
+__email__   = "polles@usc.edu"
 
 import numpy as np
 import warnings
-from .utils import Genome,Index
+import h5py
+from .utils import Genome, Index, COORD_DTYPE, RADII_DTYPE
 
+__hss_version__ = 1.0
+COORD_CHUNKSIZE = (100, 100, 3)
 
 class HssFile(h5py.File):
 
@@ -139,9 +142,11 @@ class HssFile(h5py.File):
         '''
         Parameters
         ----------
-            read_to_memory : bool
-                If True (default), the coordinates will be read and returned
-                as a numpy.ndarray. If False, a h5py dataset object
+        read_to_memory (bool) :
+            If True (default), the coordinates will be read and returned
+            as a numpy.ndarray. If False, a h5py dataset object will be
+            returned. In the latter case, note that the datased is valid 
+            only while the file is open.
         '''
         
         if read_to_memory:
