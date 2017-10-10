@@ -283,7 +283,6 @@ class Index(object):
             copy  = chrom["index"]["copy"]
             chrom_sizes = chrom["index"]["chrom_sizes"]
             chrom = chrom["index"]["chrom"]
-            self._compute_copy_index()
         else:
             label = []
             copy = []
