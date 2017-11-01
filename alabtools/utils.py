@@ -35,6 +35,11 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from io import StringIO
+try: 
+    import cPickle as pickle 
+except ImportError:
+    import pickle
+
 
 CHROMS_DTYPE = np.dtype('S10')
 ORIGINS_DTYPE = np.int32
@@ -275,7 +280,8 @@ class Index(object):
     """
 
     def __init__(self, chrom=[], start=[], end=[], **kwargs):
-        
+        self.copy_index = None
+
         if isinstance(chrom, h5py.File):
             start = chrom["index"]["start"]
             end   = chrom["index"]["end"]
@@ -283,6 +289,10 @@ class Index(object):
             copy  = chrom["index"]["copy"]
             chrom_sizes = chrom["index"]["chrom_sizes"]
             chrom = chrom["index"]["chrom"]
+            try:
+                self.copy_index = pickle.loads(chrom["index"]["copy_index"][()])
+            except:
+                pass
         else:
             label = []
             copy = []
@@ -322,7 +332,9 @@ class Index(object):
             
         self.offset = np.array([sum(self.chrom_sizes[:i]) 
                                 for i in range(len(self.chrom_sizes) + 1)])
-        self._compute_copy_index()
+
+        if not self.copy_index:
+            self._compute_copy_index()
     #-
     
     def __getitem__(self,key):
@@ -356,7 +368,7 @@ class Index(object):
 
     def _compute_copy_index(self):
         '''
-        Return a index of the copies of the same genomic region in form of a 
+        Returns a index of the copies of the same genomic region in form of a 
         dictionary. The key of each unique region is the id of the first
         bin/bead mapping to it. The values are lists of all the bead id's 
         (including the key) which map to that particular region.
@@ -444,6 +456,12 @@ class Index(object):
             igrp.create_dataset("chrom_sizes", data=self.chrom_sizes, 
                                 compression=compression,
                                 compression_opts=compression_opts)
+
+        if 'copy_index' in igrp:
+            igrp['copy_index'][...] = pickle.dumps(self.copy_index)
+        else:
+            # scalar datasets don't support compression
+            igrp.create_dataset("copy_index", data=pickle.dumps(self.copy_index)) 
 #--------------------
 
 
