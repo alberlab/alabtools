@@ -153,9 +153,6 @@ class HssFile(h5py.File):
             return self['coordinates'][:]
         return self['coordinates']
 
-    def __getitem__(self, key):
-        return self['coordinates'][key]
-
     def get_bead_crd(self, key):
         return self['coordinates'][key][()]
 
