@@ -28,8 +28,8 @@ import warnings
 import h5py
 from .utils import Genome, Index, COORD_DTYPE, RADII_DTYPE
 
-__hss_version__ = 1.0
-COORD_CHUNKSIZE = (100, 100, 3)
+__hss_version__ = 2.0
+#COORD_CHUNKSIZE = (100, 100, 3)
 
 class HssFile(h5py.File):
 
@@ -92,9 +92,9 @@ class HssFile(h5py.File):
         n_bead  = self.attrs['nbead']
         
         if 'coordinates' in self:
-            self._assert_warn(self.attrs['nstruct'] == self['coordinates'].len(),
+            self._assert_warn(self.attrs['nstruct'] == self['coordinates'].shape[1],
                               'nstruct != coordinates length')
-            self._assert_warn(n_bead == self['coordinates'].shape[1],
+            self._assert_warn(n_bead == self['coordinates'].shape[0],
                               'nbead != coordinates second axis size')
         if 'index' in self:
             self._assert_warn(n_bead == self['index/chrom'].len(),
@@ -153,6 +153,21 @@ class HssFile(h5py.File):
             return self['coordinates'][:]
         return self['coordinates']
 
+    def __getitem__(self, key):
+        return self['coordinates'][key]
+
+    def get_bead_crd(self, key):
+        return self['coordinates'][key][()]
+
+    def get_struct_crd(self, key):
+        return self['coordinates'][:, key, :][()]
+
+    def set_bead_crd(self, key, crd):
+        self['coordinates'][key, :, :] = crd
+
+    def set_struct_crd(self, key, crd):
+        self['coordinates'][:, key, :] = crd
+
     def get_radii(self):
         return self['radii'][:]
 
@@ -174,26 +189,25 @@ class HssFile(h5py.File):
         assert isinstance(coord, np.ndarray)
         if (len(coord.shape) != 3) or (coord.shape[2] != 3):
             raise ValueError('Coordinates should have dimensions ' 
-                             '(nstruct x nbeads x 3), '
+                             '(nbeads x struct x 3), '
                              'got %s' % repr(coord.shape))
-        if self._nstruct != 0 and self._nstruct != len(coord):
+        if self._nstruct != 0 and self._nstruct != coord.shape[1]:
             raise ValueError('Coord first axis does not match number of '
                              'structures')
-        if self._nbead != 0 and self._nbead != coord.shape[1]:
+        if self._nbead != 0 and self._nbead != coord.shape[0]:
             raise ValueError('Coord second axis does not match number of '
                              'beads')
 
         if 'coordinates' in self:
             self['coordinates'][...] = coord
         else:
-            chunksz = list(COORD_CHUNKSIZE)
-            for i in range(2):
-                if coord.shape[i] < COORD_CHUNKSIZE[i]:
-                    chunksz[i] = coord.shape[i]
-            self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE, 
-                                chunks=tuple(chunksz), compression="gzip")
-        self.attrs['nstruct'] = self._nstruct = coord.shape[0]
-        self.attrs['nbead'] = self._nbead = coord.shape[1]
+            #chunksz = list(COORD_CHUNKSIZE)
+            #for i in range(2):
+            #    if coord.shape[i] < COORD_CHUNKSIZE[i]:
+            #        chunksz[i] = coord.shape[i]
+            self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE)
+        self.attrs['nstruct'] = self._nstruct = coord.shape[1]
+        self.attrs['nbead'] = self._nbead = coord.shape[0]
         
     def set_radii(self, radii):
         assert isinstance(radii, np.ndarray)
@@ -216,7 +230,6 @@ class HssFile(h5py.File):
                       doc='a alabtools.Genome instance')
     nbead = property(get_nbead, set_nbead)
     nstruct = property(get_nstruct, set_nstruct)
-    
     
     
 #================================================
