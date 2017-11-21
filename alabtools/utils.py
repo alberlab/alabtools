@@ -485,7 +485,7 @@ def loadstream(filename):
 
 def make_diploid(index):
     didx = {}
-    for k in ['chrom', 'start', 'end']:
+    for k in ['chrom', 'start', 'end', 'label']:
         didx[k] = np.concatenate([index.__dict__[k], index.__dict__[k]])
     didx['copy'] = np.concatenate([index.__dict__['copy'], 
                                    index.__dict__['copy'] + 1 ])
@@ -524,8 +524,9 @@ def make_multiploid(index, chroms, copies):
     '''
     nchrom = []
     nstart = []
-    nend = []
-    ncopy = []
+    nend   = []
+    ncopy  = []
+    nlabel = []
     csizes = []
     for z in range(max(copies)):
         for cid, cnum in zip(chroms, copies):
@@ -534,6 +535,7 @@ def make_multiploid(index, chroms, copies):
                 nchrom.append(index.chrom[idxs])
                 nstart.append(index.start[idxs])
                 nend.append(index.end[idxs])
+                nlabel.append(index.label[idxs])
                 ncopy.append(np.array([z]*len(idxs)))
                 csizes.append(len(idxs))
 
@@ -541,8 +543,9 @@ def make_multiploid(index, chroms, copies):
     nstart = np.concatenate(nstart)
     nend = np.concatenate(nend)
     ncopy = np.concatenate(ncopy)
+    nlabel = np.concatenate(nlabel)
     
-    return Index(nchrom, nstart, nend, copy=ncopy, chrom_sizes=csizes)
+    return Index(nchrom, nstart, nend, copy=ncopy, label=nlabel, chrom_sizes=csizes)
 
 
 def natural_sort(l): 
@@ -551,12 +554,23 @@ def natural_sort(l):
     return sorted(l, key=alphanum_key)
 
 
-def get_index_from_bed(file):
-    bed = np.genfromtxt(file, usecols=(0,1,2),
-                        dtype=[('chr', 'S5'), ('start', int), ('end', int)])
-    cnames = natural_sort(np.unique(bed['chr']))
-    ucm = {c : i for i, c in enumerate(cnames)}
-    return Index([ucm[c] for c in bed['chr']], bed['start'], bed['end'])
+def get_index_from_bed(file, genome, usecols=(0,1,2,3), 
+                       dtype=[('chrom', 'S5'), ('start', int), ('end', int), ('label', 'S10'), ('copy', int)]):
+    bed = np.genfromtxt(file, usecols=usecols, dtype=dtype)
+    
+    chrom = np.array([genome.getchrnum(c) for c in bed['chrom']])
+    start = bed['start']
+    end = bed['end']
+    if 'label' in bed.dtype.names:
+        label = bed['label']
+    else:
+        label = []
+        
+    if 'copy' in bed.dtype.names:
+        copy = bed['copy']
+    else:
+        copy = []
+    return Index(chrom, start, end, label=label, copy=copy)
 
 
 _ftpi = 4./3. * np.pi
