@@ -489,7 +489,7 @@ def make_diploid(index):
         didx[k] = np.concatenate([index.__dict__[k], index.__dict__[k]])
     didx['copy'] = np.concatenate([index.__dict__['copy'], 
                                    index.__dict__['copy'] + 1 ])
-    return Index(didx['chrom'], didx['start'], didx['end'], copy=didx['copy'])
+    return Index(didx['chrom'], didx['start'], didx['end'], label=didx['label'], copy=didx['copy'])
 
 def make_multiploid(index, chroms, copies):
     '''
