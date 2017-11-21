@@ -185,7 +185,7 @@ class Genome(object):
     def __repr__(self):
         represent = "Genome Assembly: " + self.assembly + '\n'
         for i in range(len(self.chroms)):
-            represent += (self.chroms[i].encode() + '\t' + str(self.origins[i]) + '-' + str(self.origins[i]+self.lengths[i]) + '\n')
+            represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(self.origins[i]+self.lengths[i]) + '\n')
         return represent
         
     def save(self, h5f, compression="gzip", compression_opts=6):
