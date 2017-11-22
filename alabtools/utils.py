@@ -461,9 +461,7 @@ class Index(object):
             igrp['copy_index'][...] = json.dumps(self.copy_index)
         else:
             # scalar datasets don't support compression
-            igrp.create_dataset("copy_index", data=json.dumps(self.copy_index),
-                                compression=compression,
-                                compression_opts=compression_opts) 
+            igrp.create_dataset("copy_index", data=json.dumps(self.copy_index)) 
 #--------------------
 
 
