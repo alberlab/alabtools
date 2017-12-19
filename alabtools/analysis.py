@@ -62,6 +62,11 @@ class HssFile(h5py.File):
             self._version = __hss_version__
             self.attrs.create('version', __hss_version__, dtype='int32')
         try:
+            self._violation = self.attrs['violation']
+        except(KeyError):
+            self._violatoin = np.nan
+            self.attrs.create('violation', np.nan, dtype='float')
+        try:
             self._nbead = self.attrs['nbead']
         except(KeyError):
             self._nbead = 0
@@ -155,7 +160,10 @@ class HssFile(h5py.File):
 
     def get_bead_crd(self, key):
         return self['coordinates'][key][()]
-
+    
+    def get_violation(self):
+        return self._violation
+    
     def get_struct_crd(self, key):
         return self['coordinates'][:, key, :][()]
 
@@ -173,6 +181,9 @@ class HssFile(h5py.File):
 
     def set_nstruct(self, n):
         self.attrs['nstruct'] = self._nstruct = n
+    
+    def set_violation(self, v):
+        self.attrs['violation'] = self._violation = n
 
     def set_genome(self, genome):
         assert isinstance(genome, Genome)
@@ -227,7 +238,7 @@ class HssFile(h5py.File):
                       doc='a alabtools.Genome instance')
     nbead = property(get_nbead, set_nbead)
     nstruct = property(get_nstruct, set_nstruct)
-    
+    violation = property(get_violation, set_violation)
     
 #================================================
 
