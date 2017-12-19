@@ -183,7 +183,7 @@ class HssFile(h5py.File):
         self.attrs['nstruct'] = self._nstruct = n
     
     def set_violation(self, v):
-        self.attrs['violation'] = self._violation = n
+        self.attrs['violation'] = self._violation = v
 
     def set_genome(self, genome):
         assert isinstance(genome, Genome)
