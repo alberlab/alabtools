@@ -7,4 +7,12 @@ void TopmeanSummaryMatrix(int * Ap,
                           int * Bi,
                           int * Bj,
                           float * Bx);
-                          
+void BuildContactMap(float * coordinates,
+                     int nbead,
+                     int nstruct,
+                     float * radii,
+                     float contactRange,
+                     int DimB,
+                     int * Bi,
+                     int * Bj,
+                     float * Bx);

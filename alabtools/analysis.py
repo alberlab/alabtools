@@ -230,7 +230,28 @@ class HssFile(h5py.File):
             self.create_dataset('radii', data=radii, dtype=RADII_DTYPE, 
                                 chunks=True, compression="gzip")
         self.attrs['nbead'] = self._nbead = radii.shape[0]
-
+    
+    def buildContactMap(self, contactRange = 2):
+        from ._cmtools import BuildContactMap_func
+        from .api import Contactmatrix
+        from .matrix import sss_matrix
+        mat = Contactmatrix(None, genome=None, resolution=None)
+        mat.genome = self.genome
+        mat.index = self.index
+        DimB = len(self.radii)
+        Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
+        Bj = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
+        Bx = np.empty(int(DimB*(DimB+1)/2),dtype=np.float32)
+        
+        crd = self.coordinates
+        if crd.flags['C_CONTIGUOUS'] is not True:
+            crd = crd.copy(order='C')
+        BuildContactMap_func(crd, self.radii, contactRange, Bi, Bj, Bx)
+        
+        mat.matrix = sss_matrix((Bx, (Bi, Bj)))
+        mat.resolution = np.nan
+        return mat
+    
     coordinates = property(get_coordinates, set_coordinates)
     radii = property(get_radii, set_radii)
     index = property(get_index, set_index, doc='a alabtools.Index instance')

@@ -133,6 +133,67 @@ void TopmeanSummaryMatrix(int * Ap,
     }
 }
 
+double SquareDistance(float x1, float y1, float z1, float x2, float y2, float z2){
+    return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2);
+}
+void BuildContactMap(float * coordinates, //nbead*nstruct*3
+                     int nbead,
+                     int nstruct,
+                     float * radii,
+                     float contactRange,
+                     int DimB,
+                     int * Bi,
+                     int * Bj,
+                     float * Bx)
+{
+    std::vector<int> pBi[THREADS],pBj[THREADS];
+    std::vector<float> pBx[THREADS];
+    std::fill(Bi, Bi + DimB*(DimB+1)/2, 0);
+    std::fill(Bj, Bj + DimB*(DimB+1)/2, 0);
+    std::fill(Bx, Bx + DimB*(DimB+1)/2, 0);
+    std::cout << nbead << " " << nstruct << std::endl;
+    
+#pragma omp parallel num_threads(THREADS)
+{
+    #pragma omp for schedule(dynamic, 5)
+    for (int i = 0; i < DimB; ++i){
+        if ((i+1) % int(DimB/10) == 0){
+            std::cout << "=";
+            std::cout.flush(); //process bar
+        }
+        int thread = omp_get_thread_num();
+        for (int j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
+            double cap = (radii[i] + radii[j]) * contactRange;
+            cap = cap*cap;
+            float contacts = 0;
+            for (int k = 0; k < nstruct; ++k){
+                int indexI = i*nstruct*3 + k*3;
+                int indexJ = j*nstruct*3 + k*3;
+                double dist = SquareDistance(coordinates[indexI], coordinates[indexI+1], coordinates[indexI+2],
+                                             coordinates[indexJ], coordinates[indexJ+1], coordinates[indexJ+2]);
+                if (dist <= cap){
+                    contacts = contacts + 1;
+                }
+            }
+            pBi[thread].push_back(i);
+            pBj[thread].push_back(j);
+            pBx[thread].push_back(contacts / nstruct);
+            
+        }
+    }
+}
+    std::cout << std::endl;
+    int k = 0;
+    for (int i = 0; i < THREADS; ++i){
+        for (int j = 0; j < pBi[i].size(); ++j){
+            Bi[k] = pBi[i][j];
+            Bj[k] = pBj[i][j];
+            Bx[k] = pBx[i][j];
+            ++k;
+        }
+    }
+
+}
 /*
 int main(){
     std::ifstream f;
