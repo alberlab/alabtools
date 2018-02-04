@@ -40,16 +40,23 @@ from . import matrix
 
 class Contactmatrix(object):
     """
-    A flexible matrix instant that supports various methods for processing HiC contacts
+    A flexible matrix instant that supports various methods for processing HiC 
+    contacts. It provides a syntax to easily generate submatrices.
     
     Parameters
     ----------
     mat : str or matrix or None
         read matrix from filename, or initialize the matrix from a scipy
-        sparse matrix, or a numpy dense matrix, or with an empty matrix
-    genome : string for a genome e.g.'hg19','mm9'
-    resolution : int, the resolution for the hic matrix e.g. 100000
-    usechr : list, containing the chromosomes used for generating the matrix
+        sparse matrix, or a numpy dense matrix, a cooler file
+        or with an empty matrix
+    genome : string 
+        Name of the genome assembly e.g.'hg19','mm9'. It is ignored if
+        loading from hcs, hdf5, or cooler
+    resolution : int or utils.Index 
+        the resolution for the hic matrix e.g. 100000, or a alabtools index
+        describing the binning
+    usechr : list of str 
+        chromosomes used for generating the matrix, es: ['#', 'X', 'Y'] 
     
     Attributes
     ----------
@@ -57,6 +64,29 @@ class Contactmatrix(object):
     index : utils.Index
     genome : utils.Genome, for the genome
     resolution : resolution for the contact matrix
+
+    Examples
+    --------
+    
+    # load a matrix
+    cm = Contactmatrix('mm9_10kb.cool')
+    
+    # remove 2% of low coverage bins
+    cm.maskLowCoverage(2)
+    
+    # krnormalize it
+    cm.krnorm()
+    
+    # make a 100kb matrix probability from 10kb matrix, to have average 
+    # rowsum equal to 25
+    cm_100kb = cm.iterativeScaling(10, 25)
+
+    # get the chr1-chr1 submatrix
+    cm_chr1 = cm_100kb['chr1']
+
+    # plot it to a file, clipping to 0.2
+    com_chr1.plot('chr1.pdf', clip_max=0.2) 
+
     
     """
     def __init__(self, mat=None, genome='hg19', resolution=100000, usechr=['#','X']):
@@ -525,6 +555,34 @@ class Contactmatrix(object):
     #=============plotting method
     
     def plot(self,filename,log=False,**kwargs):
+        '''
+        Plots the current contact matrix to a file
+
+        Parameters
+        ----------
+        filename: str
+            Output filename
+        log: bool, optional
+            Use a log-scaled color map. Default is False
+        
+        Additional keyword arguments
+        ----------------------------
+
+        cmap : matplotlib color map
+            Color map used in matrix, e.g cm.Reds, cm.bwr, default is red
+        clip_min : float, optional
+            The lower clipping value. If an element of a matrix is <clip_min, it is
+            plotted as clip_min.
+        clip_max : float, optional
+            The upper clipping value.
+        label : str, optional
+            Colorbar label
+        ticklabels1 : list, optional
+            Custom tick labels for the first dimension of the matrix.
+        ticklabels2 : list, optional
+            Custom tick labels for the second dimension of the matrix.
+        '''
+
         from .plots import plotmatrix,red
         
         mat = self.matrix.toarray()
