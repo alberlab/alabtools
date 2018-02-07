@@ -13,7 +13,7 @@ float *fetchData(int * Ap,
                  int spaceLength)
 {
     //prepare newdata
-    float *data = new float[spaceLength];
+    float *data = new float[spaceLength+1];
     std::fill(data,data+spaceLength,0);
     //pointer to location for insert
     int pd = 0;
@@ -30,7 +30,11 @@ float *fetchData(int * Ap,
         for (int j = dlow; j != dup; ++j){
             data[pd] = Ax[j];
             if ((istart==jstart) && (iend==jend)){//duplicate item for diagonal
-                data[++pd] = Ax[j];
+                if (Aj[j] > i){
+                    data[++pd] = Ax[j];
+                }else{
+                    pd--;
+                }
             }
             ++pd;            
         }

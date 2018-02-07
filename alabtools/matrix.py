@@ -134,6 +134,47 @@ class sss_matrix(object):
         self.csr[nonzero,nonzero] = 0
         self.csr.eliminate_zeros()
 
+    def __getitem__(self, key):
+        n, m = self.shape
+        
+        if np.issubdtype(type(key), np.integer):
+            i = key
+            row = np.zeros(m)
+            row[ self.indices[self.indptr[i]:self.indptr[i+1]] ] = self.data[self.indptr[i]:self.indptr[i+1]]
+            row[i] = self.diagonal[i]
+            return row
+        
+        elif isinstance(key, list) or isinstance(key, np.ndarray):
+            rows = np.zeros((len(key), m))
+            for k, i in enumerate(key):
+                rows[k, self.indices[self.indptr[i]:self.indptr[i+1]] ] = self.data[self.indptr[i]:self.indptr[i+1]]
+                rows[k, i] = self.diagonal[i]
+            return rows
+
+        elif isinstance(key, slice):
+            start, stop, step = key.start, key.stop, key.step
+            if start == None:
+                start = 0
+            if stop == None or stop > n:
+                stop = n
+            if step == None:
+                step = 1
+                
+            rng = range(start, stop, step)
+            rows = np.zeros((len(rng), m))
+            for k, i in enumerate(rng):
+                rows[k, :] = self.__getitem__(i)
+            return rows
+
+        elif isinstance(key, tuple):
+            if len(key) != 2:
+                raise ValueError('__getitem__ should receive maximum 2 dimensions')
+            rows, cols = key
+            return self.__getitem__(rows)[:, cols]
+
+        else:
+            raise RuntimeError('Invalid index type')
+
     def toarray(self,order=None,out=None):
         """See the docstring for `spmatrix.toarray`."""
         mt = self.csr.toarray(order=order, out=out)
