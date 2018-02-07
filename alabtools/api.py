@@ -427,9 +427,17 @@ class Contactmatrix(object):
             start  = f_tadDef['f1']
             end    = f_tadDef['f2']
             label  = f_tadDef['f3']
+            tad_sizes = end - start
+            if np.count_nonzero(tad_sizes < self.resolution):
+                raise RuntimeError('%d TAD(s) are too small for this matrix resolution (%d)' %
+                                   (np.count_nonzero(tad_sizes < self.resolution),
+                                    self.resolution)
+                                  )
             newMatrix._set_index(chrom,start,end,label)
         else:
             newMatrix._build_index(self.resolution*step)
+
+
             
         DimB = len(newMatrix.index)
         mapping = np.empty(DimB+1,dtype=np.int32)

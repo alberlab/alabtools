@@ -32,6 +32,7 @@ import subprocess
 import itertools
 import h5py
 import json
+from six import string_types
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -281,16 +282,20 @@ class Index(object):
 
     def __init__(self, chrom=[], start=[], end=[], **kwargs):
         self.copy_index = None
+        
+        if isinstance(chrom, string_types):
+            chrom = h5py.File(chrom, 'r')
 
         if isinstance(chrom, h5py.File):
-            start = chrom["index"]["start"]
-            end   = chrom["index"]["end"]
-            label = chrom["index"]["label"]
-            copy  = chrom["index"]["copy"]
-            chrom_sizes = chrom["index"]["chrom_sizes"]
-            chrom = chrom["index"]["chrom"]
+            h5f = chrom
+            chrom = h5f["index"]["chrom"]
+            start = h5f["index"]["start"]
+            end   = h5f["index"]["end"]
+            copy  = h5f["index"]["copy"]
+            label = h5f["index"]["label"]
+            chrom_sizes = h5f["index"]["chrom_sizes"]
             try:
-                self.copy_index = json.loads(chrom["index"]["copy_index"][()])
+                self.copy_index = json.loads(h5f["index"]["copy_index"][()])
             except:
                 pass
         else:
