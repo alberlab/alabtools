@@ -296,7 +296,7 @@ class Index(object):
             chrom_sizes = h5f["index"]["chrom_sizes"]
             try:
                 tmp = json.loads(h5f["index"]["copy_index"][()])
-		self.copy_index = { int(k): v for k, v in tmp.items() }
+                self.copy_index = { int(k): v for k, v in tmp.items() }
             except:
                 pass
         else:
