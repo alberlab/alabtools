@@ -25,8 +25,9 @@ __email__   = "nhua@usc.edu"
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
+
+from scipy.ndimage.interpolation import zoom
 import matplotlib.pyplot as plt
-from matplotlib import cm
 import matplotlib.colors as mcolors
 
 
@@ -62,7 +63,7 @@ def make_colormap(seq,cmapname='CustomMap'):
 
 red = make_colormap([(1,1,1),(1,0,0)])
 
-def plotmatrix(figurename,matrix,title=None,dpi=300,**kwargs):
+def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
     """Plot a 2D array with a colorbar.
     
     Parameters
@@ -83,6 +84,8 @@ def plotmatrix(figurename,matrix,title=None,dpi=300,**kwargs):
         Custom tick labels for the first dimension of the matrix.
     ticklabels2 : list, optional
         Custom tick labels for the second dimension of the matrix.
+    max_resolution : int, optional
+        Set a maximum resolution for the output file.
     """
     
     clip_min = kwargs.pop('clip_min', -np.inf)
@@ -99,6 +102,12 @@ def plotmatrix(figurename,matrix,title=None,dpi=300,**kwargs):
         plt.xticks(range(matrix.shape[1]))
         plt.gca().set_xticklabels(kwargs.pop('ticklabels2'))
     
+    if 'max_resolution' in kwargs:
+        mr = kwargs.pop('max_resolution')
+        if len(matrix) > mr:
+            # use linear interpolation to avoid negative values
+            matrix = zoom(matrix, float(mr) / len(matrix), order=1)
+
     cax  = plt.imshow(np.clip(matrix, a_min=clip_min, a_max=clip_max),
                         interpolation='nearest',
                         cmap=cmap,

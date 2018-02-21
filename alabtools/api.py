@@ -25,7 +25,6 @@ __email__   = "nhua@usc.edu"
 
 import numpy as np
 import os.path
-import re
 import h5py
 import scipy.sparse
 try:
@@ -90,6 +89,7 @@ class Contactmatrix(object):
     
     """
     def __init__(self, mat=None, genome='hg19', resolution=100000, usechr=['#','X']):
+        
         # matrix from file
         if isinstance(mat, string_types):
             if not os.path.isfile(mat):
@@ -300,7 +300,7 @@ class Contactmatrix(object):
             chrom = self.genome.getchrom(c)
             usechr.append(chrom[3:].decode())
         
-        newMatrix = Contactmatrix(None,genome=None,resolution=None)
+        newMatrix = Contactmatrix(None, genome=None, resolution=self.resolution)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=usechr,
                                 chroms = self.genome.chroms,
@@ -562,7 +562,7 @@ class Contactmatrix(object):
         
     #=============plotting method
     
-    def plot(self,filename,log=False,**kwargs):
+    def plot(self, filename, log=False, bin_size=None, **kwargs):
         '''
         Plots the current contact matrix to a file
 
@@ -572,6 +572,11 @@ class Contactmatrix(object):
             Output filename
         log: bool, optional
             Use a log-scaled color map. Default is False
+        bin_size: int, optional
+            If set, plots the matrix by separating each bin
+            in the index in equally spaced bins of size 
+            bin_size bases. Useful to plot TAD level matrices on 
+            a fixed kilobase scale. 
         
         Additional keyword arguments
         ----------------------------
@@ -589,6 +594,8 @@ class Contactmatrix(object):
             Custom tick labels for the first dimension of the matrix.
         ticklabels2 : list, optional
             Custom tick labels for the second dimension of the matrix.
+        max_resolution : int, optional
+            Set a maximum resolution for the output file in pixels.
         '''
 
         from .plots import plotmatrix,red
@@ -596,6 +603,21 @@ class Contactmatrix(object):
         mat = self.matrix.toarray()
         if log:
             mat = np.log(mat)
+
+        if bin_size is not None:
+            sizes = self.index.end - self.index.start
+            nidx = []
+            for i, s in enumerate(sizes):
+                if s % bin_size == 0:
+                    n = s // bin_size 
+                else: 
+                    n = (s // bin_size) + 1
+                nidx += [i] * n
+            if len(nidx) > 4096 and 'max_resolution' not in kwargs:
+                warnings.warn('Very large matrix (%d x %d) to be plotted' % 
+                              (len(nidx), len(nidx)) )
+            mat = mat[nidx]
+            mat = mat[:, nidx]
         
         cmap = kwargs.pop('cmap',red)
         
