@@ -434,6 +434,14 @@ class Contactmatrix(object):
             A contactmatrix instance of the lower resolution matrix.
             
         """
+
+        if isinstance(step, int) and step == 1:
+            newMatrix = Contactmatrix(self.matrix,
+                                      genome=self.genome,
+                                      resolution=self.resolution)
+            newMatrix.index = self.index
+            return newMatrix
+            
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.index)
         
@@ -543,6 +551,7 @@ class Contactmatrix(object):
             print(fmax,average)
             self.matrix.csr.data = np.copy(originalData)
             self.matrix.diagonal = np.copy(originalDiag)
+            
             self.fmaxScaling(fmax,force=True)
             
             newMat = self.makeSummaryMatrix(domain)
