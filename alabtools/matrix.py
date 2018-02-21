@@ -182,6 +182,22 @@ class sss_matrix(object):
         np.fill_diagonal(mt,self.diagonal)
         return mt
 
+    def tocsr(self):
+        mt = self.csr.copy()
+        mt.setdiag(self.diagonal)
+        return mt
+
+    def tocoo(self):
+        mt = self.csr.tocoo()
+        mt.setdiag(self.diagonal)
+        return mt
+
+    def copy(self):
+        mt = sss_matrix((self.data, self.indices, self.indptr), 
+                        shape=self.shape, copy=True)
+        mt.diagonal = self.diagonal.copy()
+        return mt
+
     def sum(self,axis=None):
         """
             Sum of the symmetric matrix

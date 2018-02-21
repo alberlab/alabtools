@@ -436,10 +436,7 @@ class Contactmatrix(object):
         """
 
         if isinstance(step, int) and step == 1:
-            newMatrix = Contactmatrix(self.matrix,
-                                      genome=self.genome,
-                                      resolution=self.resolution)
-            newMatrix.index = self.index
+            newMatrix = self.copy()
             return newMatrix
             
         from ._cmtools import TopmeanSummaryMatrix_func
@@ -515,7 +512,14 @@ class Contactmatrix(object):
             self.matrix.csr.data = self.matrix.csr.data.clip(max=1)
             self.matrix.diagonal = self.matrix.diagonal.clip(max=1)
             self.matrix.data = self.matrix.csr.data
-            
+     
+    def copy(self):
+        newMatrix = Contactmatrix(None, genome=None, resolution=None)
+        newMatrix.index = self.index
+        newMatrix.genome = self.genome
+        newMatrix.matrix = self.matrix.copy()
+        newMatrix.resolution = self.resolution
+        return newMatrix    
         
     def iterativeScaling(self,domain=10,averageContact=24,theta=0.001,tol=0.01):
         """
@@ -565,6 +569,10 @@ class Contactmatrix(object):
         #==
         
         newMat = self.makeSummaryMatrix(domain)
+        
+        # Reset to our original status
+        self.matrix.csr.data = np.copy(originalData)
+        self.matrix.diagonal = np.copy(originalDiag)
         
         print("{} {}".format(fmax,average))
         return newMat
