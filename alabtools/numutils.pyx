@@ -26,7 +26,7 @@ import numpy as np
 cimport numpy as np 
 cimport cython   
 
-#TODO
+
 @cython.boundscheck(False)
 @cython.wraparound(False)
 @cython.cdivision(True)
@@ -42,4 +42,3 @@ def NormCSR_ByBiasVector(data,indices,indptr,bias):
     for i in range(N):
         for j in range(Ap[i],Ap[i+1]):
             D[j] *= B[i] * B[Aj[j]]
-

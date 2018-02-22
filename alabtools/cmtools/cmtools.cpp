@@ -2,6 +2,7 @@
 #include<algorithm>
 #include<omp.h>
 #include<iostream>
+#include<cmath>
 #define THREADS 16
 float *fetchData(int * Ap,
                  int * Aj,
@@ -196,6 +197,191 @@ void BuildContactMap(float * coordinates, //nbead*nstruct*3
             ++k;
         }
     }
+
+}
+
+const float Sxis[4][4] = {{ 0, 1, 3, 6},
+                          {-1, 0, 2, 5},
+                          {-3,-2, 0, 3},
+                          {-6,-5,-3, 0}};
+const float Sxi2s[4][4] = {{ 0, 1, 5,14},
+                           { 1, 2, 6,15},
+                           { 5, 6,10,19},
+                           {14,15,19,28}};
+const float Sxi3s[4][4] = {{  0,  1,  9, 36},
+                           {  1,  0,  8, 35},
+                           { -9, -8,  0, 27},
+                           {-36,-35,-27,  0}};
+const float Sxi4s[4][4] = {{  0,  1, 17, 98},
+                           {  1,  2, 18, 99},
+                           { 17, 18, 34,115},
+                           { 98, 99,115,196}};
+                          
+void predictQuadraticRegression(float * lhsValues, float * rhsValues, int lenl, int lenr, float & predictedValue, float & r){
+    int n = lenl + lenr;
+    if (n < 3){return;}
+    
+    float Sxi = Sxis[lenl][lenr];
+    float Sxi2 = Sxi2s[lenl][lenr];
+    float Sxi3 = Sxi3s[lenl][lenr];
+    float Sxi4 = Sxi4s[lenl][lenr];
+    
+    float Syi = 0, Sxiyi = 0, Sxi2yi = 0;
+    
+    for (int i = 0; i<lenl; ++i){
+        Syi += lhsValues[i];
+        Sxiyi += -(i+1)*lhsValues[i];
+        Sxi2yi += (i+1)*(i+1)*lhsValues[i];
+    }
+    for (int i = 0; i<lenr; ++i){
+        Syi += rhsValues[i];
+        Sxiyi += (i+1)*rhsValues[i];
+        Sxi2yi += (i+1)*(i+1)*rhsValues[i];
+    }
+    
+    float meanx = Sxi/n, meany = Syi/n, meanx2 = Sxi2/n;
+    float Sxx = Sxi2/n - meanx*meanx;
+    float Sxy = Sxiyi/n - meanx*meany;
+    float Sxx2 = Sxi3/n - meanx*meanx2;
+    float Sx2x2 = Sxi4/n - meanx2*meanx2;
+    float Sx2y = Sxi2yi/n - meanx2*meany;
+    
+    float coefDenomin = Sxx*Sx2x2 - Sxx2*Sxx2;
+    if (coefDenomin == 0){return;}
+    
+    float B = (Sxy*Sx2x2 - Sx2y*Sxx2)/coefDenomin;
+    float A = (Sx2y*Sxx - Sxy*Sxx2)/coefDenomin;
+    float C = (Syi - B*Sxi - A*Sxi2)/n;
+    
+    if (C <= 0){return;}
+    
+    float SSE = 0;
+    float SST = 0;
+    
+    float error, total;
+    for (int i = 0; i<lenl; ++i){
+        error = lhsValues[i] - A*(i+1)*(i+1) + B*(i+1) - C;
+        total = lhsValues[i] - meany;
+        
+        SSE += error*error;
+        SST += total*total;
+    }
+    for (int i = 0; i<lenr; ++i){
+        error = rhsValues[i] - A*(i+1)*(i+1) - B*(i+1) - C;
+        total = rhsValues[i] - meany;
+        
+        SSE += error*error;
+        SST += total*total;
+    }
+    
+    if (SST == 0){return;}
+    
+    float rnow = std::sqrt(1-SSE/SST);
+
+    if (rnow > r){
+        predictedValue = C;
+        r = rnow;
+    }
+}
+
+void predictExponentialRegression(float * lhsValues, float * rhsValues, int lenl, int lenr, float & predictedValue, float & r){
+    int n = lenl + lenr;
+    if (n < 3){return;}
+    
+    float Sxi = Sxis[lenl][lenr];
+    float Sxi2 = Sxi2s[lenl][lenr];
+    float Slnyi = 0, Sxilnyi = 0, Slnyi2 = 0;
+    
+    for (int i = 0; i<lenl; ++i){
+        if (lhsValues[i] <= 0) {return;}
+        Slnyi   += std::log(lhsValues[i]);
+        Sxilnyi += -(i+1)*std::log(lhsValues[i]);
+        Slnyi2  += std::pow(std::log(lhsValues[i]),2);
+    }
+    for (int i = 0; i<lenl; ++i){
+        if (rhsValues[i] <= 0) {return;}
+        Slnyi   += std::log(rhsValues[i]);
+        Sxilnyi += (i+1)*std::log(rhsValues[i]);
+        Slnyi2  += std::pow(std::log(rhsValues[i]),2);
+    }
+    
+    float meanx = Sxi/n, meanlny = Slnyi/n;
+    
+    float Sxx = Sxi2/n - meanx * meanx;
+    float Syy = Slnyi2/n - meanlny * meanlny;
+    float Sxy = Sxilnyi/n - meanx * meanlny;
+    
+    if ((Sxx == 0) or (Syy == 0)){return;}
+    
+    float B = std::exp(Sxy/Sxx);
+    float A = std::exp(meanlny - meanx * std::log(B));
+    
+    float rnow = std::abs(Sxy)/std::sqrt(Sxx*Syy);
+    
+    if (rnow > r){
+        predictedValue = A;
+        r = rnow;
+    }
+}
+
+const int iincRHS[4][3] = {{1, 2, 3},
+                           {1, 2, 3},
+                           {0, 0, 0},
+                           {-1, -2, -3}};
+const int jincRHS[4][3] = {{0, 0, 0},
+                           {1, 2, 3},
+                           {1, 2, 3},
+                           {1, 2, 3}};
+void PixelConfidence(float * matrix, int n, //matrix and size
+                     float * confidence)
+{
+
+#pragma omp parallel num_threads(THREADS)
+{
+    #pragma omp for schedule(dynamic, 5)
+    for (int i = 0; i < n; ++i){
+        //std::cout << i << std::endl;
+        for (int j = 0; j < n; ++j){
+            float currentValue = matrix[i*n + j];
+            float valsum = 0;
+            for (int k = 0; k < 4; ++k){
+                float lhsValues[3] = {0,0,0};
+                float rhsValues[3] = {0,0,0};
+                int lenl = 0, lenr = 0;
+                
+                for (int l = 0; l < 3; ++l){
+                    int irhs = i + iincRHS[k][l];
+                    int ilhs = i - iincRHS[k][l];
+                    
+                    int jrhs = j + jincRHS[k][l];
+                    int jlhs = j - jincRHS[k][l];
+                    
+                    if ((ilhs >= 0) and (ilhs < n) and
+                        (jlhs >= 0) and (jlhs < n)){
+                        lhsValues[l] = matrix[ilhs*n + jlhs];
+                        lenl++;
+                    }//0 otherwise
+                    
+                    if ((irhs >= 0) and (irhs < n) and
+                        (jrhs >= 0) and (jrhs < n)){
+                        rhsValues[l] = matrix[irhs*n + jrhs];
+                        lenr++;
+                    }//0 otherwise
+                }
+                
+                float predictedValue = 0, r = 0;
+                
+                predictQuadraticRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
+                predictExponentialRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
+                valsum -= std::abs(currentValue - predictedValue)/predictedValue * r * ((lenl+lenr)/6);
+                
+            }//k
+
+            confidence[i*n+j] = std::exp(valsum/4);
+            //printf("%d %d %f %f\n",i, j, currentValue, confidence[i*n+j]);
+        }            
+    }
+}
 
 }
 /*
