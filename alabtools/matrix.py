@@ -193,8 +193,11 @@ class sss_matrix(object):
         return mt
 
     def copy(self):
-        mt = sss_matrix((self.data, self.indices, self.indptr), 
-                        shape=self.shape, copy=True)
+        mt = sss_matrix(self.shape)
+        mt.csr = self.csr.copy()
+        mt.data = mt.csr.data
+        mt.indices = mt.csr.indices
+        mt.indptr = mt.csr.indptr
         mt.diagonal = self.diagonal.copy()
         return mt
 
