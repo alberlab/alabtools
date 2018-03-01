@@ -332,17 +332,17 @@ const int jincRHS[4][3] = {{0, 0, 0},
                            {1, 2, 3},
                            {1, 2, 3},
                            {1, 2, 3}};
-void PixelConfidence(float * matrix, int n, //matrix and size
+void PixelConfidence(float * matrix, int row, int col //matrix and size
                      float * confidence)
 {
 
 #pragma omp parallel num_threads(THREADS)
 {
     #pragma omp for schedule(dynamic, 5)
-    for (int i = 0; i < n; ++i){
+    for (int i = 0; i < row; ++i){
         //std::cout << i << std::endl;
-        for (int j = 0; j < n; ++j){
-            float currentValue = matrix[i*n + j];
+        for (int j = 0; j < col; ++j){
+            float currentValue = matrix[i*row + j];
             float valsum = 0;
             for (int k = 0; k < 4; ++k){
                 float lhsValues[3] = {0,0,0};
@@ -356,15 +356,15 @@ void PixelConfidence(float * matrix, int n, //matrix and size
                     int jrhs = j + jincRHS[k][l];
                     int jlhs = j - jincRHS[k][l];
                     
-                    if ((ilhs >= 0) and (ilhs < n) and
-                        (jlhs >= 0) and (jlhs < n)){
-                        lhsValues[l] = matrix[ilhs*n + jlhs];
+                    if ((ilhs >= 0) and (ilhs < row) and
+                        (jlhs >= 0) and (jlhs < col)){
+                        lhsValues[l] = matrix[ilhs*row + jlhs];
                         lenl++;
                     }//0 otherwise
                     
-                    if ((irhs >= 0) and (irhs < n) and
-                        (jrhs >= 0) and (jrhs < n)){
-                        rhsValues[l] = matrix[irhs*n + jrhs];
+                    if ((irhs >= 0) and (irhs < row) and
+                        (jrhs >= 0) and (jrhs < col)){
+                        rhsValues[l] = matrix[irhs*row + jrhs];
                         lenr++;
                     }//0 otherwise
                 }
@@ -377,7 +377,7 @@ void PixelConfidence(float * matrix, int n, //matrix and size
                 
             }//k
 
-            confidence[i*n+j] = std::exp(valsum/4);
+            confidence[i*row+j] = std::exp(valsum/4);
             //printf("%d %d %f %f\n",i, j, currentValue, confidence[i*n+j]);
         }            
     }

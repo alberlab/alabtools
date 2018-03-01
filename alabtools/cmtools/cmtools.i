@@ -46,7 +46,7 @@ void BuildContactMap_func(float * coordinates, int nbead, int nstruct, int dims,
 void CalculatePixelConfidence(float * matrix, int row, int col,
                               float * confidence, int outi, int outj)
 {
-    PixelConfidence(matrix, row, confidence);
+    PixelConfidence(matrix, row, col, confidence);
 }
 
 %}
