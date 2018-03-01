@@ -3,7 +3,8 @@
 #include<omp.h>
 #include<iostream>
 #include<cmath>
-#define THREADS 16
+#include<stdio.h>
+#define THREADS 1
 float *fetchData(int * Ap,
                  int * Aj,
                  float * Ax,
@@ -335,14 +336,13 @@ const int jincRHS[4][3] = {{0, 0, 0},
 void PixelConfidence(float * matrix, int row, int col, //matrix and size
                      float * confidence)
 {
-
 #pragma omp parallel num_threads(THREADS)
 {
     #pragma omp for schedule(dynamic, 5)
     for (int i = 0; i < row; ++i){
         //std::cout << i << std::endl;
         for (int j = 0; j < col; ++j){
-            float currentValue = matrix[i*row + j];
+            float currentValue = matrix[i*col + j];
             float valsum = 0;
             for (int k = 0; k < 4; ++k){
                 float lhsValues[3] = {0,0,0};
@@ -358,13 +358,13 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
                     
                     if ((ilhs >= 0) and (ilhs < row) and
                         (jlhs >= 0) and (jlhs < col)){
-                        lhsValues[l] = matrix[ilhs*row + jlhs];
+                        lhsValues[l] = matrix[ilhs*col + jlhs];
                         lenl++;
                     }//0 otherwise
                     
                     if ((irhs >= 0) and (irhs < row) and
                         (jrhs >= 0) and (jrhs < col)){
-                        rhsValues[l] = matrix[irhs*row + jrhs];
+                        rhsValues[l] = matrix[irhs*col + jrhs];
                         lenr++;
                     }//0 otherwise
                 }
@@ -377,8 +377,8 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
                 
             }//k
 
-            confidence[i*row+j] = std::exp(valsum/4);
-            //printf("%d %d %f %f\n",i, j, currentValue, confidence[i*n+j]);
+            confidence[i*col+j] = std::exp(valsum/4);
+            //printf("%d %d %f %f\n",i, j, currentValue, confidence[i*col+j]);
         }            
     }
 }
