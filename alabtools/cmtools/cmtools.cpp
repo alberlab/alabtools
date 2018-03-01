@@ -332,7 +332,7 @@ const int jincRHS[4][3] = {{0, 0, 0},
                            {1, 2, 3},
                            {1, 2, 3},
                            {1, 2, 3}};
-void PixelConfidence(float * matrix, int row, int col //matrix and size
+void PixelConfidence(float * matrix, int row, int col, //matrix and size
                      float * confidence)
 {
 
