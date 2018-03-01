@@ -3,8 +3,7 @@
 #include<omp.h>
 #include<iostream>
 #include<cmath>
-#include<stdio.h>
-#define THREADS 1
+#define THREADS 16
 float *fetchData(int * Ap,
                  int * Aj,
                  float * Ax,
