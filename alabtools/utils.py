@@ -280,12 +280,50 @@ class Index(object):
         groups of beads with the same `chrom` value belong to different copies. 
     """
 
-    def __init__(self, chrom=[], start=[], end=[], **kwargs):
-        self.copy_index = None
+    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[]):
         
         if isinstance(chrom, string_types):
-            chrom = h5py.File(chrom, 'r')
+            try:
+                # tries to open a hdf5 file
+                chrom = h5py.File(chrom, 'r')
+            except IOError:
+                # if it is not a hdf5 file, try to read as text BED
 
+                # try to determine if it is a 3 or 4 columns bed
+                with open(chrom) as f:
+                    line = ''
+                    while line == '' or line[0] == '#':
+                        line = f.readline().strip()
+                    ncols = len(line.split())
+                    if ncols < 3:
+                        raise ValueError('bed file appears to have less than'
+                                         ' 3 columns')
+
+                # define columns fields
+                cols = [
+                    ('chrom', np.dtype('S10')), # in a bed file 
+                    ('start', START_DTYPE), 
+                    ('end', END_DTYPE),
+                ]
+                if ncols > 3:
+                    cols.append( ('label', LABEL_DTYPE) )
+
+                data = np.genfromtxt(chrom, usecols=range(len(cols)), dtype=cols)
+
+                # transform chrom names to integers ids
+                i, nmap = 0, {}
+                for c in data['chrom']:
+                    if c not in nmap:
+                        nmap[c] = i
+                        i += 1
+
+                # set the variables for further processing
+                chrom = [ nmap[c] for c in data['chrom'] ] 
+                start = data['start'] 
+                end   = data['end']
+                if ncols > 3:
+                    label = data['label'] 
+                
         if isinstance(chrom, h5py.File):
             h5f = chrom
             chrom = h5f["index"]["chrom"]
@@ -295,14 +333,13 @@ class Index(object):
             label = h5f["index"]["label"]
             chrom_sizes = h5f["index"]["chrom_sizes"]
             try:
+                # try to load the copy index
                 tmp = json.loads(h5f["index"]["copy_index"][()])
+                # it may happen that in json dump/loading keys are considered
+                # as strings.
                 self.copy_index = { int(k): v for k, v in tmp.items() }
-            except:
+            except (KeyError, ValueError):
                 pass
-        else:
-            label = []
-            copy = []
-            chrom_sizes = []
         
         if not(len(chrom) == len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
@@ -316,20 +353,18 @@ class Index(object):
         self.start = np.array(start, dtype=START_DTYPE)
         self.end   = np.array(end, dtype=END_DTYPE)
         
-        chrom_sizes = kwargs.pop("chrom_sizes", chrom_sizes)
-
         if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
             chrom_sizes = [len(list(g)) for _, g in itertools.groupby(self.chrom)]
         
         self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
+
+        self.num_chrom = len(self.chrom_sizes)
         
-        label = kwargs.pop("label", label)
         if len(label) != len(self.chrom):
             self.label = np.array([""] * len(self.chrom), dtype=LABEL_DTYPE)
         else:
             self.label = np.array(label, dtype=LABEL_DTYPE)
         
-        copy = kwargs.pop("copy", copy)
         if len(copy) != len(self.chrom):
             self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
             self._compute_copy_vec()
@@ -339,7 +374,7 @@ class Index(object):
         self.offset = np.array([sum(self.chrom_sizes[:i]) 
                                 for i in range(len(self.chrom_sizes) + 1)])
 
-        if not self.copy_index:
+        if not hasattr(self, 'copy_index'):
             self._compute_copy_index()
     #-
     
@@ -357,7 +392,10 @@ class Index(object):
         return len(self.chrom)
 
     def __repr__(self):
-        return self.chrom_sizes.__repr__()
+        return '<alabtools.Index: %d chroms, %d segments>' % (
+            self.num_chrom, 
+            len(self.chrom) 
+        )
 
     def _compute_copy_vec(self):
         if len(self.copy) == 0:
