@@ -231,7 +231,7 @@ class Genome(object):
             ggrp.create_dataset("assembly", data=self.assembly)
         
         if 'chroms' in ggrp:
-            ggrp['chroms'][...] = self.chroms
+            ggrp['chroms'][...] = np.array(self.chroms, dtype='S10')
         else:
             ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype='S10'), # hdf5 does not like unicode 
                                 compression=compression, 
@@ -516,7 +516,7 @@ class Index(object):
                                 compression_opts=compression_opts)
         
         if 'label' in igrp:
-            igrp['label'][...] = self.label
+            igrp['label'][...] = np.array(self.label, dtype=np.dtype('S10'))
         else:
             igrp.create_dataset("label", data=np.array(self.label, dtype=np.dtype('S10')), 
                                 compression=compression,
