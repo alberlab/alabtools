@@ -110,7 +110,6 @@ class Genome(object):
             if not silence:
                 print("chroms or lengths not given, reading from genomes info file.")
             datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),"genomes/" + assembly + ".info")
-            
             info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
             chroms = info["chroms"].astype(CHROMS_DTYPE)
             lengths = info["lengths"].astype(LENGTHS_DTYPE)
@@ -128,9 +127,9 @@ class Genome(object):
         choices = np.zeros(len(chroms),dtype=bool)
         for chrnum in usechr:
             if chrnum == '#':
-                choices = np.logical_or([re.search("chr[0-9]",c) != None for c in chroms], choices)
+                choices = np.logical_or([re.search("chr[\d]+$",c) != None for c in chroms], choices)
             else:
-                choices = np.logical_or(chroms == ("chr"+str(chrnum)).encode(), choices)
+                choices = np.logical_or(chroms == ("chr%s" % chrnum), choices)
         self.chroms = chroms[choices] # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
