@@ -131,7 +131,7 @@ class Genome(object):
                 choices = np.logical_or([re.search(b"chr[0-9]",c) != None for c in chroms],choices)
             else:
                 choices = np.logical_or(chroms == ("chr"+str(chrnum)).encode(), choices)
-        self.chroms = chroms[choices]
+        self.chroms = np.array(chroms[choices], dtype='U10') # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
         self.assembly = str(assembly)
@@ -225,9 +225,10 @@ class Genome(object):
         if 'chroms' in ggrp:
             ggrp['chroms'][...] = self.chroms
         else:
-            ggrp.create_dataset("chroms", data=self.chroms, 
+            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype=CHROMS_DTYPE), # hdf5 does not like unicode 
                                 compression=compression, 
-                                compression_opts=compression_opts)
+                                compression_opts=compression_opts,
+                                )
     
         if 'origins' in ggrp:
             ggrp['origins'][...] = self.origins
