@@ -44,7 +44,7 @@ except ImportError:
 
 
 
-CHROMS_DTYPE = np.dtype('S10')
+CHROMS_DTYPE = np.dtype('U10')
 ORIGINS_DTYPE = np.int32
 LENGTHS_DTYPE = np.int32
 
@@ -52,7 +52,7 @@ CHROM_DTYPE = np.int32
 START_DTYPE = np.int32
 END_DTYPE = np.int32
 COPY_DTYPE = np.int32
-LABEL_DTYPE = np.dtype('S10')
+LABEL_DTYPE = np.dtype('U10')
 CHROM_SIZES_DTYPE = np.int32
 
 COORD_DTYPE = np.float32
@@ -100,7 +100,7 @@ class Genome(object):
     
     def __init__(self,assembly,chroms=None,origins=None,lengths=None,usechr=['#','X'],silence=False):
         if isinstance(assembly,h5py.File):
-            chroms  = assembly["genome"]["chroms"]
+            chroms  = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
             origins = assembly["genome"]["origins"]
             lengths = assembly["genome"]["lengths"]
             assembly = assembly["genome"]["assembly"].value
@@ -128,14 +128,22 @@ class Genome(object):
         choices = np.zeros(len(chroms),dtype=bool)
         for chrnum in usechr:
             if chrnum == '#':
-                choices = np.logical_or([re.search(b"chr[0-9]",c) != None for c in chroms],choices)
+                choices = np.logical_or([re.search("chr[0-9]",c) != None for c in chroms], choices)
             else:
                 choices = np.logical_or(chroms == ("chr"+str(chrnum)).encode(), choices)
-        self.chroms = np.array(chroms[choices], dtype='U10') # convert to unicode for python2/3 compatibility
+        self.chroms = chroms[choices] # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
         self.assembly = str(assembly)
     #-
+
+    def __eq__(self, other):
+        return ( 
+            np.all(self.chroms == other.chroms) and
+            np.all(self.origins == other.origins) and
+            np.all(self.lengths == other.lengths) and
+            np.all(self.assembly == other.assembly) 
+        )
     
     def bininfo(self,resolution):
         
@@ -225,7 +233,7 @@ class Genome(object):
         if 'chroms' in ggrp:
             ggrp['chroms'][...] = self.chroms
         else:
-            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype=CHROMS_DTYPE), # hdf5 does not like unicode 
+            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype='S10'), # hdf5 does not like unicode 
                                 compression=compression, 
                                 compression_opts=compression_opts,
                                 )
@@ -281,7 +289,7 @@ class Index(object):
         groups of beads with the same `chrom` value belong to different copies. 
     """
 
-    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[]):
+    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], **kwargs):
         
         if isinstance(chrom, string_types):
             try:
@@ -290,40 +298,55 @@ class Index(object):
             except IOError:
                 # if it is not a hdf5 file, try to read as text BED
 
-                # try to determine if it is a 3 or 4 columns bed
-                with open(chrom) as f:
-                    line = ''
-                    while line == '' or line[0] == '#':
-                        line = f.readline().strip()
-                    ncols = len(line.split())
-                    if ncols < 3:
-                        raise ValueError('bed file appears to have less than'
-                                         ' 3 columns')
-
-                # define columns fields
-                cols = [
-                    ('chrom', np.dtype('S10')), # in a bed file 
+                cols=[
+                    ('chrom', CHROMS_DTYPE), # note that this is a string type
                     ('start', START_DTYPE), 
-                    ('end', END_DTYPE),
+                    ('end', END_DTYPE), 
+                    ('label', LABEL_DTYPE), 
+                    ('copy', COPY_DTYPE)
                 ]
-                if ncols > 3:
-                    cols.append( ('label', LABEL_DTYPE) )
 
-                data = np.genfromtxt(chrom, usecols=range(len(cols)), dtype=cols)
+                usecols = kwargs.get('usecols', None)
+                if usecols is None:
+                    # try to determine if it is a 3, 4 or 5 columns bed
+                    with open(chrom) as f:
+                        line = ''
+                        while line == '' or line[0] == '#':
+                            line = f.readline().strip()
+                        ncols = len(line.split())
+                        if ncols < 3:
+                            raise ValueError('bed file appears to have less than'
+                                             ' 3 columns')
+                        usecols = range(ncols)
+                ncols = len(usecols)
+                
+                # define columns fields
+                
+                data = np.genfromtxt(chrom, usecols=usecols, dtype=cols[:ncols])
 
-                # transform chrom names to integers ids
-                i, nmap = 0, {}
-                for c in data['chrom']:
-                    if c not in nmap:
-                        nmap[c] = i
-                        i += 1
+                genome = kwargs.get('genome', None)
+                if genome is None:
+                    # transform chrom names to integers ids
+                    i, nmap = 0, {}
+                    for c in data['chrom']:
+                        if c not in nmap:
+                            nmap[c] = i
+                            i += 1
+                    chrom = [ nmap[c] for c in data['chrom'] ] 
+                else:
+                    if not isinstance(genome, Genome):
+                        genome = Genome(genome)
+                    chrom = np.array([genome.getchrnum(c) for c in data['chrom']])
 
                 # set the variables for further processing
-                chrom = [ nmap[c] for c in data['chrom'] ] 
+                
                 start = data['start'] 
                 end   = data['end']
-                if ncols > 3:
-                    label = data['label'] 
+                if 'label' in data.dtype.names:
+                    label = data['label']
+                    
+                if 'copy' in data.dtype.names:
+                    copy = data['copy']
                 
         if isinstance(chrom, h5py.File):
             h5f = chrom
@@ -331,7 +354,7 @@ class Index(object):
             start = h5f["index"]["start"]
             end   = h5f["index"]["end"]
             copy  = h5f["index"]["copy"]
-            label = h5f["index"]["label"]
+            label = np.array(h5f["index"]["label"][:], LABEL_DTYPE)
             chrom_sizes = h5f["index"]["chrom_sizes"]
             try:
                 # try to load the copy index
@@ -377,7 +400,18 @@ class Index(object):
 
         if not hasattr(self, 'copy_index'):
             self._compute_copy_index()
+
     #-
+
+
+    def __eq__(self, other):
+        return ( 
+            np.all(self.chrom == other.chrom) and
+            np.all(self.start == other.start) and
+            np.all(self.end == other.end) and
+            np.all(self.label == other.label) and
+            np.all(self.copy == other.copy) 
+        )
     
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key], 
@@ -484,7 +518,7 @@ class Index(object):
         if 'label' in igrp:
             igrp['label'][...] = self.label
         else:
-            igrp.create_dataset("label", data=self.label, 
+            igrp.create_dataset("label", data=np.array(self.label, dtype=np.dtype('S10')), 
                                 compression=compression,
                                 compression_opts=compression_opts)
         
@@ -601,23 +635,13 @@ def natural_sort(l):
     return sorted(l, key=alphanum_key)
 
 
-def get_index_from_bed(file, genome, usecols=(0,1,2,3), 
-                       dtype=[('chrom', 'S5'), ('start', int), ('end', int), ('label', 'S10'), ('copy', int)]):
-    bed = np.genfromtxt(file, usecols=usecols, dtype=dtype)
+def get_index_from_bed(
+        file, 
+        genome=None, 
+        usecols=None, 
+    ):
     
-    chrom = np.array([genome.getchrnum(c) for c in bed['chrom']])
-    start = bed['start']
-    end = bed['end']
-    if 'label' in bed.dtype.names:
-        label = bed['label']
-    else:
-        label = []
-        
-    if 'copy' in bed.dtype.names:
-        copy = bed['copy']
-    else:
-        copy = []
-    return Index(chrom, start, end, label=label, copy=copy)
+    return Index(file, genome, usecols)
 
 
 _ftpi = 4./3. * np.pi
