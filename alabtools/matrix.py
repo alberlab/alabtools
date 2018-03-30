@@ -267,7 +267,23 @@ class sss_matrix(object):
         #for i in xrange(len(self.indptr)-1):
             #for j in xrange(self.indptr[i],self.indptr[i+1]):
                 #self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
-        
+    
+    def coo_generator(self):
+        vp, curr_row, next_row = 0, 0, 1
+        while curr_row < min(self.shape) and vp < len(self.data):
+            while vp < self.indptr[next_row] and self.indices[vp] < curr_row:
+                yield curr_row, self.indices[vp], self.data[vp]
+                vp += 1
+            
+            if self.diagonal[curr_row] != 0:
+                yield curr_row, curr_row, self.diagonal[curr_row]
+            
+            while vp < self.indptr[next_row]:
+                yield next_row - 1, self.indices[vp], self.data[vp]
+                vp += 1
+
+            curr_row += 1
+            next_row += 1            
     #-
     
     
