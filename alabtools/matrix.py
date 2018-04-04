@@ -24,13 +24,14 @@ __version__ = "0.0.3"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
+import h5py
 from scipy.sparse import coo_matrix, csr_matrix, dia_matrix, isspmatrix_csr
 from scipy.sparse.sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
 
 DATA_DTYPE = np.float32
 INDPTR_DTYPE = np.int32
-INDICIES_DTYPE = np.int32
+INDICES_DTYPE = np.int32
 
 class sss_matrix(object):
     """
@@ -50,9 +51,15 @@ class sss_matrix(object):
     
     
     """
-    def __init__(self,arg1,shape=None,dtype=DATA_DTYPE,copy=False,mem=True):
+
+    def __init__(self,arg1,shape=None,dtype=DATA_DTYPE,copy=False,mem=True, lazy=False, h5group='.'):
         if isinstance(arg1,str):
-            pass
+            h5 = h5py.File(arg1, 'r')
+            self._load_from_h5(h5[h5group], lazy)
+
+        elif isinstance(arg1, h5py.Group):
+            self._load_from_h5(arg1[h5group], lazy)
+        
         elif isinstance(arg1, tuple):
             if isshape(arg1):
                 # It's a tuple of matrix dimensions (M, N)
@@ -78,13 +85,13 @@ class sss_matrix(object):
                         M, N = shape
                         shape = (M, N)
                         
-                    row = np.array(row,dtype=INDICIES_DTYPE)
-                    col = np.array(col,dtype=INDICIES_DTYPE)
+                    row = np.array(row,dtype=INDICES_DTYPE)
+                    col = np.array(col,dtype=INDICES_DTYPE)
                     obj = np.array(obj,dtype=dtype)
                     nnz = len(obj)
                     
                     indptr = np.empty(M+1,dtype=INDPTR_DTYPE)
-                    indices = np.empty_like(col,dtype=INDICIES_DTYPE)
+                    indices = np.empty_like(col,dtype=INDICES_DTYPE)
                     data = np.empty_like(obj,dtype=dtype)
                     
                     coo_tocsr(M, N, nnz, row, col, obj,
@@ -95,7 +102,7 @@ class sss_matrix(object):
                 elif len(arg1) == 3:
                     (data, indices, indptr) = arg1
                     data    = np.array(data,dtype=dtype)
-                    indices = np.array(indices,dtype=INDICIES_DTYPE)
+                    indices = np.array(indices,dtype=INDICES_DTYPE)
                     indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
                     
                     self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
@@ -104,7 +111,7 @@ class sss_matrix(object):
                 elif len(arg1) == 4:
                     (data, indices, indptr, diag) = arg1
                     data    = np.array(data,dtype=dtype)
-                    indices = np.array(indices,dtype=INDICIES_DTYPE)
+                    indices = np.array(indices,dtype=INDICES_DTYPE)
                     indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
                     diag    = np.array(diag,dtype=dtype)
                     if shape is None:
@@ -283,7 +290,27 @@ class sss_matrix(object):
                 vp += 1
 
             curr_row += 1
-            next_row += 1            
+            next_row += 1         
+
+    def nnz(self):
+        return len(self.data) + np.count_nonzero(self.diagonal != 0)   
+
+    def _load_from_h5(self, grp, lazy=False):
+        data = grp['data']
+        indices = grp['indices']
+        indptr = grp['indptr']
+        diagonal = grp['diagonal']
+        self.shape = (len(diagonal), len(diagonal))
+        
+        if lazy:
+            self.csr = csr_matrix(self.shape)
+            self.csr.data    = data
+            self.csr.indices = indices
+            self.csr.indptr  = indptr
+            self.diagonal = diagonal
+        else:
+            self.csr = csr_matrix((data, indices, indptr), shape=self.shape)
+            self.diagonal = diagonal[:] 
     #-
     
     
