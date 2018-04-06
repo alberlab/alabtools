@@ -32,17 +32,19 @@ import subprocess
 import itertools
 import h5py
 import json
+import sys
 from six import string_types
-try:
-    from cStringIO import StringIO
-except ImportError:
+
+if (sys.version_info > (3, 0)):
+    # python 3.x
+    def unicode(s):
+        if isinstance(s, bytes):
+            return s.decode()
+        return s
     from io import StringIO
-try: 
-    import cPickle as pickle 
-except ImportError:
-    import pickle
-
-
+else:
+    # python 2.x 
+    from cStringIO import StringIO
 
 CHROMS_DTYPE = np.dtype('U10')
 ORIGINS_DTYPE = np.int32
@@ -175,7 +177,8 @@ class Genome(object):
         return binInfo
     
     def getchrnum(self, chrom):
-        findidx = np.flatnonzero(self.chroms==chrom)
+        
+        findidx = np.flatnonzero(self.chroms==unicode(chrom))
     
         if len(findidx) == 0:
             return None
@@ -575,6 +578,8 @@ def make_multiploid(index, chroms, copies):
     '''
     Returns a multiploid index mapping based on the input index.
     The index is ordered by the copy id and then by the input chrom order.
+    For example, using chroms=[0, 1, 2] and copies=[3, 2, 1], the output
+    index chromosomes will be in this order: [0, 1, 2, 0, 1, 0].
 
     Parameters
     ----------
@@ -651,3 +656,27 @@ def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
     prefactor = volume * occupancy / (_ftpi * totsize)
     rr = [(prefactor*sz)**(1./3.) for sz in sizes]
     return np.array(rr, dtype=RADII_DTYPE)
+
+# if we are dealing with h5py datasets, preloads data for performance
+class H5Batcher():
+    def __init__(self, ds, bsize):
+        self.ds = ds
+        self.n = ds.shape[0]
+        self.b = 0
+        self.bsize = bsize 
+        self.batch = ds[0:min(bsize, self.n)]
+
+    def __getitem__(self, key):
+        if key > self.n:
+            raise KeyError()
+        z = key // self.bsize 
+        if z != self.b:
+            self.b = z
+            self.batch = self.ds[
+                self.bsize*z : 
+                min(self.n, self.bsize * (z + 1))
+            ][()]
+        return self.batch[key % self.bsize]
+
+    def __len__(self):
+        return self.ds.__len__()

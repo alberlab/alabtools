@@ -28,6 +28,7 @@ import h5py
 from scipy.sparse import coo_matrix, csr_matrix, dia_matrix, isspmatrix_csr
 from scipy.sparse.sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
+from .utils import H5Batcher
 
 DATA_DTYPE = np.float32
 INDPTR_DTYPE = np.int32
@@ -275,18 +276,43 @@ class sss_matrix(object):
             #for j in xrange(self.indptr[i],self.indptr[i+1]):
                 #self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
     
-    def coo_generator(self):
+    def coo_generator(self, batch_size=100000):
+
+        # read stuff in batches if lazy evaluating for significant
+        # performance improvements. 
+        
+        if isinstance(self.indptr, h5py.Dataset):
+            indptr = H5Batcher(self.indptr, batch_size)
+        else:
+            indptr = self.indptr
+
+        if isinstance(self.indices, h5py.Dataset):
+            indices = H5Batcher(self.indices, batch_size)
+        else:
+            indices = self.indices
+
+        if isinstance(self.data, h5py.Dataset):
+            data = H5Batcher(self.data, batch_size)
+        else:
+            data = self.data 
+
+        if isinstance(self.diagonal, h5py.Dataset):
+            diagonal = H5Batcher(self.diagonal, batch_size)
+        else:
+            diagonal = self.diagonal 
+
         vp, curr_row, next_row = 0, 0, 1
-        while curr_row < min(self.shape) and vp < len(self.data):
-            while vp < self.indptr[next_row] and self.indices[vp] < curr_row:
-                yield curr_row, self.indices[vp], self.data[vp]
+        
+        while vp < len(self.data):
+            while vp < indptr[next_row] and indices[vp] < curr_row:
+                yield curr_row, indices[vp], data[vp]
                 vp += 1
             
-            if self.diagonal[curr_row] != 0:
-                yield curr_row, curr_row, self.diagonal[curr_row]
+            if curr_row < min(self.shape) and diagonal[curr_row] != 0:
+                yield curr_row, curr_row, diagonal[curr_row]
             
-            while vp < self.indptr[next_row]:
-                yield next_row - 1, self.indices[vp], self.data[vp]
+            while vp < indptr[next_row]:
+                yield next_row - 1, indices[vp], data[vp]
                 vp += 1
 
             curr_row += 1

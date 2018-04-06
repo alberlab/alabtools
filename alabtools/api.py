@@ -450,7 +450,7 @@ class Contactmatrix(object):
                                 lengths = self.genome.lengths)
         
         if isinstance(step, string_types):
-            tadDef = np.genfromtxt(step,dtype = None)
+            tadDef = np.genfromtxt(step, dtype = None, encoding=None)
             chrom  = tadDef['f0']
             start  = tadDef['f1']
             end    = tadDef['f2']
