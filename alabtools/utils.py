@@ -101,18 +101,33 @@ class Genome(object):
     """
     
     def __init__(self,assembly,chroms=None,origins=None,lengths=None,usechr=['#','X'],silence=False):
+        
+        # If the first argument is a string, and no other info is specified, 
+        # check if we can read from info or hdf5.
+        # Genome assembly name has precedence over hdf5 file names.
+        # Will raise a IOError if cannot read any.
+        if isinstance(assembly, string_types) and (
+            (chroms is None) or (lengths is None) 
+            ):
+            datafile = os.path.join(
+                os.path.dirname( os.path.abspath(__file__) ),
+                "genomes/" + assembly + ".info"
+            )    
+            if os.path.isfile(datafile):
+                if not silence:
+                    print("chroms or lengths not given, reading from genomes info file.")
+                info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
+            else:
+                assembly = h5py.File(assembly, 'r')
+
         if isinstance(assembly,h5py.File):
             chroms  = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
             origins = assembly["genome"]["origins"]
             lengths = assembly["genome"]["lengths"]
-            assembly = assembly["genome"]["assembly"].value
+            assembly = unicode(assembly["genome"]["assembly"].value)
             usechr = ['#','X','Y']
             
-        if (chroms is None) or (lengths is None) :
-            if not silence:
-                print("chroms or lengths not given, reading from genomes info file.")
-            datafile = os.path.join(os.path.dirname(os.path.abspath(__file__)),"genomes/" + assembly + ".info")
-            info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
+        if (chroms is None) or (lengths is None):
             chroms = info["chroms"].astype(CHROMS_DTYPE)
             lengths = info["lengths"].astype(LENGTHS_DTYPE)
             origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
@@ -135,7 +150,7 @@ class Genome(object):
         self.chroms = chroms[choices] # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
-        self.assembly = str(assembly)
+        self.assembly = unicode(assembly)
     #-
 
     def __eq__(self, other):
