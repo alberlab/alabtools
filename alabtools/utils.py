@@ -303,11 +303,14 @@ class Index(object):
         number of bins/beads in each chromosome. It is useful to specify it if 
         two copies of the same chromosome appear as contiguous in the index.
         If not specified, it is automatically computed assuming non-contiguous 
-        groups of beads with the same `chrom` value belong to different copies. 
+        groups of beads with the same `chrom` value belong to different copies.
+    genome: alabtools.utils.Genome, optional
+        genome info for the index.  
     """
 
     def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], **kwargs):
         
+        self.genome = kwargs.get('genome', None)
         if isinstance(chrom, string_types):
             try:
                 # tries to open a hdf5 file
@@ -341,8 +344,8 @@ class Index(object):
                 
                 data = np.genfromtxt(chrom, usecols=usecols, dtype=cols[:ncols])
 
-                genome = kwargs.get('genome', None)
-                if genome is None:
+                
+                if self.genome is None:
                     # transform chrom names to integers ids
                     i, nmap = 0, {}
                     for c in data['chrom']:
@@ -351,9 +354,9 @@ class Index(object):
                             i += 1
                     chrom = [ nmap[c] for c in data['chrom'] ] 
                 else:
-                    if not isinstance(genome, Genome):
-                        genome = Genome(genome)
-                    chrom = np.array([genome.getchrnum(c) for c in data['chrom']])
+                    if not isinstance(self.genome, Genome):
+                        self.genome = Genome(self.genome)
+                    chrom = np.array([self.genome.getchrnum(c) for c in data['chrom']])
 
                 # set the variables for further processing
                 
@@ -373,6 +376,11 @@ class Index(object):
             copy  = h5f["index"]["copy"]
             label = np.array(h5f["index"]["label"][:], LABEL_DTYPE)
             chrom_sizes = h5f["index"]["chrom_sizes"]
+            if 'genome' in h5f:
+                try:
+                    self.genome = Genome(h5f)
+                except:
+                    pass
             try:
                 # try to load the copy index
                 tmp = json.loads(h5f["index"]["copy_index"][()])
@@ -393,9 +401,20 @@ class Index(object):
         self.chrom = np.array(chrom, dtype=CHROM_DTYPE)
         self.start = np.array(start, dtype=START_DTYPE)
         self.end   = np.array(end, dtype=END_DTYPE)
+
+        if len(copy) != len(self.chrom):
+            self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
+            self._compute_copy_vec()
+        else:
+            self.copy= np.array(copy, dtype=COPY_DTYPE)
         
         if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
-            chrom_sizes = [len(list(g)) for _, g in itertools.groupby(self.chrom)]
+            chrom_sizes = [
+                len( list(g) ) 
+                for _, g in itertools.groupby(
+                    zip(self.chrom, self.copy)
+                )
+            ]
         
         self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
 
@@ -405,12 +424,6 @@ class Index(object):
             self.label = np.array([""] * len(self.chrom), dtype=LABEL_DTYPE)
         else:
             self.label = np.array(label, dtype=LABEL_DTYPE)
-        
-        if len(copy) != len(self.chrom):
-            self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
-            self._compute_copy_vec()
-        else:
-            self.copy= np.array(copy, dtype=COPY_DTYPE)
             
         self.offset = np.array([sum(self.chrom_sizes[:i]) 
                                 for i in range(len(self.chrom_sizes) + 1)])
@@ -420,8 +433,10 @@ class Index(object):
 
     #-
 
-
     def __eq__(self, other):
+        '''
+        equality check
+        '''
         return ( 
             np.all(self.chrom == other.chrom) and
             np.all(self.start == other.start) and
@@ -429,7 +444,61 @@ class Index(object):
             np.all(self.label == other.label) and
             np.all(self.copy == other.copy) 
         )
+
+    def __add__(self, other):
+        '''
+        concatenate indices
+        '''
+        return Index(
+            np.concatenate([self.chrom, other.chrom]),
+            np.concatenate([self.start, other.start]),
+            np.concatenate([self.end, other.end]),
+            np.concatenate([self.label, other.label]),
+            genome=self.genome
+        )
+
     
+    def get_chrom_mask(self, c, copy=None):
+        '''
+        Return the mask relative to a chromosome
+
+        Parameters
+        ----------
+        c : str or int
+            the chromosome. To access by string, the Index needs to have the 
+            genome member variable set.
+        copy : int or None
+            the specific copy requested. If none, all the copies in the index
+            are included
+
+        Returns
+        -------
+        idx : np.ndarray
+
+        '''
+        if isinstance(c, string_types):
+            if self.genome is None:
+                raise TypeError('cannot access by string when genome is missing')
+            c = self.genome.getchrnum(c)
+        idx = self.chrom == c
+        if copy is not None:
+            idx = np.logical_and(idx, self.copy == copy)
+        return idx
+
+    def get_chrom_pos(self, c, copy=None):
+        return np.flatnonzero(self.get_chrom_mask(c, copy))
+
+    def get_chrom_index(self, c, copy=None):
+        ii = self.get_chrom_pos(c, copy)
+        return Index(
+            self.chrom[ii],
+            self.start[ii],
+            self.end[ii],
+            self.label[ii],
+            self.copy[ii],
+            genome=self.genome
+        )
+
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key], 
                                   self.start[key],
@@ -450,6 +519,13 @@ class Index(object):
         )
 
     def _compute_copy_vec(self):
+        '''
+        Tries to guess the copy vector. It assumes every copy of a chromosome
+        to be sequential and sorted by start/end. When bins have the same
+        chromosome id but are separated in sequence, or the latter starts
+        before the end of the previous one, the two bins are assumed to 
+        refer to different copies.
+        '''
         if len(self.copy) == 0:
             return
         chrom_ids = set(self.chrom)
@@ -458,7 +534,7 @@ class Index(object):
         self.copy[0] = 0
         for i in range(1, len(self.chrom)):
             cc = self.chrom[i]
-            if self.chrom[i - 1] != cc:
+            if self.chrom[i - 1] != cc or self.start[i] < self.end[i-1]:
                 copy_no[cc] += 1
             self.copy[i] = copy_no[cc]
 

@@ -8,3 +8,4 @@ This is the new build of lab tools
 """
 
 from .api import Contactmatrix
+from .utils import Genome, Index
