@@ -290,6 +290,55 @@ class Contactmatrix(object):
             else:
                 raise TypeError("Invalid argument type, numpy.ndarray is required")
     
+    def getSubMatrix(self, c0, c1, sum_copies=True, copies=None):
+        if isinstance(c0, string_types):
+            c0 = self.genome.getchrnum(c0)
+            
+        if isinstance(c1, string_types):
+            c1 = self.genome.getchrnum(c1)
+            
+        idx = [ 
+            np.where(self.index.chrom == c0)[0],
+            np.where(self.index.chrom == c1)[0]
+        ]    
+
+        if copies is None:
+            copies = [
+                np.unique(self.index.copy[ idx[0] ]),
+                np.unique(self.index.copy[ idx[1] ])
+            ]
+        
+        cidx = [list(), list()]
+        for i in [0, 1]:
+            try:
+                copies[i] = list(copies[i])
+            except TypeError:
+                copies[i] = [ copies[i] ]
+            
+            for cpy in copies[i]:
+                kk = np.where( self.index.copy[ idx[i] ] == cpy )[0]
+                cidx[i].append( idx[i][kk] )
+
+        l = len(cidx[0][0]), len(cidx[1][0])
+        if sum_copies:
+            n, m = l[0], l[1]
+        else:
+            n, m = l[0]*len(copies[0]), l[1]*len(copies[1])
+
+        sm = np.zeros((n, m))
+
+        for icpy in range(len(copies[0])):
+            for jcpy in range(len(copies[1])):
+                chunk = self.matrix[cidx[0][icpy], cidx[1][jcpy]]
+
+                if sum_copies:
+                    sm += chunk
+                else:
+                    sm[ l[0]*icpy:l[0]*(icpy+1) ][:, l[1]*jcpy:l[1]*(jcpy+1)] = chunk
+
+        return sm   
+
+
     def __len__(self):
         return self.index.__len__()
     
@@ -298,7 +347,7 @@ class Contactmatrix(object):
         usechr = []
         for c in uniqueChroms:
             chrom = self.genome.getchrom(c)
-            usechr.append(chrom[3:].decode())
+            usechr.append(chrom[3:])
         
         newMatrix = Contactmatrix(None, genome=None, resolution=self.resolution)
         newMatrix._build_genome(self.genome.assembly,
