@@ -394,19 +394,22 @@ class HssFile(h5py.File):
         #===write_ihm_sphere_obj_site
         xyz = self.get_struct_crd(1)
         radii = self.radii
-
+        
+        numSample = 10
         ihm_model_list_data = []
         ihm_sphere_obj_site_data = []
-
-        struct_name = "Structure 1"
-        ihm_model_list_data.append([1, 1, 1, struct_name, "Model_Population", 1, 1])
-        for i in range(len(index)):
-            chromNum = index.chrom[i]
-            chrom = genome[chromNum]
-            asym = "{}{}".format(chrom[3:], chr(65+index.copy[i]))
-            x, y, z = xyz[i]
-            ihm_sphere_obj_site_data.append([i+1, chromNum+1, i+1, i+1, asym, x,y,z, radii[i], ".", 1])
+        for s in range(numSample):
+            struct_name = "Structure {}".format(s+1)
+            ihm_model_list_data.append([s+1, s+1, 1, struct_name, "Sample_Population", 1, 1])
+            for i in range(len(index)):
+                chromNum = index.chrom[i]
+                chrom = genome[chromNum]
+                asym = "{}{}".format(chrom[3:], chr(65+index.copy[i]))
+                x, y, z = coordinates[i, s]
+                ihm_sphere_obj_site_data.append([len(index)*s+i+1, chromNum+1, i+1, i+1, asym, x,y,z, radii[i], ".", s+1])
+            #-
         #-
+
         ihm.write_ihm_model_list(ihm_model_list_data)
         ihm.write_ihm_sphere_obj_site(ihm_sphere_obj_site_data)
         
