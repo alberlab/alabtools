@@ -1,0 +1,102 @@
+{
+    "audit_author": {
+        "key": ["pdbx_ordinal", "name"],
+        "type": ["KEY", "TEXT"]
+    },
+    "chem_comp": {
+        "key": ["id", "name", "type"],
+        "type": ["KEY", "TEXT", "KEY"]
+    },
+    "citation": {
+        "key": ["id", "title", "journal_abbrev", "journal_volume", "page_first", "page_last", "year", "pdbx_database_id_PubMed", "pdbx_database_id_DOI"],
+        "type": ["KEY", "TEXT", "TEXT", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "citation_author": {
+        "key": ["citation_id", "name", "ordinal"],
+        "type": ["KEY", "TEXT", "KEY"]
+    },
+    "entity": {
+        "key": ["id", "type", "src_method", "pdbx_description", "formula_weight", "pdbx_number_of_molecules", "details"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "entity_poly": {
+        "key": ["entity_id", "type", "nstd_chirality", "nstd_linkage", "nstd_monomer", "type_details"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "entity_poly_seq": {
+        "key": ["entity_id", "num", "mon_id", "hetero"],
+        "type": ["KEY", "KEY", "KEY", "KEY"]
+    },
+    "entity_src_gen": {
+        "key": ["entity_id", "pdbx_src_id", "pdbx_alt_source_flag", "gene_src_common_name", "gene_src_genus", "pdbx_gene_src_scientific_name"],
+        "type": ["KEY", "KEY", "KEY", "TEXT", "KEY", "TEXT"]
+    },
+    "ihm_cross_link_list": {
+        "key": ["id", "group_id", "entity_description_1", "entity_id_1", "seq_id_1", "comp_id_1", "entity_description_2", "entity_id_2", "seq_id_2", "comp_id_2", "linker_type", "dataset_list_id"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "TEXT", "KEY"]
+    },
+    "ihm_cross_link_restraint": {
+        "key": ["id", "group_id", "entity_id_1", "asym_id_1", "seq_id_1", "comp_id_1", "entity_id_2", "asym_id_2", "seq_id_2", "comp_id_2", "model_granularity", "restraint_type", "distance_threshold", "sigma_1"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "TEXT", "KEY", "KEY"]
+    },
+    "ihm_dataset_group": {
+        "key": ["ordinal_id", "group_id", "dataset_list_id"],
+        "type": ["KEY", "KEY", "KEY"]
+    },
+    "ihm_dataset_list": {
+        "key": ["id", "data_type", "database_hosted"],
+        "type": ["KEY", "TEXT", "KEY"]
+    },
+    "ihm_ensemble_info":{
+        "key":["ensemble_id", "ensemble_name", "post_process_id", "model_group_id", "ensemble_clustering_method", "ensemble_clustering_feature", "num_ensemble_models", "num_ensemble_models_deposited", "ensemble_precision_value", "ensemble_file_id"],
+        "type":["KEY", "TEXT", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "ihm_external_files":{
+        "key":["id", "reference_id", "file_path", "file_format", "content_type", "file_size_bytes", "details"],
+        "type": ["KEY", "KEY", "TEXT", "TEXT", "TEXT", "KEY", "TEXT"]
+    },
+    "ihm_model_list": {
+        "key": ["ordinal_id", "model_id", "model_group_id", "model_name", "model_group_name", "assembly_id", "protocol_id"],
+        "type": ["KEY", "KEY", "KEY", "TEXT", "TEXT", "KEY", "KEY"]
+    },
+    "ihm_model_representation": {
+        "key": ["ordinal_id", "representation_id", "segment_id", "entity_id", "entity_description", "entity_asym_id", "seq_id_begin", "seq_id_end", "model_object_primitive", "starting_model_id", "model_mode", "model_granularity", "model_object_count"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "ihm_modeling_post_process": {
+        "key": ["id", "protocol_id", "analysis_id", "step_id", "type", "feature", "num_models_begin", "num_models_end"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "ihm_modeling_protocol": {
+        "key": ["ordinal_id", "protocol_id", "step_id", "struct_assembly_id", "dataset_group_id", "struct_assembly_description", "protocol_name", "step_name", "step_method", "num_models_begin", "num_models_end", "multi_scale_flag", "multi_state_flag", "time_ordered_flag"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "TEXT", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "ihm_sphere_obj_site": {
+        "key": ["ordinal_id", "entity_id", "seq_id_begin", "seq_id_end", "asym_id", "Cartn_x", "Cartn_y", "Cartn_z", "object_radius", "rmsf", "model_id"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "ihm_struct_assembly": {
+        "key": ["ordinal_id", "assembly_id", "entity_description", "entity_id", "asym_id", "seq_id_begin", "seq_id_end"],
+        "type": ["KEY", "KEY", "KEY", "KEY", "KEY", "KEY", "KEY"]
+    },
+    "ihm_struct_assembly_class": {
+        "key": ["ordinal_id", "class_id", "assembly_id"],
+        "type": ["KEY", "KEY", "KEY"]
+    },
+    "ihm_struct_assembly_class_list": {
+        "key": ["class_id", "name", "type", "description"],
+        "type": ["KEY", "TEXT", "TEXT", "KEY"]
+    },
+    "pdbx_entry_details": {
+        "key": ["entry_id", "sequence_details"],
+        "type": ["KEY", "KEY"]
+    },
+    "software": {
+        "key": ["pdbx_ordinal", "name", "classification", "version", "type", "location"],
+        "type": ["KEY", "TEXT", "TEXT", "KEY", "KEY", "KEY"]
+    },
+    "struct_asym": {
+        "key": ["id", "entity_id", "details"],
+        "type": ["KEY", "KEY", "TEXT"]
+    }
+}
