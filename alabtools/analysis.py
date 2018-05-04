@@ -335,7 +335,7 @@ class HssFile(h5py.File):
             chrom = genome[index.chrom[i]]
             start = index.start[i]
             end = index.end[i]
-            chem_comp_data.append(["{}".format(i+1), "{}:{}-{}".format(chrom, start, end), "other"])
+            chem_comp_data.append(["{}".format(hex(i+1)[2:]), "{}:{}-{}".format(chrom, start, end), "other"])
         #-
         ihm.write_chem_comp(chem_comp_data)
 
