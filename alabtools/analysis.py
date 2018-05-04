@@ -283,7 +283,7 @@ class HssFile(h5py.File):
             filename += ".ihm"
         
         path = os.path.join(path, prefix)
-        directory = os.path.dirname(os.path.join(path,"data"))
+        directory = os.path.dirname(os.path.join(path, "data/"))
         if not os.path.exists(directory):
             os.makedirs(directory)
         
