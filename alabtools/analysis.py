@@ -335,7 +335,7 @@ class HssFile(h5py.File):
             chrom = genome[index.chrom[i]]
             start = index.start[i]
             end = index.end[i]
-            chem_comp_data.append(["{}".format(hex(i+1)[2:]), "{}:{}-{}".format(chrom, start, end), "other"])
+            chem_comp_data.append(["Seg-{}".format(i+1), "{}:{}-{}".format(chrom, start, end), "other"])
         #-
         ihm.write_chem_comp(chem_comp_data)
 
@@ -393,14 +393,15 @@ class HssFile(h5py.File):
         #===write_ihm_model_list
         #===write_ihm_sphere_obj_site
         radii = self.radii
-        
+        print("Loading coordinates into memory..")
+        coords = self.coordinates
         numSample = 10
         ihm_model_list_data = []
         ihm_sphere_obj_site_data = []
         for s in range(numSample):
             struct_name = "Structure {}".format(s+1)
             ihm_model_list_data.append([s+1, s+1, 1, struct_name, "Sample_Population", 1, 1])
-            xyz = hss.get_struct_crd(s)
+            xyz = coords[:, s, :]
             for i in range(len(index)):
                 chromNum = index.chrom[i]
                 chrom = genome[chromNum]
@@ -414,12 +415,12 @@ class HssFile(h5py.File):
         ihm.write_ihm_sphere_obj_site(ihm_sphere_obj_site_data)
         
         ihm.close()
-
+        print("Writing DCD coordinates..")
         dcdfh = open(os.path.join(path, coordinate_filename), 'wb')
         dcdwriter = DCDWriter(dcdfh)
 
         for i in range(numModel):
-            xyz = self.get_struct_crd(i)
+            xyz = coords[:, i, :]
             dcdwriter._write_frame(xyz[:,0],xyz[:,1],xyz[:,2])
 
         dcdfh.close()
