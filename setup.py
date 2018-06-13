@@ -58,10 +58,10 @@ setup(
         description = 'Alber lab toolbox',
         cmdclass = cmdclass,
         packages=['alabtools'],
-        package_data={'alabtools' : ['genomes/*']},
-        install_requires=install_requires,
-        tests_require=tests_require,
-        extras_require=extras_require,
+        package_data={'alabtools' : ['genomes/*','config/*']},
+        #install_requires=install_requires,
+        #tests_require=tests_require,
+        #extras_require=extras_require,
         ext_modules=extensions,
         include_dirs=[numpy.get_include()]
 )
