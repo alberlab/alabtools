@@ -54,6 +54,7 @@ class sss_matrix(object):
     """
 
     def __init__(self,arg1,shape=None,dtype=DATA_DTYPE,copy=False,mem=True, lazy=False, h5group='.'):
+        
         if isinstance(arg1,str):
             h5 = h5py.File(arg1, 'r')
             self._load_from_h5(h5[h5group], lazy)
@@ -66,7 +67,9 @@ class sss_matrix(object):
                 # It's a tuple of matrix dimensions (M, N)
                 # create empty matrix
                 self.csr = csr_matrix(arg1, shape, dtype, copy)
-            else:
+                self._pop_diag()
+            else:    
+
                 if len(arg1) == 2:
                     # (data, ij) format
                     try:
@@ -126,7 +129,7 @@ class sss_matrix(object):
                     raise ValueError("unrecognized sss_matrix constructor usage")
                 #-
             #--
-        #if instance
+        
         self.data    = self.csr.data
         self.indices = self.csr.indices
         self.indptr  = self.csr.indptr

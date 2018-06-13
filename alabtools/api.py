@@ -109,11 +109,17 @@ class Contactmatrix(object):
         else:
             # build genome/index
             if genome is not None:
-                self._build_genome(assembly=genome, usechr=usechr)
+                if isinstance(genome, utils.Genome):
+                    self.genome = genome
+                else:
+                    self._build_genome(assembly=genome, usechr=usechr)
+                
                 if resolution is not None:
-                    self._build_index(resolution=resolution)
-                elif isinstance(resolution, utils.Index):
-                    self.index = resolution
+                    if isinstance(resolution, utils.Index):
+                        self.index = resolution
+                        self.resolution = 0
+                    else:
+                        self._build_index(resolution=resolution)
 
             # matrix from scipy sparse matrix
             if isinstance(mat, scipy.sparse.base.spmatrix):
@@ -138,7 +144,7 @@ class Contactmatrix(object):
                                                     [0] * (len(self.index)+1),
                                                     [0] * len(self.index)))
             else:
-                raise(ValueError, 'Invalid mat argument')
+                raise(ValueError, 'If mat argument is none, you must specify genome and resolution')
             #assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index)) 
             #-
         
@@ -338,6 +344,35 @@ class Contactmatrix(object):
 
         return sm   
 
+    def sumCopies(self):
+        ii = np.array([i for i in self.index.copy_index.keys()])
+        new_index = self.index.get_sub_index(ii)
+        N = len(new_index)
+        chroms = new_index.get_chromosomes()
+        n_chrom = len(chroms)
+        chrom_idxs = [
+            [
+                self.index.get_chrom_pos(c, z) for z in self.index.get_chrom_copies(c)
+            ] for c in chroms 
+        ]
+
+        max_copies = max( [ len(i) for i in chrom_idxs ] )
+        
+        out_matrix = [ [None] * N for _ in range(N) ]
+        for i in range(n_chrom):
+            for j in range(i, n_chrom):
+                oi = new_index.get_chrom_index(chroms[i])
+                oj = new_index.get_chrom_index(chroms[j])
+                x = np.zeros( (len(oi), len(oj)) )
+                for ci in chrom_idxs[i]:
+                    for cj in chrom_idxs[j]:
+                        x += self.matrix[ci, cj]
+                x /= max_copies                
+                if i == j:
+                    x = np.triu(x)
+                out_matrix[i][j] = scipy.sparse.csr_matrix(x)
+        full_matrix = scipy.sparse.bmat(out_matrix)
+        return Contactmatrix(full_matrix, genome=self.genome, resolution=new_index)
 
     def __len__(self):
         return self.index.__len__()
@@ -504,7 +539,10 @@ class Contactmatrix(object):
             chrom  = tadDef['f0']
             start  = tadDef['f1']
             end    = tadDef['f2']
-            label  = tadDef['f3']
+            if 'f3' in tadDef:
+                label  = tadDef['f3']
+            else:
+                label = [''] * len(chrom)
             nchrom = np.array([newMatrix.genome.getchrnum(x) for x in chrom])
             
             f_tadDef = np.sort(
@@ -514,32 +552,39 @@ class Contactmatrix(object):
             chrom  = f_tadDef['f0']
             start  = f_tadDef['f1']
             end    = f_tadDef['f2']
-            label  = f_tadDef['f3']
+            if 'f3' in f_tadDef:
+                label  = f_tadDef['f3']
+            else:
+                label = ['']*len(chrom)
             tad_sizes = end - start
             if np.count_nonzero(tad_sizes < self.resolution):
-                raise RuntimeError('%d TAD(s) are too small for this matrix resolution (%d)' %
-                                   (np.count_nonzero(tad_sizes < self.resolution),
-                                    self.resolution)
-                                  )
+                # it is ok if they are the last beads of a chromosome tho.
+                warnings.warn('%d TAD(s) are too small for this matrix resolution (%d)' %
+                               (np.count_nonzero(tad_sizes < self.resolution),
+                                self.resolution)
+                              )
             newMatrix._set_index(chrom,start,end,label)
         else:
             newMatrix._build_index(self.resolution*step)
-
-
             
         DimB = len(newMatrix.index)
+
+        _, fwmap, _ = utils.get_index_mappings(newMatrix.index, self.index)
+
         mapping = np.empty(DimB+1,dtype=np.int32)
-        mapping[0] = 0
+        for i in len(fwmap):
+            mapping[0] = fwmap[i][0]
+        mapping[-1] = fwmap[-1] + 1
         
-        row = 0
-        for i in range(DimB):
-            incStep = int((newMatrix.index.end[i] - newMatrix.index.start[i]) / self.resolution)
-            row += incStep
+        # row = 0
+        # for i in range(DimB):
+        #     incStep = int((newMatrix.index.end[i] - newMatrix.index.start[i]) / self.resolution)
+        #     row += incStep
             
-            if (row >= DimA) or (newMatrix.index.chrom[i] != self.index.chrom[row]):
-                #row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
-                row = self.index.offset[self.index.chrom[row-incStep]+1]
-            mapping[i+1] = row
+        #     if (row >= DimA) or (newMatrix.index.chrom[i] != self.index.chrom[row]):
+        #         #row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
+        #         row = self.index.offset[self.index.chrom[row-incStep]+1]
+        #     mapping[i+1] = row
 
         Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
         Bj = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
@@ -692,6 +737,12 @@ class Contactmatrix(object):
         cmap = kwargs.pop('cmap',red)
         
         plotmatrix(filename,mat,cmap=cmap,**kwargs)
+
+    def plotComparison(self, m2, chromosome=None, file=None, dpi=300, **kwargs):
+        from .plots import plot_comparison, red
+        cmap = kwargs.pop('cmap',red)
+        plot_comparison(self, m2, chromosome, file, dpi, cmap=cmap, **kwargs)
+
         
     #=============saveing method
     def save(self,filename,compression='gzip', compression_opts=6):

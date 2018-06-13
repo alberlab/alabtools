@@ -100,7 +100,8 @@ class Genome(object):
         chromosome region length
     """
     
-    def __init__(self,assembly,chroms=None,origins=None,lengths=None,usechr=['#','X'],silence=False):
+    def __init__(self, assembly, chroms=None, origins=None, lengths=None,
+                 usechr=None, silence=False):
         
         # If the first argument is a string, and no other info is specified, 
         # check if we can read from info or hdf5.
@@ -119,6 +120,16 @@ class Genome(object):
                 info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
             else:
                 assembly = h5py.File(assembly, 'r')
+
+        if isinstance(assembly, Genome):
+            genome = assembly
+            assembly = genome.assembly
+            if chroms is None:
+                chroms = genome.chroms
+            if origins is None:
+                origins = genome.origins
+            if lengths is None:
+                lengths = genome.lengths
 
         if isinstance(assembly,h5py.File):
             chroms  = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
@@ -142,6 +153,10 @@ class Genome(object):
             origins = np.array(origins,dtype=ORIGINS_DTYPE)
             
         choices = np.zeros(len(chroms),dtype=bool)
+
+        if usechr is None:
+            usechr=['#', 'X']
+
         for chrnum in usechr:
             if chrnum == '#':
                 choices = np.logical_or([re.search("chr[\d]+$",c) != None for c in chroms], choices)
@@ -389,6 +404,14 @@ class Index(object):
                 self.copy_index = { int(k): v for k, v in tmp.items() }
             except (KeyError, ValueError):
                 pass
+
+        if isinstance(chrom, Index):
+            index = chrom
+            chrom = index.chrom
+            start = index.start
+            end = index.end
+            copy = index.copy
+            self.genome = index.genome
         
         if not(len(chrom) == len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
@@ -499,6 +522,12 @@ class Index(object):
             genome=self.genome
         )
 
+    def get_chrom_copies(self, c):
+        return np.unique(self.copy[self.chrom == c])
+
+    def get_chromosomes(self):
+        return np.unique(self.chrom)
+
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key], 
                                   self.start[key],
@@ -516,6 +545,17 @@ class Index(object):
         return '<alabtools.Index: %d chroms, %d segments>' % (
             self.num_chrom, 
             len(self.chrom) 
+        )
+
+    def get_sub_index(self, keys):
+        dt = self[keys]
+        return Index(
+            dt['chrom'],
+            dt['start'],
+            dt['end'],
+            dt['label'],
+            self.copy[keys],
+            genome=self.genome
         )
 
     def _compute_copy_vec(self):
@@ -771,3 +811,111 @@ class H5Batcher():
 
     def __len__(self):
         return self.ds.__len__()
+
+def remap(s0, s1):
+    '''
+    Creates forward and backward maps between two segmentations, assuming
+    no gaps in the mapping: each segment will have at least one corresponding
+    partner in the other segmentation. Assumes the two segmentations have
+    the same starting and ending points. Ugly stuff can happen if this is not
+    the case.
+
+    Parameters
+    ----------
+
+    s0, s1 : list of ints
+        the boundaries of two segmentations, including start and end positions.
+        A segmentation in N segments will have N+1 boundary positions.
+
+    Returns
+    -------
+
+    dmap : list of lists of ints
+        the map from s0 to s1. Each element dmap[ i ], 0 <= i < N holds 
+        the indexes of the segments on s1 corresponding to the i-th segment
+        on s0. Each segment in s0 is guarantee to have at least one 
+        corresponding segment in s1.
+    imap : list of lists of ints
+        the inverse mapping from s1 to s0.
+    '''
+
+    dmap = [list() for _ in range(len(s0)-1)]
+    imap = [list() for _ in range(len(s1)-1)]
+
+    # Define an overlap score to generalize the choice of corresponding 
+    # elements when boundaries do not match. Simply the size of the 
+    # overlapping section 
+    def overlap(i, j):
+        b = max(s0[i], s1[j])
+        e = min(s0[i+1], s1[j+1])
+        return max(0, e-b)
+
+    N = len(s0) - 1
+    M = len(s1) - 1
+
+    # the first elements are necessarily mapped one to the other
+    i = 0
+    j = 0
+    
+    while True:
+        dmap[i].append(j)
+        imap[j].append(i)
+
+        if i == N-1 and j == M-1:
+            break
+
+        # if we get to the end of a segmentation, assign all the rest of
+        # the other one to this last element
+        if j == M - 1:
+            i += 1
+        elif i == N - 1:
+            j += 1
+        else:
+            # decide on which sequence(s) to advance based on overlap
+            v = [overlap(i+1, j), overlap(i, j+1), overlap(i+1, j+1)]
+                
+            k = v.index(max(v))
+
+            if k == 0 or k == 2:
+                i += 1
+            if k == 1 or k == 2:
+                j += 1
+
+    return dmap, imap 
+
+
+def get_index_mappings(idx0, idx1):
+    # make sure that the two subdivisions map the same chromosomes
+    assert idx0.num_chrom == idx1.num_chrom 
+    n_chrom = idx0.num_chrom
+    
+    # get the starting index for each chromosome  
+    cc0 = idx0.offset
+    cc1 = idx1.offset
+
+    # get the mapping for each chromosome
+    cmap, fwmap, bwmap = [], [], []
+    for i in range(n_chrom):
+        # create the arrays of boundaries
+        v0 = np.concatenate([ idx0.start[cc0[i]:cc0[i+1]], [ idx0.end[ cc0[ i + 1 ] - 1 ] ] ])
+        v1 = np.concatenate([ idx1.start[cc1[i]:cc1[i+1]], [ idx1.end[ cc1[ i + 1 ] - 1 ] ] ])
+        
+        # get the maps chromosome by chromosome
+        dm, im = remap(v0, v1)
+        cmap.append( [dm, im] )
+        
+        # the full mapping needs to add the chromosome offset 
+        # to every element (note, elements in direct map refer to
+        # the second segmentation, and viceversa)
+        fwmap += [
+            [
+                x + idx1.offset[ i ] for x in row 
+            ] for row in dm 
+        ]
+        bwmap += [
+            [
+                x + idx0.offset[ i ] for x in row 
+            ] for row in im 
+        ]
+    
+    return cmap, fwmap, bwmap
