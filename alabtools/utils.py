@@ -45,6 +45,7 @@ if (sys.version_info > (3, 0)):
 else:
     # python 2.x 
     from cStringIO import StringIO
+    unicode = unicode
 
 CHROMS_DTYPE = np.dtype('U10')
 ORIGINS_DTYPE = np.int32
