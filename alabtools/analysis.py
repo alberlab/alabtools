@@ -496,7 +496,8 @@ def compare_hic_maps(M, ref, fname='matrix'):
     plt.savefig(dname + '/difference_histo.pdf')
     plt.close(fig)
 
-    plotmatrix(dname + '/difference_matrix.pdf', d)
+    v0 = min(0.1, np.max(np.abs(d)))
+    plotmatrix(dname + '/difference_matrix.pdf', d, cmap='coolwarm', vmin=-v0, vmax=v0)
 
     # 2d hist to have a "scatter plot"
     fig = plt.figure()
