@@ -88,7 +88,7 @@ class Contactmatrix(object):
 
     
     """
-    def __init__(self, mat=None, genome='hg19', resolution=100000, usechr=['#','X']):
+    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X']):
         
         # matrix from file
         if isinstance(mat, string_types):
@@ -99,7 +99,14 @@ class Contactmatrix(object):
             elif os.path.splitext(mat)[1] == '.hcs':
                 self._load_hcs(mat)
             elif os.path.splitext(mat)[1] == '.cool':
-                self._load_cool(mat,usechr=usechr)
+                h5 = h5py.File(mat)
+                self._load_cool(h5, assembly=genome, usechr=usechr)
+                h5.close()
+            elif os.path.splitext(mat)[1] == '.mcool':
+                h5 = h5py.File(mat)
+                print("Loading matrix from mcool, resolution={}".format(resolution))
+                self._load_cool(h5['resolutions']['{}'.format(resolution)], assembly=genome, usechr=usechr)
+                h5.close()
             elif os.path.splitext(mat)[1] == '.hic':
                 self._load_hic(mat,resolution=resolution,usechr=usechr)
             elif os.path.splitext(mat)[1] == '.gz' and os.path.splitext(os.path.splitext(mat)[0])[1] == '.pairs':
@@ -171,9 +178,9 @@ class Contactmatrix(object):
                                          h5["matrix"]["diagonal"]))
         h5.close()
         
-    def _load_cool(self,filename,usechr=['#','X']):        
-        h5 = h5py.File(filename)
-        assembly = h5.attrs['genome-assembly']
+    def _load_cool(self, h5, assembly=None, usechr=['#','X']):
+        if assembly is None:
+            assembly = h5.attrs['genome-assembly']
         nbins = h5.attrs['nbins']
         self.resolution = h5.attrs['bin-size']
         self._build_genome(assembly,usechr=usechr,chroms=h5['chroms']['name'][:],lengths=h5['chroms']['length'][:])
@@ -226,7 +233,7 @@ class Contactmatrix(object):
         data    = np.concatenate(data)
         
         self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.index),len(self.index)))
-        h5.close()
+        
         
     def _load_pairs_bgzip(self,filename,resolution,usechr=['#','X']):
         import pypairix
@@ -572,9 +579,9 @@ class Contactmatrix(object):
         _, fwmap, _ = utils.get_index_mappings(newMatrix.index, self.index)
 
         mapping = np.empty(DimB+1,dtype=np.int32)
-        for i in len(fwmap):
-            mapping[0] = fwmap[i][0]
-        mapping[-1] = fwmap[-1] + 1
+        for i in range(len(fwmap)):
+            mapping[i] = fwmap[i][0]
+        mapping[-1] = fwmap[-1][0] + 1
         
         # row = 0
         # for i in range(DimB):
@@ -648,9 +655,32 @@ class Contactmatrix(object):
         average = 0
         originalData = np.copy(self.matrix.csr.data)
         originalDiag = np.copy(self.matrix.diagonal)
+        
         fmax = self.rowsum().mean()/(averageContact+0.2)
+        left = 0
+        right = fmax*2
+        
+        self.fmaxScaling(fmax,force=True)
+        newMat = self.makeSummaryMatrix(domain)
+        newMat.matrix.data[newMat.matrix.data < theta] = 0
+        
+        rowsums = newMat.rowsum()
+        rowsums = rowsums[rowsums > 0]
+        average = rowsums.mean()
+        
+        print("({}, {}) => {} : {}".format(left, right, fmax, average))
+        
+        if average < averageContact:
+            right = fmax
+            fmax = (left+fmax)/2
+            
+        else:
+            left = fmax
+            fmax = (right+fmax)/2
+            
+        
         while abs(average - averageContact)/averageContact > tol :
-            print(fmax,average)
+            
             self.matrix.csr.data = np.copy(originalData)
             self.matrix.diagonal = np.copy(originalDiag)
             
@@ -663,7 +693,17 @@ class Contactmatrix(object):
             rowsums = newMat.rowsum()
             rowsums = rowsums[rowsums > 0]
             average = rowsums.mean()
-            fmax = fmax/averageContact*average
+            
+            print("({}, {}) => {} : {}".format(left, right, fmax, average))
+            if average < averageContact:
+                right = fmax
+                fmax = (left+fmax)/2
+                
+            else:
+                left = fmax
+                fmax = (right+fmax)/2
+            #fmax = fmax/averageContact*average
+
         #==
         
         newMat = self.makeSummaryMatrix(domain)
@@ -672,7 +712,7 @@ class Contactmatrix(object):
         self.matrix.csr.data = np.copy(originalData)
         self.matrix.diagonal = np.copy(originalDiag)
         
-        print("{} {}".format(fmax,average))
+        print("Fmax = {} Rowmean = {}".format(fmax,average))
         return newMat
         
     #=============plotting method
