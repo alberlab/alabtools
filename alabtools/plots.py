@@ -24,7 +24,7 @@ __email__   = "nhua@usc.edu"
 
 import numpy as np
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 
 from scipy.ndimage.interpolation import zoom
 import matplotlib.pyplot as plt

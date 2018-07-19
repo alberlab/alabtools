@@ -24,13 +24,13 @@ __version__ = "0.0.3"
 __email__   = "polles@usc.edu"
 
 import numpy as np
-import matplotlib.pyplot as plt
 import warnings
 import os, errno
 from .api import Contactmatrix
 from .plots import plot_comparison, plotmatrix
 import h5py
 from .utils import unicode, Genome, Index, COORD_DTYPE, RADII_DTYPE
+import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 
 
