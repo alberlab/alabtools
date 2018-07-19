@@ -33,6 +33,7 @@ import itertools
 import h5py
 import json
 import sys
+import collections
 from six import string_types
 
 if (sys.version_info > (3, 0)):
@@ -60,6 +61,9 @@ CHROM_SIZES_DTYPE = np.int32
 
 COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
+
+# size of buckets (in basepairs) for fast search in index (see index.loc function)
+BUCKET_SIZE = 100000 
 
 class Genome(object):
     """
@@ -167,6 +171,7 @@ class Genome(object):
         self.origins = origins[choices]
         self.lengths = lengths[choices]
         self.assembly = unicode(assembly)
+
     #-
 
     def __eq__(self, other):
@@ -455,6 +460,10 @@ class Index(object):
         if not hasattr(self, 'copy_index'):
             self._compute_copy_index()
 
+        self._compute_ref_vec()
+
+        self.loctree = None
+
     #-
 
     def __eq__(self, other):
@@ -491,9 +500,8 @@ class Index(object):
         c : str or int
             the chromosome. To access by string, the Index needs to have the 
             genome member variable set.
-        copy : int or None
-            the specific copy requested. If none, all the copies in the index
-            are included
+        copy : int or list, optional
+            If specified, select only the specified copy/copies.
 
         Returns
         -------
@@ -506,7 +514,7 @@ class Index(object):
             c = self.genome.getchrnum(c)
         idx = self.chrom == c
         if copy is not None:
-            idx = np.logical_and(idx, self.copy == copy)
+            idx = np.logical_and(idx, np.isin(self.copy, copy))
         return idx
 
     def get_chrom_pos(self, c, copy=None):
@@ -528,6 +536,12 @@ class Index(object):
 
     def get_chromosomes(self):
         return np.unique(self.chrom)
+
+    def get_chrom_names(self):
+        if self.genome is not None:
+            return [self.genome.getchrom(i) for i in self.get_chromosomes()]
+        else:
+            return [ 'chr%d' % (i + 1) for i in self.get_chromosomes()]
 
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key], 
@@ -597,6 +611,15 @@ class Index(object):
                 tmp_index[locus] += [i]
         # use first index as a key
         self.copy_index = {ii[0]: ii for locus, ii in tmp_index.items()}
+
+    def _compute_ref_vec(self):
+        '''
+        Sets a vector of references, the inverse of the copy index
+        '''
+        self.refs = [None] * len(self)
+        for i, ii in self.copy_index.items():
+            for j in ii:
+                self.refs[j] = i
         
     def save(self,h5f,compression="gzip", compression_opts=6):
 
@@ -675,6 +698,43 @@ class Index(object):
         else:
             # scalar datasets don't support compression
             igrp.create_dataset("copy_index", data=json.dumps(self.copy_index)) 
+
+    def loc(self, chrom, start, end=None, copy=None):
+        '''
+        Get the indexes corresponding to the specified genomic location or 
+        segment.
+        
+        Parameters
+        ----------
+        chrom (str or int) : chromosome name or 0 based number
+        start (int) : position or starting position of a region (basepairs)
+        end (int, optional) : ending position of the region
+        copy (int or list, optional) : consider only the specified copies
+            of the chromosome
+
+        Returns
+        -------
+        np.ndarray[int] : an array containing the positions of index's 
+            regions which overlap with the input region. 
+        '''
+    
+        if self.loctree is None:
+            self.loctree = LocStruct(self)
+
+        if end is None:
+            buckets = self.loctree[ chrom ][ start // BUCKET_SIZE : start // BUCKET_SIZE + 1]
+        else:
+            buckets = self.loctree[ chrom ][ start // BUCKET_SIZE : (end-1) // BUCKET_SIZE + 1]
+        locs = []
+        for bucket in buckets:
+            locs += bucket.get_intersections(start, end)
+        if copy is not None:
+            if not isinstance(copy, collections.Iterable):
+                copy = [copy]
+            locs = [i for i in locs if self.copy[i] in copy]
+        return np.sort(np.unique(locs))
+
+
 #--------------------
 
 
@@ -920,3 +980,86 @@ def get_index_mappings(idx0, idx1):
         ]
     
     return cmap, fwmap, bwmap
+
+def region_intersect(b, e, x, y):
+    a = x < e
+    b = y > b
+    return (a and b)
+
+def region_intersect_one(b, e, x, y):
+    return (x >= b) and (x < e)
+
+
+class Node:
+    """
+    Class Node
+    """
+    def __init__(self, value=None):
+        self.left = None
+        self.data = value
+        self.right = None
+
+class BucketTree:
+    def __init__(self, ids, starts, ends):
+        self.root = Node()
+        # sort by start, end, id
+        self.fill(self.root, ids, starts, ends)
+
+    @staticmethod
+    def fill(node, ids, starts, ends):
+        n = len(starts)
+        if n == 0:
+            return
+        i = n // 2
+        node.data = (ids[i], starts[i], ends[i])
+        node.left = Node()
+        node.right = Node()
+        BucketTree.fill(node.left, ids[:i], starts[:i], ends[:i])
+        BucketTree.fill(node.right, ids[i+1:], starts[i+1:], ends[i+1:])
+
+    @staticmethod
+    def _traverse_tree(node, ids, x, y, f=region_intersect):
+        if node.data is None:
+            return
+        i, s, e = node.data
+        if f(s, e, x, y):
+            ids.append(i)
+            BucketTree._traverse_tree(node.left, ids, x, y, f)
+            BucketTree._traverse_tree(node.right, ids, x, y, f)
+        
+    def get_intersections(self, x, y=None):
+        ids = []
+        if y is None:
+            self._traverse_tree(self.root, ids, x, y, region_intersect_one)
+        else:
+            self._traverse_tree(self.root, ids, x, y)
+        return ids
+
+class LocStruct:
+    def __init__(self, index):
+        self.chroms = {}
+        chromids = index.get_chromosomes()
+        chroms = index.get_chrom_names()
+        for cid, c in zip(chromids, chroms):
+            ii = index.get_chrom_pos(c)
+            ind = np.lexsort((index.start[ii], index.end[ii], ii))
+            starts, ends, ids = index.start[ii][ind], index.end[ii][ind], ii[ind]
+            nbuckets = ends[-1] // BUCKET_SIZE + 1
+            bS = [list() for x in range(nbuckets)]
+            bE = [list() for x in range(nbuckets)]
+            bI = [list() for x in range(nbuckets)]
+            for s, e, i in zip(starts, ends, ids):
+                i0, i1 = s // BUCKET_SIZE, (e-1) // BUCKET_SIZE
+                for k in range(i0, i1+1):
+                    bS[k].append(s)
+                    bE[k].append(e)
+                    bI[k].append(i)
+            self.chroms[c] = list()
+            for i in range(nbuckets):
+                self.chroms[c].append( BucketTree(bI[i], bS[i], bE[i]) )
+
+            self.chroms[cid] = self.chroms[c]
+
+    def __getitem__(self, c):
+        return self.chroms[c]
+

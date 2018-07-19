@@ -55,6 +55,10 @@ class sss_matrix(object):
 
     def __init__(self,arg1,shape=None,dtype=DATA_DTYPE,copy=False,mem=True, lazy=False, h5group='.'):
         
+        if isinstance(arg1, np.ndarray):
+            self.csr = csr_matrix(np.triu(arg1), shape, dtype, copy)
+            self._pop_diag()
+
         if isinstance(arg1,str):
             h5 = h5py.File(arg1, 'r')
             self._load_from_h5(h5[h5group], lazy)
@@ -319,7 +323,11 @@ class sss_matrix(object):
                 vp += 1
 
             curr_row += 1
-            next_row += 1         
+            next_row += 1       
+
+        while curr_row < len(self.diagonal):
+            yield curr_row, curr_row, diagonal[curr_row]
+            curr_row += 1  
 
     def nnz(self):
         return len(self.data) + np.count_nonzero(self.diagonal != 0)   
