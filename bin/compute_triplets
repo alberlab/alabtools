@@ -1,0 +1,136 @@
+#!/usr/bin/env python
+from __future__ import print_function, division
+import argparse
+
+import os
+import zipfile
+import sys
+
+from alabtools.analysis import HssFile
+
+
+
+def get_triplet_task(args):
+    from alabtools.analysis import HssFile
+    import alabtools.triplets as tri
+    import numpy as np
+    import os
+    hss, seqnum, cutoff, output_dir, filter_type, filter_args, split = args
+
+    # check the job is not run already
+    if os.path.isfile(
+        os.path.join( output_dir, 'triplets%d.%d.npy' % (seqnum, split-1) ),
+    ):
+        return
+
+    with HssFile( hss, 'r' ) as f:
+        index = f.index
+        crd = f.coordinates[:, seqnum, :]
+        radii = f.radii
+
+    hap_idx = {}
+    for i, bs in index.copy_index.items():
+        for j in bs:
+            hap_idx[j] = i
+
+    n = len(index.copy_index)
+    if split is None:
+        split = 1
+
+    triplets = tri.get_triplets(crd, radii, cutoff, 
+                                tri.filters[filter_type](index, *filter_args) )
+    
+    tvec = np.sort([
+        tri.get_tindex(hap_idx[i], hap_idx[j], hap_idx[k], n)
+        for i, j, k in triplets
+    ])
+
+    # split the triplets in multiple files. The number of possible triplets
+    # scales in a way that is not super clear to me, but I believe this power
+    # law will approximately split the triplets so each file will be of 
+    # comparable size.
+    steps = np.arange(split+1)**1.7
+    steps = steps * ( (n*n*n) / steps[-1] )
+    steps = [int(s) for s in steps]
+
+    k0 = 0
+    for i in range(split):
+        start = k0
+        k0 = np.searchsorted(tvec, steps[i+1])
+        np.save( 
+            os.path.join( output_dir, 'triplets%d.%d.npy' % (seqnum, i) ), 
+            tvec[start:k0]
+        )
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Find triplets in population')
+    parser.add_argument('hss', help='Hss File')
+    parser.add_argument('cutoff', type=float, help='cutoff')
+    parser.add_argument('outdir', help='output_directory')
+    parser.add_argument('filter', help='filter type [trans, cis, mixed]')
+    parser.add_argument('--gap', type=int, help='filter out contacts close in sequence')
+    parser.add_argument('--serial', action='store_true', help='do not use ipyparallel')
+    parser.add_argument('--split', type=int, default=1, help='split in multiple files')
+    parser.add_argument('--zip', help='put all files in the specified zip archive')
+    
+    args = parser.parse_args()
+
+    with HssFile( args.hss, 'r' ) as f:
+        n_struct = f.nstruct
+
+    hss = os.path.abspath(args.hss)
+
+    if not os.path.isdir(args.outdir):
+        os.makedirs(args.outdir)
+    else:
+        import glob
+        if len(glob.glob(args.outdir + '/triplets*.npy')) > 0:
+            print('the working directory is not empty, (a)bort, (r)eplace, (c)ontinue a previous run?', file=sys.stderr) 
+        # TODO: ask for confirmation
+
+    outdir = os.path.abspath(args.outdir)
+
+    filter_args = []
+    if args.gap is not None:
+        filter_args.append(args.gap)
+    
+    rargs = [(hss, i, args.cutoff, outdir, args.filter, filter_args, args.split) for i in range(n_struct)]
+    
+    if not args.serial:
+        import ipyparallel 
+        rcl = ipyparallel.Client()
+        lbv = rcl.load_balanced_view()
+        ar = lbv.map_async(get_triplet_task, rargs)
+        try:
+            for i, x in enumerate(ar):
+                print('\rComputing: {} / {}'.format(i+1, n_struct), file=sys.stderr, end='')
+        except:
+            ar.abort()
+            raise
+        finally:
+            print('')
+            rcl.close()
+    else:
+        for i in range(n_struct):
+            print('\rComputing: {} / {}'.format(i+1, n_struct), file=sys.stderr, end='')
+            get_triplet_task(rargs[i])
+
+    print('', file=sys.stderr, end='')
+
+    if args.zip is not None:
+        zf = os.path.join(outdir, args.zip)
+        zipf = zipfile.ZipFile(zf, 'w')
+        for i in range(n_struct):
+            print('\rPacking: {} / {}'.format(i+1, n_struct), file=sys.stderr, end='')
+            for j in range(args.split):
+                file = os.path.join( outdir, 'triplets%d.%d.npy' % (i, j) )
+                zipf.write(file)
+        zipf.close()
+        print('', file=sys.stderr, end='')
+        for i in range(n_struct):
+            print('\rDeleting packed items: {} / {}'.format(i+1, n_struct), file=sys.stderr, end='')
+            for j in range(args.split):
+                file = os.path.join( outdir, 'triplets%d.%d.npy' % (i, j) )
+                os.remove(file)
+        print('', file=sys.stderr, end='')
+    print('Done.', file=sys.stderr, end='')

@@ -1,0 +1,130 @@
+#!/usr/bin/env python
+from __future__ import print_function, division
+import numpy as np
+import pandas as pd
+import sys
+from alabtools import Index, Genome
+
+n_random = 20
+tolerance = 0*1000*1000
+
+myclusters = sys.argv[1]
+spriteclusters = sys.argv[2]
+index = Index(sys.argv[3], genome=Genome(sys.argv[4]))
+
+def get_bead(chrom, pos, index):
+    return np.where(
+        (index.chrom == chrom) & (index.start <= pos) & (index.end > pos)
+    )[0][0]
+
+def get_comparable_random_cluster(cluster, index):
+    ix = pd.DataFrame({
+        'chrom': index.chrom,
+        'start': index.start,
+        'end': index.end
+    })
+    all_chroms = np.arange(index.genome.chroms.size)
+    by_chrom = ix.loc[cluster].groupby('chrom')
+    cavail = set(all_chroms)
+    new_cluster = set()
+    for v, cc in by_chrom:
+        span = max(cc.end) - min(cc.start)
+        candidates = set(np.where(index.genome.lengths > span)[0]).intersection(cavail)
+        if len(candidates) == 0:
+            return None
+        new_chrom = np.random.choice(list(candidates))
+        cavail.remove(new_chrom)
+        old_start = min(cc.start)
+        new_start = np.random.randint( index.genome.lengths[new_chrom] - span) 
+        new_beads = set()
+        for x in cc.itertuples(index=True):
+            bi = get_bead(new_chrom, new_start + x.start - old_start, index)         
+            new_beads.add(bi)
+        if len(new_beads) != len(cc):
+            return None
+        new_cluster = new_cluster.union(new_beads)
+    return new_cluster
+
+
+def get_comparable_random_cluster_2(cluster, index):
+    ix = pd.DataFrame({
+        'chrom': index.chrom,
+        'start': index.start,
+        'end': index.end
+    })
+    by_chrom = ix.loc[cluster].groupby('chrom')
+    new_cluster = set()
+    for v, cc in by_chrom:
+        new_chrom = v
+        span = max(cc.start) - min(cc.start)
+        old_start = min(cc.start)
+        # if index.genome.lengths[new_chrom] - span < 1:
+        #     print(cluster, new_chrom, index.genome.lengths[new_chrom], span)
+        #     exit(1)
+        new_start = np.random.randint( index.genome.lengths[new_chrom] - span - 1) 
+        new_beads = set()
+        for x in cc.itertuples(index=True):
+            bi = get_bead(new_chrom, new_start + x.start - old_start, index)         
+            new_beads.add(bi)
+        if len(new_beads) != len(cc):
+            return None
+        new_cluster = new_cluster.union(new_beads)
+    return new_cluster
+
+
+# prepare cluster sets
+csets = [set() for i in range(len(index))]
+for i, line in enumerate(open(spriteclusters, 'r')):
+    jj = [int(x) for x in line.split()[1:]]
+    for j in jj:
+        csets[j].add(i)
+
+
+def count_instances(cluster):
+    where = csets[cluster[0]]
+    for j in cluster[1:]:
+        where = where.intersection(csets[j])
+    return len(where)
+
+def or_set(beads):
+    where = csets[beads[0]]
+    for i in beads[1:]:
+        where = where.union(csets[i])
+    return where
+
+
+def count_instances_tol(cluster, index, tolerance):
+    bgrp = [get_compatible_indexes(i, index, tolerance) for i in cluster]
+    where = or_set(bgrp[0])
+    for bg in bgrp[1:]:
+        where = where.intersection( or_set( bg ) )
+    return len(where)
+
+def get_compatible_indexes(bead, index, tolerance):
+    start = max(0, index.start[bead] - tolerance)
+    stop = min(index.genome.lengths[index.chrom[bead]] - 1, index.start[bead] + tolerance)
+    i1 = get_bead(index.chrom[bead], start, index)  
+    i2 = get_bead(index.chrom[bead], stop, index)
+    return list(range(i1, i2+1))
+
+# now count appearance
+z = 1
+
+for line in open(myclusters, 'r'):
+    print(z, line.strip(), file=sys.stderr)
+    z += 1
+    cluster = [int(x) for x in line.split()[1:]]
+    n_my = count_instances_tol(cluster, index, tolerance)
+    n_rnds = []
+    for i in range(n_random):
+        random = None
+        print('\r%d' % i, file=sys.stderr, end='')
+        while random is None:
+            random = get_comparable_random_cluster_2(cluster, index)
+        random = list(random)
+        n_rnds.append(count_instances_tol(random, index, tolerance))
+    print('', file=sys.stderr)
+    n_ave = np.average(n_rnds)
+    std = np.std(n_rnds)
+    print( n_my, n_ave, std, (n_my - n_ave)/std )
+

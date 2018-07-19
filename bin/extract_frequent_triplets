@@ -1,0 +1,141 @@
+#!/usr/bin/env python
+from __future__ import print_function, division
+import os
+import argparse
+import glob
+import numpy as np
+import sys
+import pdb
+from numba import jit
+from collections import Counter
+
+@jit
+def merge_sorted(a, b):
+    n, m = len(a), len(b)
+    if n == 0:
+        return b
+    if m == 0:
+        return a
+    c = np.empty(n+m, dtype=b.dtype)
+    i, j, k = 0, 0, 0
+    while k < n+m:
+        if i == n:
+            c[k:] = b[j:]
+            return c
+        elif j == m:
+            c[k:] = a[i:]
+            return c
+        else:
+            if a[i] < b[j]:
+                c[k] = a[i]
+                i += 1
+                k += 1
+            else:
+                c[k] = b[j]
+                j += 1
+                k += 1
+
+@jit
+def count_sorted(v, freq=0.0):
+    if len(v) == 0: 
+        return []
+    r = np.empty((1024, 2)) 
+    x = v[0]
+    c = 1
+    n = len(v)
+    m = 0
+    for i in range(1, n):
+        if v[i] != n:
+            if c >= freq:
+                r[m][0] = x
+                r[m][1] = c
+                m += 1
+                if m == len(r):
+                    r = np.resize(r, (m*2, 2))
+            x = v[i]
+            c = 1
+        else:
+            c += 1
+    return r[:m]
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Extract frequent triplets')
+    parser.add_argument('input', help='input directory or zip file')
+    parser.add_argument('cutoff', type=float, help='cutoff frequency')
+    args = parser.parse_args()
+
+    # decide if it is a directory or a zip file
+    if os.path.isdir(args.input):
+        zipf = None
+        files = glob.glob(args.input + '/triplets*.npy')
+    elif os.path.isfile(args.input):
+        zipf = np.load(args.input)
+        files = list(zipf.keys())
+    else:
+        print('cannot find %s' % args.input, file=sys.stderr)
+        exit(1)
+
+    if len(files) == 0:
+        print('Eroor: %s appears to be empty' % args.input, file=sys.stderr)
+
+    zippath = os.path.dirname(files[0])
+    n_struct = 0
+    n_split = 0
+    for f in files:
+        if f.endswith('.npy'):
+            f = f[:-4]
+        s = f.split('.')
+        n_split = max( int( s[-1] ), n_split )
+        w = s[-2].split('s')[-1]
+        n_struct = max( int(w), n_struct)
+    
+    n_struct += 1
+    n_split += 1
+
+    print('Structures: {}, Passes: {}\n-----------------'.format(n_struct, n_split), file=sys.stderr)
+
+    
+    for j in range(n_split):
+        ts = []
+        vs = []
+        nt = 0
+
+        for i in range(n_struct):
+            print('\rPass: {}, Structure: {},  Total triplets: {:.2f}M      '.format(j+1, i+1, nt/1000/1000), file=sys.stderr, end='')
+            if zipf is None:
+                v = np.load(args.input + '/triplets{}.{}.npy'.format(i, j))
+            else:
+                v = zipf[os.path.join( zippath, 'triplets{}.{}.npy'.format(i, j))]
+            v.sort()
+            vs.append(v)
+            nt += len(v)
+            #ts = merge_sorted(ts, v)
+            #ts = np.concatenate([ts, v]) 
+        print('\nSorting and merging:', file=sys.stderr)
+        while True:
+            n = len(vs)
+            print('\rVector pool size: {:6d}         '.format(n), file=sys.stderr, end='')
+            ts = [ merge_sorted(vs[i], vs[n//2 + i]) for i in range( n//2 ) ]
+            if n % 2 == 1:
+                ts.append(vs[-1])
+            if len(ts) == 1:
+                ts = ts[0]
+                del vs
+                break
+            else:
+                vs = ts
+
+        print('\nCounting...', file=sys.stderr)
+        
+        frequents = Counter(ts)
+        nf = np.count_nonzero(np.array(list(frequents.values())) >= args.cutoff*n_struct)
+        print('Writing {} frequent triplets...'.format(nf), file=sys.stderr)
+        #ts.sort()
+        for t, v in frequents.most_common():
+            if v < args.cutoff*n_struct:
+                break
+            print(t, v)
+
+        print('Done.', file=sys.stderr)

@@ -1,0 +1,105 @@
+#!/usr/bin/env python
+from alabtools.analysis import HssFile
+from ipyparallel import Client, require
+from igm.utils.log import print_progress
+import uuid
+import argparse
+import sys
+
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Compute pairwise distance statistics')
+    parser.add_argument('--kl', action='store_true', help='Compute Kullback-Liebler')
+    parser.add_argument('--ks', action='store_true', help='Compute Kolmogorov-Smirnoff')
+    parser.add_argument('--nbins', type=int, default=10, help='Number of bins for KL computation')
+    parser.add_argument('--use', type=str, nargs='+', default=['all'], choices=['all', 'max', 'min'], help='With multiploid populations, use minimum, maximum, or all distances between two regions')
+    parser.add_argument('hss', type=str, help='reference population')
+    parser.add_argument('refhss', type=str, help='current population')
+    args = parser.parse_args()
+
+    statlist = []
+    if args.kl:
+        statlist.append('KL')
+    if args.ks:
+        statlist.append('KS')
+
+    hss = HssFile(args.hss, 'r')
+
+    n = len(hss.index.copy_index)
+    to_process = [(i, j) for i in range(0, n) for j in range(0, i)]
+    ii = [i for (i, j) in to_process]
+    jj = [j for (i, j) in to_process]
+
+    kwargs = {
+        'compute' : statlist,
+        'nbins' : args.nbins,
+        'use' : args.use
+    }
+
+    uid = 'data_' + str(uuid.uuid4()).replace('-', '')
+
+    rcl = Client()
+    ids = rcl.ids
+    dv = rcl[ids]
+    lbv = rcl.load_balanced_view(targets=ids)
+
+    # setup
+
+    rcl[ids][uid] = dict()
+
+    @dv.remote(block=True)
+    @require('alabtools.analysis')
+    def setup(uid, hss, ref, kwargs):
+        # prepare the data
+        data = globals()[uid]
+        data['ref_hss'] = alabtools.analysis.HssFile(ref, 'r')
+        data['hss'] = alabtools.analysis.HssFile(hss, 'r')
+        data['kwargs'] = kwargs
+
+
+    #@lbv.parallel(block=True, chunksize=300)
+    @require('alabtools.extras.pair_distributions')
+    def remote_function(uid, i, j):
+        data = globals()[uid]
+        result = alabtools.extras.pair_distributions.get_pair_distance_statistics(
+            data['hss'], data['ref_hss'], i, j, **data['kwargs'] 
+        )
+        return result
+
+    chunksize = 500
+    print('Working on', len(to_process) / chunksize, 'chunks', file=sys.stderr)
+
+    setup(uid, args.hss, args.refhss, kwargs)
+    print('Setup completed', file=sys.stderr)
+    ar = lbv.map_async(remote_function, [uid] * len(to_process), ii, jj, chunksize=chunksize)
+    #res = remote_function.map([uid] * len(to_process), ii, jj)
+    for i in print_progress(ar):
+        pass
+    res = ar.get()
+
+    header = 'i j'
+    if args.kl:
+        header += ' KL'
+    if args.ks:
+        header += 'KS pvalue'
+    for ui, u in enumerate(args.use):
+        print('#' + u, header)
+        for (i, j), r in zip(to_process, res):
+            line = ''
+            field = 0
+            if args.kl:
+                line += str(r[ui][field]) + ' '
+                field += 1
+            if args.ks:
+                line += ' '.join([str(x) for x in r[ui][field]]) + ' '
+                field += 1
+            print( i, j, line.strip() )
+
+    rcl[ids][uid] = None
+    rcl.close()
+
+
+
+
