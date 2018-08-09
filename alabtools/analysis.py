@@ -267,6 +267,26 @@ class HssFile(h5py.File):
     nstruct = property(get_nstruct, set_nstruct)
     violation = property(get_violation, set_violation)
 
+
+    def getBeadRadialPositions(self, beads, nucleusRadius=5000.0):
+        allrp = []
+        for i in np.array(beads):
+            beadcrd = self.get_bead_crd(i)
+            rp = np.linalg.norm(beadcrd, axis=1) / nucleusRadius
+            
+            allrp.append(rp)
+    
+        return np.array(allrp)
+
+    def getChromBeadRadialPosition(self, chrnum, nucleusRadius=5000.0):
+        rps = []
+        for c in self.index.get_chrom_copies(chrnum):
+            beads = self.index.get_chrom_pos(chrnum, copy=c)
+            rps.append(self.getBeadRadialPositions(self, beads))
+        rps = np.column_stack(rps)
+        #print(rps.shape)
+        return rps
+
     def savePDBx(self, output_file, max_struct=None, entry_id="Model", title="Model Population",
                  software=None,
                  citation=None,
