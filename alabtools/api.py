@@ -24,6 +24,10 @@ __version__ = "0.0.4"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
+
+import warnings
+warnings.simplefilter('ignore', FutureWarning)
+
 import os.path
 import h5py
 import scipy.sparse
@@ -31,7 +35,6 @@ try:
    import cPickle as pickle
 except:
    import pickle
-import warnings
 from six import string_types
 
 from . import utils
@@ -88,7 +91,7 @@ class Contactmatrix(object):
 
     
     """
-    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X']):
+    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X'], tri='upper'):
         
         # matrix from file
         if isinstance(mat, string_types):
@@ -138,6 +141,12 @@ class Contactmatrix(object):
                                                  mm.indptr, diag))
             # matrix from numpy dense matrix
             elif isinstance(mat, np.ndarray):
+                if tri == 'upper':
+                    mat = np.triu(mat)
+                elif tri == 'lower':
+                    mat = np.tril(mat)
+                else:
+                    raise ValueError('tri should be either `upper` or `lower`, got `%s`' % repr(tri) )
                 mm = scipy.sparse.csr_matrix(mat)
                 diag = mm.diagonal()
                 mm.setdiag(0)

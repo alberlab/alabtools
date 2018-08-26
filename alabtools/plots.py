@@ -23,12 +23,15 @@ __version__ = "0.0.1"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
+import warnings
+warnings.simplefilter('ignore', UserWarning)
 import matplotlib
 matplotlib.use('Agg')
 
 from scipy.ndimage.interpolation import zoom
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from .api import Contactmatrix
 
 
 def make_colormap(seq,cmapname='CustomMap'):
@@ -132,7 +135,13 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
     plt.show()
     plt.close(fig)
 
-def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, **kwargs):
+def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, **kwargs):
+    
+    if not isinstance(m1, Contactmatrix):
+        m1 = Contactmatrix(m1)
+    if not isinstance(m2, Contactmatrix):
+        m2 = Contactmatrix(m2)
+    
     if chromosome is not None:
         m1 = m1[chromosome]
         m2 = m2[chromosome]
@@ -140,10 +149,13 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, **kwargs):
     cwrb = make_colormap([(1,1,1),(1,0,0),0.5,(1,0,0),(0,0,0)],'wrb')
     cmap     = kwargs.pop('cmap',cwrb)
 
-    m = np.tril( m1.matrix.toarray() ) + np.triu( m2.matrix.toarray() )
+    m = np.tril( m1.matrix.toarray(), -1 ) + np.triu( m2.matrix.toarray(), 1 )
 
     fig = plt.figure(figsize=(10,10))
     plt.imshow(m, cmap=cmap, **kwargs)
+    if labels:
+        plt.text(0.1, 0.1, labels[0], transform=plt.gca().transAxes)
+        plt.text(0.9, 0.9, labels[1], transform=plt.gca().transAxes, horizontalalignment='right', verticalalignment='top')
     plt.colorbar()
     if file is None:
         plt.show()

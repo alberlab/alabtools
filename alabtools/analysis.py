@@ -66,22 +66,26 @@ class HssFile(h5py.File):
             self._version = self.attrs['version']
         except(KeyError):
             self._version = __hss_version__
-            self.attrs.create('version', __hss_version__, dtype='int32')
+            if self.mode != 'r':
+                self.attrs.create('version', __hss_version__, dtype='int32')
         try:
             self._violation = self.attrs['violation']
         except(KeyError):
             self._violation = np.nan
-            self.attrs.create('violation', np.nan, dtype='float')
+            if self.mode != 'r':
+                self.attrs.create('violation', np.nan, dtype='float')
         try:
             self._nbead = self.attrs['nbead']
         except(KeyError):
             self._nbead = 0
-            self.attrs.create('nbead', 0, dtype='int32')
+            if self.mode != 'r':
+                self.attrs.create('nbead', 0, dtype='int32')
         try:
             self._nstruct = self.attrs['nstruct']
         except(KeyError):
             self._nstruct = 0
-            self.attrs.create('nstruct', 0, dtype='int32')
+            if self.mode != 'r':
+                self.attrs.create('nstruct', 0, dtype='int32')
 
         if self.mode == "r":
             if 'genome' not in self:

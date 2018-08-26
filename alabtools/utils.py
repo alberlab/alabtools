@@ -1,18 +1,18 @@
 # Copyright (C) 2017 University of Southern California and
 #                          Nan Hua
-# 
+#
 # Authors: Nan Hua, Guido Polles
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
@@ -44,7 +44,7 @@ if (sys.version_info > (3, 0)):
         return s
     from io import StringIO
 else:
-    # python 2.x 
+    # python 2.x
     from cStringIO import StringIO
     unicode = unicode
 
@@ -63,38 +63,38 @@ COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
 
 # size of buckets (in basepairs) for fast search in index (see index.loc function)
-BUCKET_SIZE = 100000 
+BUCKET_SIZE = 100000
 
 class Genome(object):
     """
     And instance which holds genome information
-    
+
     Parameters
     ----------
     assembly : str
         The name of the genome. e.g. "hg19" or "mm9"
-        
+
     chroms : array[str] like, optional
         List of chromosome names. e.g ['chr1','chr2' ... 'chrX']
-        
+
     origins : array[int] like, optional
         List of chr region start, default will be arry of zeros
-        
+
     lengths : array[int] like, optional
         List of chr region length. e.g [249250621, 243199373, ...]
-        
+
     usechr : array[str] like, optional
         Specified chromsome to use. e.g. ['#','X'] or ['1','2','3'..'10']\
         '#' indicates all autosome chromosomes.
-        
+
     Notes
     -----
-    
+
     If ``chroms`` or ``lengths`` is(are) not specified, genome info will be read from genomes/*.info file
-    
+
     Attributes
     ----------
-    
+
     assembly : str
         Name of genome
     chroms : np.array[string10]
@@ -104,21 +104,21 @@ class Genome(object):
     lengths : np.array[int32]
         chromosome region length
     """
-    
+
     def __init__(self, assembly, chroms=None, origins=None, lengths=None,
                  usechr=None, silence=False):
-        
-        # If the first argument is a string, and no other info is specified, 
+
+        # If the first argument is a string, and no other info is specified,
         # check if we can read from info or hdf5.
         # Genome assembly name has precedence over hdf5 file names.
         # Will raise a IOError if cannot read any.
         if isinstance(assembly, string_types) and (
-            (chroms is None) or (lengths is None) 
+            (chroms is None) or (lengths is None)
             ):
             datafile = os.path.join(
                 os.path.dirname( os.path.abspath(__file__) ),
                 "genomes/" + assembly + ".info"
-            )    
+            )
             if os.path.isfile(datafile):
                 if not silence:
                     print("chroms or lengths not given, reading from genomes info file.")
@@ -142,7 +142,7 @@ class Genome(object):
             lengths = assembly["genome"]["lengths"]
             assembly = unicode(assembly["genome"]["assembly"].value)
             usechr = ['#','X','Y']
-            
+
         if (chroms is None) or (lengths is None):
             chroms = info["chroms"].astype(CHROMS_DTYPE)
             lengths = info["lengths"].astype(LENGTHS_DTYPE)
@@ -152,11 +152,11 @@ class Genome(object):
                 origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
             if len(chroms) != len(lengths) or len(chroms) != len(origins):
                 raise RuntimeError("Dimension of chroms and lengths do not match.")
-            
+
             chroms = np.array(chroms,dtype=CHROMS_DTYPE)
             lengths = np.array(lengths,dtype=LENGTHS_DTYPE)
             origins = np.array(origins,dtype=ORIGINS_DTYPE)
-            
+
         choices = np.zeros(len(chroms),dtype=bool)
 
         if usechr is None:
@@ -175,56 +175,56 @@ class Genome(object):
     #-
 
     def __eq__(self, other):
-        return ( 
+        return (
             np.all(self.chroms == other.chroms) and
             np.all(self.origins == other.origins) and
             np.all(self.lengths == other.lengths) and
-            np.all(self.assembly == other.assembly) 
+            np.all(self.assembly == other.assembly)
         )
-    
+
     def bininfo(self,resolution):
-        
+
         """
         Bin the genome by resolution
-        
+
         Parameters
         ----------
         resolution : int
             resolution of the matrix
-        
+
         Return
         ------
         utils.Index instance
-        
+
         """
-        
+
         binSize    = [int(math.ceil(float(x)/resolution)) for x in self.lengths]
-        
+
         chromList  = []
         binLabel   = []
         for i in range(len(self.chroms)):
             chromList += [i for j in range(binSize[i])]
             binLabel  += [j+int(self.origins[i]/resolution) for j in range(binSize[i])]
-   
+
         startList  = [binLabel[j]*resolution for j in range(sum(binSize))]
         endList    = [binLabel[j]*resolution + resolution for j in range(sum(binSize))]
-        
+
         binInfo    = Index(chromList,startList,endList,chrom_sizes=binSize)
         return binInfo
-    
+
     def getchrnum(self, chrom):
-        
+
         findidx = np.flatnonzero(self.chroms==unicode(chrom))
-    
+
         if len(findidx) == 0:
             return None
         else:
             return findidx[0]
-  
+
     def getchrom(self, chromNum):
         assert isinstance(chromNum,(int,np.int32,np.int64))
         return self.chroms[chromNum]
-    
+
     def __getitem__(self, key):
         if isinstance(key, (int, np.int32, np.int64)):
             return self.getchrom(key)
@@ -235,7 +235,7 @@ class Genome(object):
         for i in range(len(self.chroms)):
             represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(self.origins[i]+self.lengths[i]) + '\n')
         return represent
-        
+
     def save(self, h5f, compression="gzip", compression_opts=6):
 
         """
@@ -245,92 +245,92 @@ class Genome(object):
             |- chroms
             |- origins
             |- lengths
-        
+
         Parameters
         ----------
         h5f : h5py.File object
-        
+
         compression : string
             "gzip" as default
-        
+
         compression_opts : int
             compression level, higher the better
         """
-        
+
         assert isinstance(h5f, h5py.File)
         if 'genome' in h5f:
             ggrp = h5f["genome"]
         else:
             ggrp = h5f.create_group("genome")
-            
+
         if 'assembly' in ggrp:
             ggrp['assembly'][...] = self.assembly
         else:
             ggrp.create_dataset("assembly", data=self.assembly)
-        
+
         if 'chroms' in ggrp:
             ggrp['chroms'][...] = np.array(self.chroms, dtype='S10')
         else:
-            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype='S10'), # hdf5 does not like unicode 
-                                compression=compression, 
+            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype='S10'), # hdf5 does not like unicode
+                                compression=compression,
                                 compression_opts=compression_opts,
                                 )
-    
+
         if 'origins' in ggrp:
             ggrp['origins'][...] = self.origins
         else:
-            ggrp.create_dataset("origins", data=self.origins, 
+            ggrp.create_dataset("origins", data=self.origins,
                                 compression=compression,
                                 compression_opts=compression_opts)
-            
+
         if 'lengths' in ggrp:
             ggrp['lengths'][...] = self.lengths
         else:
-            ggrp.create_dataset("lengths", data=self.lengths, 
+            ggrp.create_dataset("lengths", data=self.lengths,
                                 compression=compression,
                                 compression_opts=compression_opts)
 #--------------------
 
 
 class Index(object):
-    
+
     """
     Matrix/System indexes. Maps matrix bins or model beads to
     genomic regions.
-    
+
     Parameters
     ----------
     chrom : list[int32]
         numeric chromosome id (starting from 0) for each bin/bead.
-        Es.: 0 -> chr1, 1 -> chr2, ..., 22 -> chrX  
+        Es.: 0 -> chr1, 1 -> chr2, ..., 22 -> chrX
     start : list[int32]
-        genomic starting positions of each bin (in bp, with respect to the 
+        genomic starting positions of each bin (in bp, with respect to the
         chromosome start)
     end : list[int32]
-        genomic ending positions of each bin (in bp, with respect to the 
-        chromosome start) 
+        genomic ending positions of each bin (in bp, with respect to the
+        chromosome start)
     label : list[string10]
-        label for each bin (usually, 'CEN', 'gap', 'domain', although it 
+        label for each bin (usually, 'CEN', 'gap', 'domain', although it
         can be any string of less than 10 characters)
     copy : list[int32], optional
-        In systems of beads, there may be multiple indistinguishable 
+        In systems of beads, there may be multiple indistinguishable
         copies of the same chromosome in the system. The copy vector specifies
         which copy of the chromosome each bead maps to. If not specified,
         is computed assuming non-contiguous groups of beads with the same
         `chrom` value belong to different copies.
         Each bead mapping to the same (chrom, start, end) tuple should,
-        in general, have a different copy value. 
+        in general, have a different copy value.
     chrom_sizes : list[int32], optional
-        number of bins/beads in each chromosome. It is useful to specify it if 
+        number of bins/beads in each chromosome. It is useful to specify it if
         two copies of the same chromosome appear as contiguous in the index.
-        If not specified, it is automatically computed assuming non-contiguous 
+        If not specified, it is automatically computed assuming non-contiguous
         groups of beads with the same `chrom` value belong to different copies.
     genome: alabtools.utils.Genome, optional
-        genome info for the index.  
+        genome info for the index.
     """
 
     def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], **kwargs):
-        
+
         self.genome = kwargs.get('genome', None)
         if isinstance(chrom, string_types):
             try:
@@ -341,9 +341,9 @@ class Index(object):
 
                 cols=[
                     ('chrom', CHROMS_DTYPE), # note that this is a string type
-                    ('start', START_DTYPE), 
-                    ('end', END_DTYPE), 
-                    ('label', LABEL_DTYPE), 
+                    ('start', START_DTYPE),
+                    ('end', END_DTYPE),
+                    ('label', LABEL_DTYPE),
                     ('copy', COPY_DTYPE)
                 ]
 
@@ -360,12 +360,12 @@ class Index(object):
                                              ' 3 columns')
                         usecols = range(ncols)
                 ncols = len(usecols)
-                
+
                 # define columns fields
-                
+
                 data = np.genfromtxt(chrom, usecols=usecols, dtype=cols[:ncols])
 
-                
+
                 if self.genome is None:
                     # transform chrom names to integers ids
                     i, nmap = 0, {}
@@ -373,22 +373,22 @@ class Index(object):
                         if c not in nmap:
                             nmap[c] = i
                             i += 1
-                    chrom = [ nmap[c] for c in data['chrom'] ] 
+                    chrom = [ nmap[c] for c in data['chrom'] ]
                 else:
                     if not isinstance(self.genome, Genome):
                         self.genome = Genome(self.genome)
                     chrom = np.array([self.genome.getchrnum(c) for c in data['chrom']])
 
                 # set the variables for further processing
-                
-                start = data['start'] 
+
+                start = data['start']
                 end   = data['end']
                 if 'label' in data.dtype.names:
                     label = data['label']
-                    
+
                 if 'copy' in data.dtype.names:
                     copy = data['copy']
-                
+
         if isinstance(chrom, h5py.File):
             h5f = chrom
             chrom = h5f["index"]["chrom"]
@@ -418,7 +418,7 @@ class Index(object):
             end = index.end
             copy = index.copy
             self.genome = index.genome
-        
+
         if not(len(chrom) == len(start) == len(end)):
             raise RuntimeError("Dimensions do not match.")
         if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
@@ -436,25 +436,25 @@ class Index(object):
             self._compute_copy_vec()
         else:
             self.copy= np.array(copy, dtype=COPY_DTYPE)
-        
+
         if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
             chrom_sizes = [
-                len( list(g) ) 
+                len( list(g) )
                 for _, g in itertools.groupby(
                     zip(self.chrom, self.copy)
                 )
             ]
-        
+
         self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
 
         self.num_chrom = len(self.chrom_sizes)
-        
+
         if len(label) != len(self.chrom):
             self.label = np.array([""] * len(self.chrom), dtype=LABEL_DTYPE)
         else:
             self.label = np.array(label, dtype=LABEL_DTYPE)
-            
-        self.offset = np.array([sum(self.chrom_sizes[:i]) 
+
+        self.offset = np.array([sum(self.chrom_sizes[:i])
                                 for i in range(len(self.chrom_sizes) + 1)])
 
         if not hasattr(self, 'copy_index'):
@@ -470,12 +470,12 @@ class Index(object):
         '''
         equality check
         '''
-        return ( 
+        return (
             np.all(self.chrom == other.chrom) and
             np.all(self.start == other.start) and
             np.all(self.end == other.end) and
             np.all(self.label == other.label) and
-            np.all(self.copy == other.copy) 
+            np.all(self.copy == other.copy)
         )
 
     def __add__(self, other):
@@ -490,7 +490,7 @@ class Index(object):
             genome=self.genome
         )
 
-    
+
     def get_chrom_mask(self, c, copy=None):
         '''
         Return the mask relative to a chromosome
@@ -498,7 +498,7 @@ class Index(object):
         Parameters
         ----------
         c : str or int
-            the chromosome. To access by string, the Index needs to have the 
+            the chromosome. To access by string, the Index needs to have the
             genome member variable set.
         copy : int or list, optional
             If specified, select only the specified copy/copies.
@@ -510,8 +510,9 @@ class Index(object):
         '''
         if isinstance(c, string_types):
             if self.genome is None:
-                raise TypeError('cannot access by string when genome is missing')
-            c = self.genome.getchrnum(c)
+                c = int(c.replace('chr', ''))  - 1
+            else:
+                c = self.genome.getchrnum(c)
         idx = self.chrom == c
         if copy is not None:
             idx = np.logical_and(idx, np.isin(self.copy, copy))
@@ -544,7 +545,7 @@ class Index(object):
             return [ 'chr%d' % (i + 1) for i in self.get_chromosomes()]
 
     def __getitem__(self,key):
-        return np.rec.fromarrays((self.chrom[key], 
+        return np.rec.fromarrays((self.chrom[key],
                                   self.start[key],
                                   self.end[key],
                                   self.label[key]),
@@ -552,14 +553,14 @@ class Index(object):
                                         ("start",START_DTYPE),
                                         ("end",END_DTYPE),
                                         ("label",LABEL_DTYPE)])
-    
+
     def __len__(self):
         return len(self.chrom)
 
     def __repr__(self):
         return '<alabtools.Index: %d chroms, %d segments>' % (
-            self.num_chrom, 
-            len(self.chrom) 
+            self.num_chrom,
+            len(self.chrom)
         )
 
     def get_sub_index(self, keys):
@@ -578,7 +579,7 @@ class Index(object):
         Tries to guess the copy vector. It assumes every copy of a chromosome
         to be sequential and sorted by start/end. When bins have the same
         chromosome id but are separated in sequence, or the latter starts
-        before the end of the previous one, the two bins are assumed to 
+        before the end of the previous one, the two bins are assumed to
         refer to different copies.
         '''
         if len(self.copy) == 0:
@@ -595,9 +596,9 @@ class Index(object):
 
     def _compute_copy_index(self):
         '''
-        Returns a index of the copies of the same genomic region in form of a 
+        Returns a index of the copies of the same genomic region in form of a
         dictionary. The key of each unique region is the id of the first
-        bin/bead mapping to it. The values are lists of all the bead id's 
+        bin/bead mapping to it. The values are lists of all the bead id's
         (including the key) which map to that particular region.
         In the case of an haploid system, or a contact map, this dictionary
         is completely trivial, i.e. {i : i for i in range(len(index))}.
@@ -620,11 +621,11 @@ class Index(object):
         for i, ii in self.copy_index.items():
             for j in ii:
                 self.refs[j] = i
-        
+
     def save(self,h5f,compression="gzip", compression_opts=6):
 
         """
-        Save index information into a hd5f file handle. The information will 
+        Save index information into a hd5f file handle. The information will
         be saved as a group of datasets:
         index/
             |- chrom
@@ -633,63 +634,63 @@ class Index(object):
             |- label
             |- copy
             |- chrom_sizes
-        
+
         Parameters
         ----------
         h5f : h5py.File object
-        
+
         compression : string
             'gzip' as default
-        
+
         compression_opts : int
             compression level, higher the better
         """
-        
+
         assert isinstance(h5f, h5py.File)
         if 'index' in h5f:
             igrp = h5f['index']
         else:
             igrp = h5f.create_group("index")
-            
+
         if 'chrom' in igrp:
             igrp['chrom'][...] = self.chrom
         else:
-            igrp.create_dataset("chrom", data=self.chrom, 
+            igrp.create_dataset("chrom", data=self.chrom,
                                 compression=compression,
                                 compression_opts=compression_opts)
-        
+
         if 'start' in igrp:
             igrp['start'][...] = self.start
         else:
-            igrp.create_dataset("start", data=self.start, 
+            igrp.create_dataset("start", data=self.start,
                                 compression=compression,
                                 compression_opts=compression_opts)
-        
+
         if 'end' in igrp:
             igrp['end'][...] = self.end
         else:
-            igrp.create_dataset("end", data=self.end, 
+            igrp.create_dataset("end", data=self.end,
                                 compression=compression,
                                 compression_opts=compression_opts)
-        
+
         if 'label' in igrp:
             igrp['label'][...] = np.array(self.label, dtype=np.dtype('S10'))
         else:
-            igrp.create_dataset("label", data=np.array(self.label, dtype=np.dtype('S10')), 
+            igrp.create_dataset("label", data=np.array(self.label, dtype=np.dtype('S10')),
                                 compression=compression,
                                 compression_opts=compression_opts)
-        
+
         if 'copy' in igrp:
             igrp['copy'][...] = self.copy
         else:
-            igrp.create_dataset("copy", data=self.copy, 
+            igrp.create_dataset("copy", data=self.copy,
                                 compression=compression,
                                 compression_opts=compression_opts)
 
         if 'chrom_sizes' in igrp:
             igrp['chrom_sizes'][...] = self.chrom_sizes
         else:
-            igrp.create_dataset("chrom_sizes", data=self.chrom_sizes, 
+            igrp.create_dataset("chrom_sizes", data=self.chrom_sizes,
                                 compression=compression,
                                 compression_opts=compression_opts)
 
@@ -697,13 +698,13 @@ class Index(object):
             igrp['copy_index'][...] = json.dumps(self.copy_index)
         else:
             # scalar datasets don't support compression
-            igrp.create_dataset("copy_index", data=json.dumps(self.copy_index)) 
+            igrp.create_dataset("copy_index", data=json.dumps(self.copy_index))
 
     def loc(self, chrom, start, end=None, copy=None):
         '''
-        Get the indexes corresponding to the specified genomic location or 
+        Get the indexes corresponding to the specified genomic location or
         segment.
-        
+
         Parameters
         ----------
         chrom (str or int) : chromosome name or 0 based number
@@ -714,10 +715,10 @@ class Index(object):
 
         Returns
         -------
-        np.ndarray[int] : an array containing the positions of index's 
-            regions which overlap with the input region. 
+        np.ndarray[int] : an array containing the positions of index's
+            regions which overlap with the input region.
         '''
-    
+
         if self.loctree is None:
             self.loctree = LocStruct(self)
 
@@ -744,7 +745,7 @@ def loadstream(filename):
     Convert a file location, return a file handle
     zipped file are automaticaly unzipped using stream
     """
-    
+
     if not os.path.isfile(filename):
         raise IOError("File %s doesn't exist!\n" % (filename))
     if os.path.splitext(filename)[1] == '.gz':
@@ -762,7 +763,7 @@ def make_diploid(index):
     didx = {}
     for k in ['chrom', 'start', 'end', 'label']:
         didx[k] = np.concatenate([index.__dict__[k], index.__dict__[k]])
-    didx['copy'] = np.concatenate([index.__dict__['copy'], 
+    didx['copy'] = np.concatenate([index.__dict__['copy'],
                                    index.__dict__['copy'] + 1 ])
     return Index(didx['chrom'], didx['start'], didx['end'], label=didx['label'], copy=didx['copy'])
 
@@ -777,7 +778,7 @@ def make_multiploid(index, chroms, copies):
     ----------
     index (alabtools.utils.Index): Haploid input index
     chroms (array[int] like): the chromosomes ids to be included
-        in the output index 
+        in the output index
     copy_number (array[int] like): the number of copies for each
         of the chromosomes in `chrom`
 
@@ -821,22 +822,22 @@ def make_multiploid(index, chroms, copies):
     nend = np.concatenate(nend)
     ncopy = np.concatenate(ncopy)
     nlabel = np.concatenate(nlabel)
-    
+
     return Index(nchrom, nstart, nend, copy=ncopy, label=nlabel, chrom_sizes=csizes)
 
 
-def natural_sort(l): 
-    convert = lambda text: int(text) if text.isdigit() else text.lower() 
-    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
+def natural_sort(l):
+    convert = lambda text: int(text) if text.isdigit() else text.lower()
+    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
     return sorted(l, key=alphanum_key)
 
 
 def get_index_from_bed(
-        file, 
-        genome=None, 
-        usecols=None, 
+        file,
+        genome=None,
+        usecols=None,
     ):
-    
+
     return Index(file, genome, usecols)
 
 
@@ -855,17 +856,17 @@ class H5Batcher():
         self.ds = ds
         self.n = ds.shape[0]
         self.b = 0
-        self.bsize = bsize 
+        self.bsize = bsize
         self.batch = ds[0:min(bsize, self.n)]
 
     def __getitem__(self, key):
         if key > self.n:
             raise KeyError()
-        z = key // self.bsize 
+        z = key // self.bsize
         if z != self.b:
             self.b = z
             self.batch = self.ds[
-                self.bsize*z : 
+                self.bsize*z :
                 min(self.n, self.bsize * (z + 1))
             ][()]
         return self.batch[key % self.bsize]
@@ -892,9 +893,9 @@ def remap(s0, s1):
     -------
 
     dmap : list of lists of ints
-        the map from s0 to s1. Each element dmap[ i ], 0 <= i < N holds 
+        the map from s0 to s1. Each element dmap[ i ], 0 <= i < N holds
         the indexes of the segments on s1 corresponding to the i-th segment
-        on s0. Each segment in s0 is guarantee to have at least one 
+        on s0. Each segment in s0 is guarantee to have at least one
         corresponding segment in s1.
     imap : list of lists of ints
         the inverse mapping from s1 to s0.
@@ -903,9 +904,9 @@ def remap(s0, s1):
     dmap = [list() for _ in range(len(s0)-1)]
     imap = [list() for _ in range(len(s1)-1)]
 
-    # Define an overlap score to generalize the choice of corresponding 
-    # elements when boundaries do not match. Simply the size of the 
-    # overlapping section 
+    # Define an overlap score to generalize the choice of corresponding
+    # elements when boundaries do not match. Simply the size of the
+    # overlapping section
     def overlap(i, j):
         b = max(s0[i], s1[j])
         e = min(s0[i+1], s1[j+1])
@@ -917,7 +918,7 @@ def remap(s0, s1):
     # the first elements are necessarily mapped one to the other
     i = 0
     j = 0
-    
+
     while True:
         dmap[i].append(j)
         imap[j].append(i)
@@ -934,7 +935,7 @@ def remap(s0, s1):
         else:
             # decide on which sequence(s) to advance based on overlap
             v = [overlap(i+1, j), overlap(i, j+1), overlap(i+1, j+1)]
-                
+
             k = v.index(max(v))
 
             if k == 0 or k == 2:
@@ -942,15 +943,15 @@ def remap(s0, s1):
             if k == 1 or k == 2:
                 j += 1
 
-    return dmap, imap 
+    return dmap, imap
 
 
 def get_index_mappings(idx0, idx1):
     # make sure that the two subdivisions map the same chromosomes
-    assert idx0.num_chrom == idx1.num_chrom 
+    assert idx0.num_chrom == idx1.num_chrom
     n_chrom = idx0.num_chrom
-    
-    # get the starting index for each chromosome  
+
+    # get the starting index for each chromosome
     cc0 = idx0.offset
     cc1 = idx1.offset
 
@@ -960,25 +961,25 @@ def get_index_mappings(idx0, idx1):
         # create the arrays of boundaries
         v0 = np.concatenate([ idx0.start[cc0[i]:cc0[i+1]], [ idx0.end[ cc0[ i + 1 ] - 1 ] ] ])
         v1 = np.concatenate([ idx1.start[cc1[i]:cc1[i+1]], [ idx1.end[ cc1[ i + 1 ] - 1 ] ] ])
-        
+
         # get the maps chromosome by chromosome
         dm, im = remap(v0, v1)
         cmap.append( [dm, im] )
-        
-        # the full mapping needs to add the chromosome offset 
+
+        # the full mapping needs to add the chromosome offset
         # to every element (note, elements in direct map refer to
         # the second segmentation, and viceversa)
         fwmap += [
             [
-                x + idx1.offset[ i ] for x in row 
-            ] for row in dm 
+                x + idx1.offset[ i ] for x in row
+            ] for row in dm
         ]
         bwmap += [
             [
-                x + idx0.offset[ i ] for x in row 
-            ] for row in im 
+                x + idx0.offset[ i ] for x in row
+            ] for row in im
         ]
-    
+
     return cmap, fwmap, bwmap
 
 def region_intersect(b, e, x, y):
@@ -1026,7 +1027,7 @@ class BucketTree:
             ids.append(i)
             BucketTree._traverse_tree(node.left, ids, x, y, f)
             BucketTree._traverse_tree(node.right, ids, x, y, f)
-        
+
     def get_intersections(self, x, y=None):
         ids = []
         if y is None:
@@ -1063,3 +1064,26 @@ class LocStruct:
     def __getitem__(self, c):
         return self.chroms[c]
 
+def underline(*args, char='-', terminal=False):
+    '''
+    Underlines a string.Takes a variable number of unnamed arguments, and the
+        final string is assembled like in the print function. The width of
+        the under-line matches the longest line in the output (or the terminal
+        width, if `terminal` is set to True)
+
+    Keyword arguments
+    -----------------
+        char : a character or a string to use to underline
+        terminal : if set to True, limits the line width to the terminal
+
+    '''
+    import re
+    s = ' '.join([str(a) if hasattr(a, '__str__') else repr(a) for a in args ])
+    ss = re.split('[\\r\\n]+', s)
+    l = max([len(x) for x in ss])
+    if terminal:
+        import shutil
+        c, r = shutil.get_terminal_size()
+        l = min(l, c)
+    u = (char * (l // len(char) + 1))[:l]
+    return s + '\n' + u
