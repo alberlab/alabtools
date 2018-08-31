@@ -153,11 +153,48 @@ class sss_matrix(object):
         self.csr.eliminate_zeros()
 
     def get_column(self, key):
-        ix = np.where(self.indices == key)[0]
+        ix = np.flatnonzero(self.indices[:self.indptr[key]] == key)
         js = np.searchsorted(self.indptr, ix, side='right') - 1
         col = np.zeros(self.shape[1])
         col[js] = self.data[ix]
         return col
+
+    def get_triu_row(self, key):
+        n, m = self.shape
+
+        if np.issubdtype(type(key), np.integer):
+            i = key
+            row = np.zeros(m)
+            row[ self.indices[self.indptr[i]:self.indptr[i+1]] ] = self.data[self.indptr[i]:self.indptr[i+1]]
+            row[i] = self.diagonal[i]
+            return row
+
+        elif isinstance(key, list) or isinstance(key, np.ndarray):
+            rows = np.zeros((len(key), m))
+            for k, i in enumerate(key):
+                rows[k] = self.get_triu_row(i)
+            return rows
+
+        elif isinstance(key, slice):
+            start, stop, step = key.start, key.stop, key.step
+            if start == None:
+                start = 0
+            if stop == None or stop > n:
+                stop = n
+            if step == None:
+                step = 1
+
+            rng = range(start, stop, step)
+            return self.get_triu_row(list(rng))
+
+        elif isinstance(key, tuple):
+            if len(key) != 2:
+                raise ValueError('get_triu_row should receive maximum 2 dimensions')
+            rows, cols = key
+            return self.get_triu_row(rows)[:, cols]
+
+        else:
+            raise RuntimeError('Invalid index type')
 
     def __getitem__(self, key):
         n, m = self.shape

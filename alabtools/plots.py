@@ -135,13 +135,13 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
     plt.show()
     plt.close(fig)
 
-def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, **kwargs):
-    
+def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, title='', **kwargs):
+
     if not isinstance(m1, Contactmatrix):
         m1 = Contactmatrix(m1)
     if not isinstance(m2, Contactmatrix):
         m2 = Contactmatrix(m2)
-    
+
     if chromosome is not None:
         m1 = m1[chromosome]
         m2 = m2[chromosome]
@@ -152,6 +152,7 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, **
     m = np.tril( m1.matrix.toarray(), -1 ) + np.triu( m2.matrix.toarray(), 1 )
 
     fig = plt.figure(figsize=(10,10))
+    plt.title(title)
     plt.imshow(m, cmap=cmap, **kwargs)
     if labels:
         plt.text(0.1, 0.1, labels[0], transform=plt.gca().transAxes)
@@ -160,5 +161,6 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, **
     if file is None:
         plt.show()
     else:
+        plt.tight_layout()
         plt.savefig(file, dpi=dpi)
         plt.close(fig)
