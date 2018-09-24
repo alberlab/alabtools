@@ -1087,3 +1087,25 @@ def underline(*args, char='-', terminal=False):
         l = min(l, c)
     u = (char * (l // len(char) + 1))[:l]
     return s + '\n' + u
+
+def block_transpose(x1, x2, max_items=int(1e8)):
+    '''
+    Transposes a matrix in blocks smaller than max_items.
+
+    Parameters
+    ----------
+        x1: ndarray-like
+            input matrix
+        x2: indarray-like
+            output matrix
+        max_items: int
+            maximum number of matrix elements to be transposed at once
+    '''
+    from tqdm import tqdm
+    n = x1.shape[0]
+    k = max(max_items // n, 1)
+    for i in tqdm(range(0, n, k)):
+        s = min(k, n-i)
+        block = x1[i:i+s].swapaxes(0, 1) # get a subset and transpose in memory
+        for z in block:
+            x2[:, i:i+s] = block

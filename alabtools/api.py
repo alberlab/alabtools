@@ -91,7 +91,7 @@ class Contactmatrix(object):
 
 
     """
-    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X'], tri='upper'):
+    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X'], tri='upper', lazy=False):
 
         self.resolution = None
         # matrix from file
@@ -101,7 +101,7 @@ class Contactmatrix(object):
             if os.path.splitext(mat)[1] == '.hdf5' or os.path.splitext(mat)[1] == '.hmat':
                 self._load_hmat(mat)
             elif os.path.splitext(mat)[1] == '.hcs':
-                self._load_hcs(mat)
+                self._load_hcs(mat, lazy=lazy)
             elif os.path.splitext(mat)[1] == '.cool':
                 h5 = h5py.File(mat)
                 self._load_cool(h5, assembly=genome, usechr=usechr)
@@ -176,17 +176,15 @@ class Contactmatrix(object):
     def _set_index(self,chrom,start,end,label=[],copy=[],chrom_sizes=[]):
         self.index = utils.Index(chrom=chrom,start=start,end=end,label=label,copy=copy,chrom_sizes=chrom_sizes)
 
-    def _load_hcs(self,filename):
-        h5 = h5py.File(filename)
+    def _load_hcs(self,filename, lazy=False):
+        h5 = h5py.File(filename, 'r')
         self.resolution = h5.attrs["resolution"]
         self.genome = utils.Genome(h5)
         self.index = utils.Index(h5)
 
-        self.matrix = matrix.sss_matrix((h5["matrix"]["data"],
-                                         h5["matrix"]["indices"],
-                                         h5["matrix"]["indptr"],
-                                         h5["matrix"]["diagonal"]))
-        h5.close()
+        self.matrix = matrix.sss_matrix(h5["matrix"], lazy=lazy)
+        if not lazy:
+            h5.close()
 
     def _load_cool(self, h5, assembly=None, usechr=['#','X']):
         if assembly is None:
@@ -352,7 +350,22 @@ class Contactmatrix(object):
 
         for icpy in range(len(copies[0])):
             for jcpy in range(len(copies[1])):
-                chunk = self.matrix[cidx[0][icpy], cidx[1][jcpy]]
+
+                ii = cidx[0][icpy]
+                jj = cidx[1][jcpy]
+                transpose = False
+
+                if jj[0] < ii[0]:
+                    ii, jj = jj, ii
+                    transpose = True
+
+                chunk = self.matrix.get_triu_row(icpy)[:, jcpy]
+                if jj[0] == ii[0]:
+                    chunk += chunk.T
+                    chunk[np.diag_indices(len(chunk))] /= 2
+                elif transpose:
+                    chunk = chunk.T
+                #chunk = self.matrix[cidx[0][icpy], cidx[1][jcpy]]
 
                 if sum_copies:
                     sm += chunk
@@ -477,6 +490,8 @@ class Contactmatrix(object):
         bias : np.array column vector
 
         """
+        # stores the bias
+        self.bias = bias
         self.matrix.normalize(np.array(bias))
 
     #-
@@ -519,6 +534,36 @@ class Contactmatrix(object):
         x = self.getKRnormBias(mask, **kwargs)
         self.normalize(x)
 
+    def computeConfidenceMatrix(self, M=None):
+        from ._cmtools import CalculatePixelConfidence
+        if M is None:
+            M = self.matrix.toarray()
+        c = np.empty(self.matrix.shape, dtype=np.float32)
+        CalculatePixelConfidence(M, c)
+        c[np.isnan(c)] = 0
+        return c
+
+    def filterByConfidence(self, cut=0.25, passes=2):
+        newM = self.matrix.toarray()
+        for _ in range(passes):
+            c = self.computeConfidenceMatrix(newM)
+            ii = np.where(c < cut)
+            newM[ii] = 0
+        return Contactmatrix(newM, genome=self.genome, resolution=self.index)
+
+    def expectedRestraints(self, cut=0.01):
+        '''
+        Returns the number of expected restraints per structure per bead when theta == cut
+
+        Parameters
+        ----------
+        cut : float
+            the theta cutoff
+        '''
+        ii = self.matrix.data >= cut
+        return 2*np.sum(self.matrix.data[ii])/self.matrix.shape[0]
+
+
     def makeSummaryMatrix(self,step=10):
         """
         Filter the matrix to get a lower resolution matrix. New resolution will be resolution*step
@@ -551,7 +596,7 @@ class Contactmatrix(object):
                                 lengths = self.genome.lengths)
 
         if isinstance(step, string_types):
-            tadDef = np.genfromtxt(step, dtype=None)
+            tadDef = np.genfromtxt(step, dtype=None, encoding=None)
 
             chrom  = tadDef['f0']
             start  = tadDef['f1']
@@ -582,7 +627,7 @@ class Contactmatrix(object):
                                     self.resolution)
                                   )
             newMatrix._set_index(chrom,start,end,label)
-        else:    
+        else:
             newMatrix._build_index(self.resolution*step)
 
         DimB = len(newMatrix.index)
@@ -592,7 +637,7 @@ class Contactmatrix(object):
         mapping = np.empty(DimB+1,dtype=np.int32)
         for i in range(len(fwmap)):
             mapping[i] = fwmap[i][0]
-        mapping[-1] = fwmap[-1][0] + 1
+        mapping[-1] = fwmap[-1][-1] + 1
 
         # row = 0
         # for i in range(DimB):
@@ -722,6 +767,7 @@ class Contactmatrix(object):
         self.matrix.diagonal[:] = originalDiag
 
         print("Fmax = {} Rowmean = {}".format(fmax,average))
+        newMat.matrix.csr.eliminate_zeros()
         return newMat
 
     #=============plotting method

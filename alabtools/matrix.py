@@ -25,7 +25,7 @@ __email__   = "nhua@usc.edu"
 
 import numpy as np
 import h5py
-from scipy.sparse import coo_matrix, csr_matrix, dia_matrix, isspmatrix_csr, SparseEfficiencyWarning
+from scipy.sparse import coo_matrix, csr_matrix, dia_matrix, isspmatrix_csr, SparseEfficiencyWarning, triu
 from scipy.sparse.sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
 from .utils import H5Batcher
@@ -69,80 +69,75 @@ class sss_matrix(object):
         elif isinstance(arg1, h5py.Group):
             self._load_from_h5(arg1[h5group], lazy)
 
-        elif isinstance(arg1, tuple):
-            if isshape(arg1):
-                # It's a tuple of matrix dimensions (M, N)
-                # create empty matrix
-                self.csr = csr_matrix(arg1, shape, dtype, copy)
-                self._pop_diag()
+        elif isinstance(arg1, tuple) and len(arg1) == 4:
+
+            (data, indices, indptr, diag) = arg1
+            data    = np.array(data,dtype=dtype)
+            indices = np.array(indices,dtype=INDICES_DTYPE)
+            indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
+            diag    = np.array(diag,dtype=dtype)
+            if shape is None:
+                shape = (len(diag),len(diag))
             else:
+                shape = (max(shape[0],len(diag)),max(shape[1],len(diag)))
 
-                if len(arg1) == 2:
-                    # (data, ij) format
-                    try:
-                        obj, (row, col) = arg1
-                    except (TypeError, ValueError):
-                        raise TypeError('invalid input format')
+            self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
+            self.diagonal = diag
 
-                    if shape is None:
-                        if len(row) == 0 or len(col) == 0:
-                            raise ValueError('cannot infer dimensions from zero '
-                                             'sized index arrays')
-                        M = np.max(row) + 1
-                        N = np.max(col) + 1
-                        shape = (M, N)
-                    else:
-                        # Use 2 steps to ensure shape has length 2.
-                        M, N = shape
-                        shape = (M, N)
+        else:
+            self.csr = triu(csr_matrix(arg1, shape=shape, dtype=dtype, copy=copy), format='csr')
+            self._pop_diag()
+            #-
+        #--
 
-                    row = np.array(row,dtype=INDICES_DTYPE)
-                    col = np.array(col,dtype=INDICES_DTYPE)
-                    obj = np.array(obj,dtype=dtype)
-                    nnz = len(obj)
+    def _load_from_h5(self, grp, lazy=False):
+        data = grp['data']
+        indices = grp['indices']
+        indptr = grp['indptr']
+        diagonal = grp['diagonal']
+        shape = (len(diagonal), len(diagonal))
 
-                    indptr = np.empty(M+1,dtype=INDPTR_DTYPE)
-                    indices = np.empty_like(col,dtype=INDICES_DTYPE)
-                    data = np.empty_like(obj,dtype=dtype)
-
-                    coo_tocsr(M, N, nnz, row, col, obj,
-                              indptr, indices, data)
-                    self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
-                    self._pop_diag()
-
-                elif len(arg1) == 3:
-                    (data, indices, indptr) = arg1
-                    data    = np.array(data,dtype=dtype)
-                    indices = np.array(indices,dtype=INDICES_DTYPE)
-                    indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
-
-                    self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
-                    self._pop_diag()
-
-                elif len(arg1) == 4:
-                    (data, indices, indptr, diag) = arg1
-                    data    = np.array(data,dtype=dtype)
-                    indices = np.array(indices,dtype=INDICES_DTYPE)
-                    indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
-                    diag    = np.array(diag,dtype=dtype)
-                    if shape is None:
-                        shape = (len(diag),len(diag))
-                    else:
-                        shape = (max(shape[0],len(diag)),max(shape[1],len(diag)))
-
-                    self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
-                    self.diagonal = diag
-                else:
-                    raise ValueError("unrecognized sss_matrix constructor usage")
-                #-
-            #--
-
-        self.data    = self.csr.data
-        self.indices = self.csr.indices
-        self.indptr  = self.csr.indptr
-        self.shape   = self.csr.shape
+        if lazy:
+            self.csr = csr_matrix(shape)
+            self.csr.data    = data
+            self.csr.indices = indices
+            self.csr.indptr  = indptr
+            self.diagonal = diagonal
+        else:
+            self.csr = csr_matrix((data, indices, indptr), shape=shape)
+            self.diagonal = diagonal[:]
+    #-
 
     #==
+    @property
+    def shape(self):
+        return self.csr.shape
+
+    @property
+    def data(self):
+        return self.csr.data
+
+    @data.setter
+    def data(self, x):
+        self.csr.data = x
+
+    @property
+    def indptr(self):
+        return self.csr.indptr
+
+    @indptr.setter
+    def indptr(self, x):
+        self.csr.indptr = x
+
+    @property
+    def indices(self):
+        return self.csr.indices
+    @indices.setter
+    def indices(self, x):
+        self.csr.indices = x
+
+
+
     def _pop_diag(self):
         if not hasattr(self,"diagonal"):
             self.diagonal = np.zeros(self.csr.shape[0],dtype=self.csr.dtype)
@@ -256,9 +251,6 @@ class sss_matrix(object):
     def copy(self):
         mt = sss_matrix(self.shape)
         mt.csr = self.csr.copy()
-        mt.data = mt.csr.data
-        mt.indices = mt.csr.indices
-        mt.indptr = mt.csr.indptr
         mt.diagonal = self.diagonal.copy()
         return mt
 
@@ -378,23 +370,7 @@ class sss_matrix(object):
     def nnz(self):
         return len(self.data) + np.count_nonzero(self.diagonal != 0)
 
-    def _load_from_h5(self, grp, lazy=False):
-        data = grp['data']
-        indices = grp['indices']
-        indptr = grp['indptr']
-        diagonal = grp['diagonal']
-        self.shape = (len(diagonal), len(diagonal))
 
-        if lazy:
-            self.csr = csr_matrix(self.shape)
-            self.csr.data    = data
-            self.csr.indices = indices
-            self.csr.indptr  = indptr
-            self.diagonal = diagonal
-        else:
-            self.csr = csr_matrix((data, indices, indptr), shape=self.shape)
-            self.diagonal = diagonal[:]
-    #-
 
 
 #=================================================

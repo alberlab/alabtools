@@ -18,14 +18,14 @@ float *fetchData(int * Ap,
     std::fill(data,data+spaceLength,0);
     //pointer to location for insert
     int pd = 0;
-    
+
     for (int i = istart; i < iend; ++i){
         int *low;
         int *up;
-        
+
         low = std::lower_bound(Aj+Ap[i],Aj+Ap[i+1],jstart);
-        up  = std::upper_bound(Aj+Ap[i],Aj+Ap[i+1],jend-1); 
-        
+        up  = std::upper_bound(Aj+Ap[i],Aj+Ap[i+1],jend-1);
+
         int dlow = low -Aj;
         int dup  = up - Aj;
         for (int j = dlow; j != dup; ++j){
@@ -37,7 +37,7 @@ float *fetchData(int * Ap,
                     pd--;
                 }
             }
-            ++pd;            
+            ++pd;
         }
     }
     return data;
@@ -86,7 +86,7 @@ void TopmeanSummaryMatrix(int * Ap,
             std::cout << "=";
             std::cout.flush(); //process bar
         }
-        
+
         int thread = omp_get_thread_num();
         for (int j = i; j < DimB; ++j){ //loop all indicies in new upper tril matrix
             int istart = mapping[i];
@@ -94,28 +94,28 @@ void TopmeanSummaryMatrix(int * Ap,
             int jstart = mapping[j];
             int jend = mapping[j+1];
             int dataSize = (iend - istart) * (jend - jstart);
-            
+
             float *data = fetchData(Ap,Aj,Ax,istart,iend,jstart,jend,dataSize);
-            
+
             std::sort(data,data + dataSize);
-            
+
             float lowerFence,upperFence;
             boxplotStats(data,dataSize,lowerFence,upperFence);
 
             float topSum = 0;
             int topCount = 0;
             int topCut   = dataSize / top;
-            
+
             if (topCut == 0){topCut = dataSize;}
             if (upperFence == 0){
                 upperFence = 10;
                 topCut     = dataSize;
             }
-            
+
             for (int k = dataSize-1; k >= 0; --k){
                 if (data[k] < upperFence){
                     topSum += data[k];
-                    ++topCount;                    
+                    ++topCount;
                 }
                 if (topCount == topCut){break;}
             }
@@ -123,6 +123,7 @@ void TopmeanSummaryMatrix(int * Ap,
             pBi[thread].push_back(i);
             pBj[thread].push_back(j);
             pBx[thread].push_back(topSum / topCut);
+
         }
     }
 }
@@ -157,7 +158,7 @@ void BuildContactMap(float * coordinates, //nbead*nstruct*3
     std::fill(Bj, Bj + DimB*(DimB+1)/2, 0);
     std::fill(Bx, Bx + DimB*(DimB+1)/2, 0);
     std::cout << nbead << " " << nstruct << std::endl;
-    
+
 #pragma omp parallel num_threads(THREADS)
 {
     #pragma omp for schedule(dynamic, 5)
@@ -183,7 +184,7 @@ void BuildContactMap(float * coordinates, //nbead*nstruct*3
             pBi[thread].push_back(i);
             pBj[thread].push_back(j);
             pBx[thread].push_back(contacts / nstruct);
-            
+
         }
     }
 }
@@ -216,18 +217,18 @@ const float Sxi4s[4][4] = {{  0,  1, 17, 98},
                            {  1,  2, 18, 99},
                            { 17, 18, 34,115},
                            { 98, 99,115,196}};
-                          
+
 void predictQuadraticRegression(float * lhsValues, float * rhsValues, int lenl, int lenr, float & predictedValue, float & r){
     int n = lenl + lenr;
     if (n < 3){return;}
-    
+
     float Sxi = Sxis[lenl][lenr];
     float Sxi2 = Sxi2s[lenl][lenr];
     float Sxi3 = Sxi3s[lenl][lenr];
     float Sxi4 = Sxi4s[lenl][lenr];
-    
+
     float Syi = 0, Sxiyi = 0, Sxi2yi = 0;
-    
+
     for (int i = 0; i<lenl; ++i){
         Syi += lhsValues[i];
         Sxiyi += -(i+1)*lhsValues[i];
@@ -238,44 +239,44 @@ void predictQuadraticRegression(float * lhsValues, float * rhsValues, int lenl, 
         Sxiyi += (i+1)*rhsValues[i];
         Sxi2yi += (i+1)*(i+1)*rhsValues[i];
     }
-    
+
     float meanx = Sxi/n, meany = Syi/n, meanx2 = Sxi2/n;
     float Sxx = Sxi2/n - meanx*meanx;
     float Sxy = Sxiyi/n - meanx*meany;
     float Sxx2 = Sxi3/n - meanx*meanx2;
     float Sx2x2 = Sxi4/n - meanx2*meanx2;
     float Sx2y = Sxi2yi/n - meanx2*meany;
-    
+
     float coefDenomin = Sxx*Sx2x2 - Sxx2*Sxx2;
     if (coefDenomin == 0){return;}
-    
+
     float B = (Sxy*Sx2x2 - Sx2y*Sxx2)/coefDenomin;
     float A = (Sx2y*Sxx - Sxy*Sxx2)/coefDenomin;
     float C = (Syi - B*Sxi - A*Sxi2)/n;
-    
+
     if (C <= 0){return;}
-    
+
     float SSE = 0;
     float SST = 0;
-    
+
     float error, total;
     for (int i = 0; i<lenl; ++i){
         error = lhsValues[i] - A*(i+1)*(i+1) + B*(i+1) - C;
         total = lhsValues[i] - meany;
-        
+
         SSE += error*error;
         SST += total*total;
     }
     for (int i = 0; i<lenr; ++i){
         error = rhsValues[i] - A*(i+1)*(i+1) - B*(i+1) - C;
         total = rhsValues[i] - meany;
-        
+
         SSE += error*error;
         SST += total*total;
     }
-    
+
     if (SST == 0){return;}
-    
+
     float rnow = std::sqrt(1-SSE/SST);
 
     if (rnow > r){
@@ -287,11 +288,11 @@ void predictQuadraticRegression(float * lhsValues, float * rhsValues, int lenl, 
 void predictExponentialRegression(float * lhsValues, float * rhsValues, int lenl, int lenr, float & predictedValue, float & r){
     int n = lenl + lenr;
     if (n < 3){return;}
-    
+
     float Sxi = Sxis[lenl][lenr];
     float Sxi2 = Sxi2s[lenl][lenr];
     float Slnyi = 0, Sxilnyi = 0, Slnyi2 = 0;
-    
+
     for (int i = 0; i<lenl; ++i){
         if (lhsValues[i] <= 0) {return;}
         Slnyi   += std::log(lhsValues[i]);
@@ -304,20 +305,20 @@ void predictExponentialRegression(float * lhsValues, float * rhsValues, int lenl
         Sxilnyi += (i+1)*std::log(rhsValues[i]);
         Slnyi2  += std::pow(std::log(rhsValues[i]),2);
     }
-    
+
     float meanx = Sxi/n, meanlny = Slnyi/n;
-    
+
     float Sxx = Sxi2/n - meanx * meanx;
     float Syy = Slnyi2/n - meanlny * meanlny;
     float Sxy = Sxilnyi/n - meanx * meanlny;
-    
+
     if ((Sxx == 0) or (Syy == 0)){return;}
-    
+
     float B = std::exp(Sxy/Sxx);
     float A = std::exp(meanlny - meanx * std::log(B));
-    
+
     float rnow = std::abs(Sxy)/std::sqrt(Sxx*Syy);
-    
+
     if (rnow > r){
         predictedValue = A;
         r = rnow;
@@ -347,38 +348,38 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
                 float lhsValues[3] = {0,0,0};
                 float rhsValues[3] = {0,0,0};
                 int lenl = 0, lenr = 0;
-                
+
                 for (int l = 0; l < 3; ++l){
                     int irhs = i + iincRHS[k][l];
                     int ilhs = i - iincRHS[k][l];
-                    
+
                     int jrhs = j + jincRHS[k][l];
                     int jlhs = j - jincRHS[k][l];
-                    
+
                     if ((ilhs >= 0) and (ilhs < row) and
                         (jlhs >= 0) and (jlhs < col)){
                         lhsValues[l] = matrix[ilhs*col + jlhs];
                         lenl++;
                     }//0 otherwise
-                    
+
                     if ((irhs >= 0) and (irhs < row) and
                         (jrhs >= 0) and (jrhs < col)){
                         rhsValues[l] = matrix[irhs*col + jrhs];
                         lenr++;
                     }//0 otherwise
                 }
-                
+
                 float predictedValue = 0, r = 0;
-                
+
                 predictQuadraticRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
                 predictExponentialRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
                 valsum -= std::abs(currentValue - predictedValue)/predictedValue * r * ((lenl+lenr)/6);
-                
+
             }//k
 
             confidence[i*col+j] = std::exp(valsum/4);
             //printf("%d %d %f %f\n",i, j, currentValue, confidence[i*col+j]);
-        }            
+        }
     }
 }
 
@@ -407,13 +408,13 @@ int main(){
         //std::cout << Ax[i] << ' ';
     }
     f.close();
-    
+
     int mapping[3] = {0,10,20};
     int *Bi = new int[3];
     int *Bj = new int[3];
     float *Bx = new float[3];
     TopmeanSummaryMatrix(Ap,Aj,Ax,20,2,mapping,Bi,Bj,Bx);
-    
+
     for (int i = 0; i < 3; i++){
         std::cout << Bi[i] << Bj[i] << Bx[i] << std::endl;
     }

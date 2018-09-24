@@ -1,7 +1,7 @@
 # Copyright (C) 2017 University of Southern California and
-#                          Nan Hua
+#                    Guido Polles, Nan Hua
 #
-# Authors: Nan Hua
+# Authors: Guido Polles, Nan Hua
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -175,7 +175,10 @@ class HssFile(h5py.File):
         return self._violation
 
     def get_struct_crd(self, key):
-        return self['coordinates'][:, key, :][()]
+        if 'structmajorcrd' in self:
+            return self['structmajorcrd'][key][()]
+        else:
+            return self['coordinates'][:, key, :][()]
 
     def set_bead_crd(self, key, crd):
         self['coordinates'][key, :, :] = crd
@@ -261,6 +264,18 @@ class HssFile(h5py.File):
         mat.matrix = sss_matrix((Bx, (Bi, Bj)))
         mat.resolution = np.nan
         return mat
+
+    def has_struct_major(self):
+        return 'structmajorcrd' in self
+
+    def transpose_coords(self, max_items=int(1e8)):
+        '''
+        Transposes data for fast visualization retrieval
+        '''
+        from .utils import block_transpose
+        if not self.has_struct_major():
+            self.create_dataset('structmajorcrd', shape=(self.nstruct, self.nbead, 3), dtype=COORD_DTYPE)
+        block_transpose(self['coordinates'], self['structmajorcrd'], max_items)
 
     coordinates = property(get_coordinates, set_coordinates)
     radii = property(get_radii, set_radii)
@@ -437,7 +452,10 @@ class HssFile(h5py.File):
 #================================================
 
 def get_simulated_hic(hssfname, contactRange=2):
-    with HssFile(hssfname) as f:
+    '''
+    Computes the contact map and sums the copies. Returns a Contactmap instance
+    '''
+    with HssFile(hssfname, 'r') as f:
         full_cmap = f.buildContactMap(contactRange)
 
     return full_cmap.sumCopies()
