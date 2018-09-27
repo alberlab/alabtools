@@ -84,6 +84,10 @@ class sss_matrix(object):
             self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
             self.diagonal = diag
 
+        elif isinstance(arg1, dict):
+            self.csr = arg1['csr']
+            self.diagonal = arg1['diag']
+
         else:
             self.csr = triu(csr_matrix(arg1, shape=shape, dtype=dtype, copy=copy), format='csr')
             self._pop_diag()
