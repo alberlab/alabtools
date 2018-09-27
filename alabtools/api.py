@@ -294,6 +294,29 @@ class Contactmatrix(object):
     def rowsum(self):
         return self.matrix.sum(axis=1)
 
+    def icp(self):
+        '''
+        Returns the interchromosomal probability for each row, defined as
+        the sum of inter-chromosomal pixels divided by rowsum.
+        '''
+        cis = np.zeros(len(self))
+        rs = self.rowsum()
+        nchrom = len(self.index.offset) - 1
+        for i in range(nchrom):
+            s, e = self.index.offset[i], self.index.offset[i+1]
+            cis[s:e] = np.array(
+                self.matrix.csr[s:e, s:e].sum(axis=0)
+                + self.matrix.csr[s:e, s:e].sum(axis=1).T
+                + self.matrix.diagonal[s:e]
+            )[0]
+
+        # we are ok when returning nan for 0 rowsum rows
+        old_settings = np.seterr(divide='ignore', invalid='ignore')
+        trans = rs - cis
+        np.seterr(**old_settings)
+
+        return trans / rs
+
     def columnsum(self):
         return self.matrix.sum(axis=0)
 
