@@ -177,14 +177,15 @@ class Contactmatrix(object):
         self.index = utils.Index(chrom=chrom,start=start,end=end,label=label,copy=copy,chrom_sizes=chrom_sizes)
 
     def _load_hcs(self,filename, lazy=False):
-        h5 = h5py.File(filename, 'r')
-        self.resolution = h5.attrs["resolution"]
-        self.genome = utils.Genome(h5)
-        self.index = utils.Index(h5)
+        self.h5 = h5py.File(filename, 'r')
+        self.resolution = self.h5.attrs["resolution"]
+        self.genome = utils.Genome(self.h5)
+        self.index = utils.Index(self.h5)
 
-        self.matrix = matrix.sss_matrix(h5["matrix"], lazy=lazy)
+        self.matrix = matrix.sss_matrix(self.h5["matrix"], lazy=lazy)
         if not lazy:
-            h5.close()
+            self.h5.close()
+            del self.h5
 
     def _load_cool(self, h5, assembly=None, usechr=['#','X']):
         if assembly is None:
@@ -310,12 +311,14 @@ class Contactmatrix(object):
                 + self.matrix.diagonal[s:e]
             )[0]
 
-        # we are ok when returning nan for 0 rowsum rows
-        old_settings = np.seterr(divide='ignore', invalid='ignore')
         trans = rs - cis
+
+        # we are ok when returning nan for 0 rowsum rows, turn off warnings for 0 division
+        old_settings = np.seterr(divide='ignore', invalid='ignore')
+        icp = trans / rs
         np.seterr(**old_settings)
 
-        return trans / rs
+        return icp
 
     def columnsum(self):
         return self.matrix.sum(axis=0)
@@ -429,6 +432,14 @@ class Contactmatrix(object):
 
     def __len__(self):
         return self.index.__len__()
+
+    def __repr__(self):
+        return '<alabtools.Contactmatrix: {:d} x {:d} | {:s} | {:s}>'.format(
+            self.matrix.shape[0],
+            self.matrix.shape[1],
+            str(self.genome.assembly).strip(),
+            str(self.resolution)
+        )
 
     def __getIntra(self,start,stop):
         uniqueChroms = np.unique(self.index.chrom[start:stop])
@@ -887,5 +898,9 @@ class Contactmatrix(object):
 
         h5f.close()
     #
-
+    def __del__(self):
+        try:
+            self.h5.close()
+        except:
+            pass
 
