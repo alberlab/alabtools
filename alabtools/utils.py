@@ -209,7 +209,7 @@ class Genome(object):
         startList  = [binLabel[j]*resolution for j in range(sum(binSize))]
         endList    = [binLabel[j]*resolution + resolution for j in range(sum(binSize))]
 
-        binInfo    = Index(chromList,startList,endList,chrom_sizes=binSize)
+        binInfo    = Index(chromList,startList,endList,chrom_sizes=binSize, genome=self)
         return binInfo
 
     def getchrnum(self, chrom):
@@ -331,11 +331,16 @@ class Index(object):
 
     def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], **kwargs):
 
-        self.genome = kwargs.get('genome', None)
+        self.custom_tracks = []
+        self.chrom_sizes = chrom_sizes
+        self.genome = kwargs.pop('genome', None)
+
         if isinstance(chrom, string_types):
             try:
-                # tries to open a hdf5 file
-                chrom = h5py.File(chrom, 'r')
+                # tries to load a hdf5 file
+                with h5py.File(chrom, 'r') as f:
+                    self.load_h5f(f)
+
             except IOError:
                 # if it is not a hdf5 file, try to read as text BED
 
@@ -347,7 +352,7 @@ class Index(object):
                     ('copy', COPY_DTYPE)
                 ]
 
-                usecols = kwargs.get('usecols', None)
+                usecols = kwargs.pop('usecols', None)
                 if usecols is None:
                     # try to determine if it is a 3, 4 or 5 columns bed
                     with open(chrom) as f:
@@ -377,82 +382,71 @@ class Index(object):
                 else:
                     if not isinstance(self.genome, Genome):
                         self.genome = Genome(self.genome)
-                    chrom = np.array([self.genome.getchrnum(c) for c in data['chrom']])
+                    self.chrom = np.array([self.genome.getchrnum(c) for c in data['chrom']])
 
                 # set the variables for further processing
 
-                start = data['start']
-                end   = data['end']
+                self.start = data['start']
+                self.end   = data['end']
                 if 'label' in data.dtype.names:
-                    label = data['label']
+                    self.label = data['label']
 
                 if 'copy' in data.dtype.names:
-                    copy = data['copy']
+                    self.copy = data['copy']
 
-        if isinstance(chrom, h5py.File):
-            h5f = chrom
-            chrom = h5f["index"]["chrom"]
-            start = h5f["index"]["start"]
-            end   = h5f["index"]["end"]
-            copy  = h5f["index"]["copy"]
-            label = np.array(h5f["index"]["label"][:], LABEL_DTYPE)
-            chrom_sizes = h5f["index"]["chrom_sizes"]
-            if 'genome' in h5f:
-                try:
-                    self.genome = Genome(h5f)
-                except:
-                    pass
-            try:
-                # try to load the copy index
-                tmp = json.loads(h5f["index"]["copy_index"][()])
-                # it may happen that in json dump/loading keys are considered
-                # as strings.
-                self.copy_index = { int(k): v for k, v in tmp.items() }
-            except (KeyError, ValueError):
-                pass
+        elif isinstance(chrom, h5py.File):
+            self.load_h5f(chrom)
 
-        if isinstance(chrom, Index):
+        elif isinstance(chrom, Index):
             index = chrom
-            chrom = index.chrom
-            start = index.start
-            end = index.end
-            copy = index.copy
+            self.chrom = index.chrom
+            self.start = index.start
+            self.end = index.end
+            self.copy = index.copy
             self.genome = index.genome
 
-        if not(len(chrom) == len(start) == len(end)):
-            raise RuntimeError("Dimensions do not match.")
-        if len(chrom) and not isinstance(chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
-            raise RuntimeError("chrom should be a list of integers.")
-        if len(start) and not isinstance(start[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
-            raise RuntimeError("start should be a list of integers.")
-        if len(end) and not isinstance(end[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
-            raise RuntimeError("end should be list of integers.")
-        self.chrom = np.array(chrom, dtype=CHROM_DTYPE)
-        self.start = np.array(start, dtype=START_DTYPE)
-        self.end   = np.array(end, dtype=END_DTYPE)
+        else:
+            self.chrom = chrom
+            self.start = start
+            self.end = end
+            self.label = label
+            self.copy = copy
 
-        if len(copy) != len(self.chrom):
+        # fix datatypes and eventual problems
+        if not(len(self.chrom) == len(self.start) == len(self.end)):
+            raise RuntimeError("Dimensions do not match.")
+        if len(self.chrom) and not isinstance(self.chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
+            raise RuntimeError("chrom should be a list of integers.")
+        if len(self.start) and not isinstance(self.start[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
+            raise RuntimeError("start should be a list of integers.")
+        if len(self.end) and not isinstance(self.end[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
+            raise RuntimeError("end should be list of integers.")
+        self.chrom = np.array(self.chrom, dtype=CHROM_DTYPE)
+        self.start = np.array(self.start, dtype=START_DTYPE)
+        self.end   = np.array(self.end, dtype=END_DTYPE)
+
+        if len(self.copy) != len(self.chrom):
             self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
             self._compute_copy_vec()
         else:
-            self.copy= np.array(copy, dtype=COPY_DTYPE)
+            self.copy= np.array(self.copy, dtype=COPY_DTYPE)
 
-        if len(chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
-            chrom_sizes = [
+        if len(self.chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
+            self.chrom_sizes = [
                 len( list(g) )
                 for _, g in itertools.groupby(
                     zip(self.chrom, self.copy)
                 )
             ]
 
-        self.chrom_sizes = np.array(chrom_sizes, dtype=CHROM_SIZES_DTYPE)
+        self.chrom_sizes = np.array(self.chrom_sizes, dtype=CHROM_SIZES_DTYPE)
 
         self.num_chrom = len(self.chrom_sizes)
 
-        if len(label) != len(self.chrom):
-            self.label = np.array([""] * len(self.chrom), dtype=LABEL_DTYPE)
+        if len(self.label) != len(self.chrom):
+            self.label = np.array(["-"] * len(self.chrom), dtype=LABEL_DTYPE)
         else:
-            self.label = np.array(label, dtype=LABEL_DTYPE)
+            self.label = np.array(self.label, dtype=LABEL_DTYPE)
 
         self.offset = np.array([sum(self.chrom_sizes[:i])
                                 for i in range(len(self.chrom_sizes) + 1)])
@@ -464,6 +458,14 @@ class Index(object):
 
         self.loctree = None
 
+        # add additional attributes
+        for k, v in kwargs.items():
+            self.add_custom_track(k, v)
+
+        if self.genome is not None:
+            self.chromstr = self.genome.chroms[self.chrom]
+        else:
+            self.chromstr = np.array([ 'chr%d' % (i + 1) for i in self.chrom])
     #-
 
     def __eq__(self, other):
@@ -489,7 +491,6 @@ class Index(object):
             np.concatenate([self.label, other.label]),
             genome=self.genome
         )
-
 
     def get_chrom_mask(self, c, copy=None):
         '''
@@ -539,6 +540,9 @@ class Index(object):
         return np.unique(self.chrom)
 
     def get_chrom_names(self):
+        '''
+        Returns the unique names of chromosomes in this index
+        '''
         if self.genome is not None:
             return [self.genome.getchrom(i) for i in self.get_chromosomes()]
         else:
@@ -563,16 +567,33 @@ class Index(object):
             len(self.chrom)
         )
 
+    def add_custom_track(self, k, v):
+        a = np.array(v)
+        assert(len(a) == len(self))
+        self.custom_tracks.append(k)
+        self.__setattr__(k, a)
+
+    def remove_custom_track(self, k):
+        self.custom_tracks.remove(k)
+        delattr(self, k)
+
     def get_sub_index(self, keys):
         dt = self[keys]
+        custom_tracks = {
+            k: self.__getattribute__(k)[keys] for k in self.custom_tracks
+        }
         return Index(
             dt['chrom'],
             dt['start'],
             dt['end'],
             dt['label'],
             self.copy[keys],
-            genome=self.genome
+            genome=self.genome,
+            **custom_tracks
         )
+
+    def get_haploid(self):
+        return self.get_sub_index(self.copy == 0)
 
     def _compute_copy_vec(self):
         '''
@@ -622,6 +643,39 @@ class Index(object):
             for j in ii:
                 self.refs[j] = i
 
+    def load_h5f(self, h5f):
+        self.chrom = h5f["index"]["chrom"][()]
+        self.start = h5f["index"]["start"][()]
+        self.end   = h5f["index"]["end"][()]
+        self.copy  = h5f["index"]["copy"][()]
+        self.label = np.array(h5f["index"]["label"][()], LABEL_DTYPE)
+        self.chrom_sizes = h5f["index"]["chrom_sizes"][()]
+        if 'genome' in h5f:
+            try:
+                self.genome = Genome(h5f)
+            except:
+                pass
+        try:
+            # try to load the copy index
+            tmp = json.loads(h5f["index"]["copy_index"][()])
+            # it may happen that in json dump/loading keys are considered
+            # as strings.
+            self.copy_index = { int(k): v for k, v in tmp.items() }
+        except (KeyError, ValueError):
+            pass
+
+        # tries to load additional data tracks
+        if 'custom_tracks' in h5f["index"]:
+            self.custom_tracks = json.loads(h5f["index"]["custom_tracks"][()])
+            for k in self.custom_tracks:
+                v = h5f["index"][k][()]
+                if not isinstance(v, np.ndarray):
+                    v = np.array(json.loads(v))
+                setattr(self, k, v)
+
+    def load_txt(self, f):
+        pass
+
     def save(self,h5f,compression="gzip", compression_opts=6):
 
         """
@@ -647,6 +701,7 @@ class Index(object):
         """
 
         assert isinstance(h5f, h5py.File)
+
         if 'index' in h5f:
             igrp = h5f['index']
         else:
@@ -699,6 +754,58 @@ class Index(object):
         else:
             # scalar datasets don't support compression
             igrp.create_dataset("copy_index", data=json.dumps(self.copy_index))
+
+        for k in self.custom_tracks:
+            if k in igrp:
+                try:
+                    igrp[k][...] = self.__getattribute__(k)
+                except:
+                    igrp['copy_index'][...] = json.dumps(self.__getattribute__(k).tolist())
+            else:
+            # scalar datasets don't support compression
+                try:
+                    igrp.create_dataset(k, data=self.__getattribute__(k))
+                except:
+                    igrp.create_dataset(k, data=json.dumps(self.__getattribute__(k).tolist()))
+
+        if 'custom_tracks' in igrp:
+            igrp['custom_tracks'][...] = json.dumps(self.custom_tracks)
+        else:
+            # scalar datasets don't support compression
+            igrp.create_dataset("custom_tracks", data=json.dumps(self.custom_tracks))
+
+        h5f.flush()
+
+    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";"):
+
+        if isinstance(file, str):
+            file = open(file, 'w')
+
+        if include is None:
+            include = ['chrom', 'start', 'end', 'label', 'copy'] + self.custom_tracks
+        else:
+            include = ['chrom', 'start', 'end'] + include
+
+        if exclude is not None:
+            for e in exclude:
+                if e in include:
+                    include.remove(e)
+
+        if header:
+            if header_style == 'comment':
+                file.write('# ')
+            file.write(sep.join(include) + '\n')
+
+        cnames = self.get_chrom_names()
+        for i in range(len(self)):
+            file.write(
+                sep.join([
+                    str(self.__getattribute__(col)[i]) if col != 'chrom' else self.chromstr[i] for col in include
+                ]) + '\n'
+            )
+
+    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True):
+        self.dump_csv(file, include, exclude, header, sep='\t')
 
     def loc(self, chrom, start, end=None, copy=None):
         '''
