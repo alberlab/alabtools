@@ -19,6 +19,7 @@ install_requires = [
     'h5py>=2.5', 
     'matplotlib>=1.5',
     'cython',
+    'tqdm'
 ]
 tests_require = [
     'mock'
@@ -48,6 +49,13 @@ extensions = [
               extra_link_args=["-lCGAL","-lmpfr","-lgmp"]
              )
 ]
+
+clscripts = [
+    'bin/triplets-compact',
+    'bin/triplets-compute',
+    'bin/triplets-extract'
+]
+
 cmdclass.update({'build_ext': build_ext})
 setup(
         name = 'alabtools', 
@@ -62,6 +70,7 @@ setup(
         #install_requires=install_requires,
         #tests_require=tests_require,
         #extras_require=extras_require,
+        scripts=clscripts,
         ext_modules=extensions,
         include_dirs=[numpy.get_include()]
 )

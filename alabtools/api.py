@@ -1,18 +1,18 @@
 # Copyright (C) 2017 University of Southern California and
 #                          Nan Hua
-# 
+#
 # Authors: Nan Hua
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
@@ -24,6 +24,10 @@ __version__ = "0.0.4"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
+
+import warnings
+warnings.simplefilter('ignore', FutureWarning)
+
 import os.path
 import h5py
 import scipy.sparse
@@ -31,7 +35,6 @@ try:
    import cPickle as pickle
 except:
    import pickle
-import warnings
 from six import string_types
 
 from . import utils
@@ -39,24 +42,24 @@ from . import matrix
 
 class Contactmatrix(object):
     """
-    A flexible matrix instant that supports various methods for processing HiC 
+    A flexible matrix instant that supports various methods for processing HiC
     contacts. It provides a syntax to easily generate submatrices.
-    
+
     Parameters
     ----------
     mat : str or matrix or None
         read matrix from filename, or initialize the matrix from a scipy
         sparse matrix, or a numpy dense matrix, a cooler file
         or with an empty matrix
-    genome : string 
+    genome : string
         Name of the genome assembly e.g.'hg19','mm9'. It is ignored if
         loading from hcs, hdf5, or cooler
-    resolution : int or utils.Index 
+    resolution : int or utils.Index
         the resolution for the hic matrix e.g. 100000, or a alabtools index
         describing the binning
-    usechr : list of str 
-        chromosomes used for generating the matrix, es: ['#', 'X', 'Y'] 
-    
+    usechr : list of str
+        chromosomes used for generating the matrix, es: ['#', 'X', 'Y']
+
     Attributes
     ----------
     matrix : sparse skyline matrix sss_matrix
@@ -66,17 +69,17 @@ class Contactmatrix(object):
 
     Examples
     --------
-    
+
     # load a matrix
     cm = Contactmatrix('mm9_10kb.cool')
-    
+
     # remove 2% of low coverage bins
     cm.maskLowCoverage(2)
-    
+
     # krnormalize it
     cm.krnorm()
-    
-    # make a 100kb matrix probability from 10kb matrix, to have average 
+
+    # make a 100kb matrix probability from 10kb matrix, to have average
     # rowsum equal to 25
     cm_100kb = cm.iterativeScaling(10, 25)
 
@@ -84,12 +87,13 @@ class Contactmatrix(object):
     cm_chr1 = cm_100kb['chr1']
 
     # plot it to a file, clipping to 0.2
-    com_chr1.plot('chr1.pdf', clip_max=0.2) 
+    com_chr1.plot('chr1.pdf', clip_max=0.2)
 
-    
+
     """
-    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X']):
-        
+    def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X'], tri='upper', lazy=False):
+
+        self.resolution = None
         # matrix from file
         if isinstance(mat, string_types):
             if not os.path.isfile(mat):
@@ -97,7 +101,7 @@ class Contactmatrix(object):
             if os.path.splitext(mat)[1] == '.hdf5' or os.path.splitext(mat)[1] == '.hmat':
                 self._load_hmat(mat)
             elif os.path.splitext(mat)[1] == '.hcs':
-                self._load_hcs(mat)
+                self._load_hcs(mat, lazy=lazy)
             elif os.path.splitext(mat)[1] == '.cool':
                 h5 = h5py.File(mat)
                 self._load_cool(h5, assembly=genome, usechr=usechr)
@@ -120,7 +124,7 @@ class Contactmatrix(object):
                     self.genome = genome
                 else:
                     self._build_genome(assembly=genome, usechr=usechr)
-                
+
                 if resolution is not None:
                     if isinstance(resolution, utils.Index):
                         self.index = resolution
@@ -134,15 +138,21 @@ class Contactmatrix(object):
                 diag = mm.diagonal()
                 mm.setdiag(0)
                 mm.eliminate_zeros()
-                self.matrix = matrix.sss_matrix((mm.data, mm.indices, 
+                self.matrix = matrix.sss_matrix((mm.data, mm.indices,
                                                  mm.indptr, diag))
             # matrix from numpy dense matrix
             elif isinstance(mat, np.ndarray):
+                if tri == 'upper':
+                    mat = np.triu(mat)
+                elif tri == 'lower':
+                    mat = np.tril(mat)
+                else:
+                    raise ValueError('tri should be either `upper` or `lower`, got `%s`' % repr(tri) )
                 mm = scipy.sparse.csr_matrix(mat)
                 diag = mm.diagonal()
                 mm.setdiag(0)
                 mm.eliminate_zeros()
-                self.matrix = matrix.sss_matrix((mm.data, mm.indices, 
+                self.matrix = matrix.sss_matrix((mm.data, mm.indices,
                                                  mm.indptr, diag))
             # empty matrix
             elif mat is None:
@@ -152,32 +162,31 @@ class Contactmatrix(object):
                                                     [0] * len(self.index)))
             else:
                 raise(ValueError, 'If mat argument is none, you must specify genome and resolution')
-            #assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index)) 
+            #assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index))
             #-
-        
-    def _build_genome(self, assembly, usechr=['#','X'], chroms=None, 
+
+    def _build_genome(self, assembly, usechr=['#','X'], chroms=None,
                       origins=None, lengths=None):
         self.genome = utils.Genome(assembly,chroms=chroms,origins=origins,lengths=lengths,usechr=usechr)
-    
+
     def _build_index(self,resolution):
         self.index = self.genome.bininfo(resolution)
         self.resolution = resolution
-        
+
     def _set_index(self,chrom,start,end,label=[],copy=[],chrom_sizes=[]):
         self.index = utils.Index(chrom=chrom,start=start,end=end,label=label,copy=copy,chrom_sizes=chrom_sizes)
-        
-    def _load_hcs(self,filename):
-        h5 = h5py.File(filename)
-        self.resolution = h5.attrs["resolution"]
-        self.genome = utils.Genome(h5)
-        self.index = utils.Index(h5)
-        
-        self.matrix = matrix.sss_matrix((h5["matrix"]["data"],
-                                         h5["matrix"]["indices"],
-                                         h5["matrix"]["indptr"],
-                                         h5["matrix"]["diagonal"]))
-        h5.close()
-        
+
+    def _load_hcs(self,filename, lazy=False):
+        self.h5 = h5py.File(filename, 'r')
+        self.resolution = self.h5.attrs["resolution"]
+        self.genome = utils.Genome(self.h5)
+        self.index = utils.Index(self.h5)
+
+        self.matrix = matrix.sss_matrix(self.h5["matrix"], lazy=lazy)
+        if not lazy:
+            self.h5.close()
+            del self.h5
+
     def _load_cool(self, h5, assembly=None, usechr=['#','X']):
         if assembly is None:
             assembly = h5.attrs['genome-assembly']
@@ -185,7 +194,7 @@ class Contactmatrix(object):
         self.resolution = h5.attrs['bin-size']
         self._build_genome(assembly,usechr=usechr,chroms=h5['chroms']['name'][:],lengths=h5['chroms']['length'][:])
         self._build_index(self.resolution)
-        
+
         origenome = utils.Genome(assembly,usechr=['#','X','Y'],silence=True)
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0],allChrId[0]+1]]
@@ -194,12 +203,12 @@ class Contactmatrix(object):
                 chrIdRange[-1][1] = i+1
             else:
                 chrIdRange.append([i,i+1])
-        
+
         indptr = np.empty(len(self.index)+1,np.int32)
         indptr[0] = 0
         indices = []
         data = []
-        
+
         #loop through all used chromosomes
         for cil,cih in chrIdRange:
             i0,i1 = (h5['indexes']['chrom_offset'][cil],h5['indexes']['chrom_offset'][cih])
@@ -228,18 +237,18 @@ class Contactmatrix(object):
         #--
         for r in range(len(indices)):
             indptr[r+1] = indptr[r] + len(indices[r])
-        
+
         indices = np.concatenate(indices)
         data    = np.concatenate(data)
-        
+
         self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.index),len(self.index)))
-        
-        
+
+
     def _load_pairs_bgzip(self,filename,resolution,usechr=['#','X']):
         import pypairix
         tb = pypairix.open(filename)
         self.resolution = resolution
-        
+
         header = tb.get_header()
 
         chroms = []
@@ -261,7 +270,7 @@ class Contactmatrix(object):
         data = []
         for i in range(len(self.index)):
             chrom1 = self.genome.getchrom(self.index.chrom[i])
-            
+
             start1 = self.index.start[i]
             end1   = self.index.end[i]
             print(chrom1,start1,end1)
@@ -273,7 +282,7 @@ class Contactmatrix(object):
                 #it = tb.querys2D(querystr)
                 it = tb.query2D(chrom1, start1, end1, chrom2, start2, end2, 1)
                 n = len([x for x in it])
-                
+
                 if n > 0:
                     indices.append(j)
                     data.append(n)
@@ -281,17 +290,42 @@ class Contactmatrix(object):
             indptr[i+1] = len(indices)
         #-
         self.matrix = matrix.sss_matrix((data,indices,indptr),shape=(len(self.index),len(self.index)))
-      
+
     #-------------------
     def rowsum(self):
         return self.matrix.sum(axis=1)
-        
+
+    def icp(self):
+        '''
+        Returns the interchromosomal probability for each row, defined as
+        the sum of inter-chromosomal pixels divided by rowsum.
+        '''
+        cis = np.zeros(len(self))
+        rs = self.rowsum()
+        nchrom = len(self.index.offset) - 1
+        for i in range(nchrom):
+            s, e = self.index.offset[i], self.index.offset[i+1]
+            cis[s:e] = np.array(
+                self.matrix.csr[s:e, s:e].sum(axis=0)
+                + self.matrix.csr[s:e, s:e].sum(axis=1).T
+                + self.matrix.diagonal[s:e]
+            )[0]
+
+        trans = rs - cis
+
+        # we are ok when returning nan for 0 rowsum rows, turn off warnings for 0 division
+        old_settings = np.seterr(divide='ignore', invalid='ignore')
+        icp = trans / rs
+        np.seterr(**old_settings)
+
+        return icp
+
     def columnsum(self):
         return self.matrix.sum(axis=0)
-    
+
     def _getZeroEntry(self):
         self.mask   = np.flatnonzero(self.rowsum() == 0)
-    
+
     def _getMask(self,mask = None):
         if mask is None:
             self._getZeroEntry()
@@ -302,32 +336,32 @@ class Contactmatrix(object):
                 return 1
             else:
                 raise TypeError("Invalid argument type, numpy.ndarray is required")
-    
+
     def getSubMatrix(self, c0, c1, sum_copies=True, copies=None):
         if isinstance(c0, string_types):
             c0 = self.genome.getchrnum(c0)
-            
+
         if isinstance(c1, string_types):
             c1 = self.genome.getchrnum(c1)
-            
-        idx = [ 
+
+        idx = [
             np.where(self.index.chrom == c0)[0],
             np.where(self.index.chrom == c1)[0]
-        ]    
+        ]
 
         if copies is None:
             copies = [
                 np.unique(self.index.copy[ idx[0] ]),
                 np.unique(self.index.copy[ idx[1] ])
             ]
-        
+
         cidx = [list(), list()]
         for i in [0, 1]:
             try:
                 copies[i] = list(copies[i])
             except TypeError:
                 copies[i] = [ copies[i] ]
-            
+
             for cpy in copies[i]:
                 kk = np.where( self.index.copy[ idx[i] ] == cpy )[0]
                 cidx[i].append( idx[i][kk] )
@@ -342,14 +376,29 @@ class Contactmatrix(object):
 
         for icpy in range(len(copies[0])):
             for jcpy in range(len(copies[1])):
-                chunk = self.matrix[cidx[0][icpy], cidx[1][jcpy]]
+
+                ii = cidx[0][icpy]
+                jj = cidx[1][jcpy]
+                transpose = False
+
+                if jj[0] < ii[0]:
+                    ii, jj = jj, ii
+                    transpose = True
+
+                chunk = self.matrix.get_triu_row(icpy)[:, jcpy]
+                if jj[0] == ii[0]:
+                    chunk += chunk.T
+                    chunk[np.diag_indices(len(chunk))] /= 2
+                elif transpose:
+                    chunk = chunk.T
+                #chunk = self.matrix[cidx[0][icpy], cidx[1][jcpy]]
 
                 if sum_copies:
                     sm += chunk
                 else:
                     sm[ l[0]*icpy:l[0]*(icpy+1) ][:, l[1]*jcpy:l[1]*(jcpy+1)] = chunk
 
-        return sm   
+        return sm
 
     def sumCopies(self):
         ii = np.array([i for i in self.index.copy_index.keys()])
@@ -360,11 +409,11 @@ class Contactmatrix(object):
         chrom_idxs = [
             [
                 self.index.get_chrom_pos(c, z) for z in self.index.get_chrom_copies(c)
-            ] for c in chroms 
+            ] for c in chroms
         ]
 
         max_copies = max( [ len(i) for i in chrom_idxs ] )
-        
+
         out_matrix = [ [None] * N for _ in range(N) ]
         for i in range(n_chrom):
             for j in range(i, n_chrom):
@@ -373,8 +422,8 @@ class Contactmatrix(object):
                 x = np.zeros( (len(oi), len(oj)) )
                 for ci in chrom_idxs[i]:
                     for cj in chrom_idxs[j]:
-                        x += self.matrix[ci, cj]
-                x /= max_copies                
+                        x += self.matrix.get_triu_row( (ci, cj) )
+                x /= max_copies
                 if i == j:
                     x = np.triu(x)
                 out_matrix[i][j] = scipy.sparse.csr_matrix(x)
@@ -383,42 +432,50 @@ class Contactmatrix(object):
 
     def __len__(self):
         return self.index.__len__()
-    
+
+    def __repr__(self):
+        return '<alabtools.Contactmatrix: {:d} x {:d} | {:s} | {:s}>'.format(
+            self.matrix.shape[0],
+            self.matrix.shape[1],
+            str(self.genome.assembly).strip(),
+            str(self.resolution)
+        )
+
     def __getIntra(self,start,stop):
         uniqueChroms = np.unique(self.index.chrom[start:stop])
         usechr = []
         for c in uniqueChroms:
             chrom = self.genome.getchrom(c)
             usechr.append(chrom[3:])
-        
+
         newMatrix = Contactmatrix(None, genome=None, resolution=self.resolution)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=usechr,
                                 chroms = self.genome.chroms,
                                 origins = self.genome.origins,
                                 lengths = self.genome.lengths)
-        
+
         newchrom = np.copy(self.index.chrom[start:stop])
         for i in range(len(newchrom)):
             chrom = self.genome.getchrom(newchrom[i])
             newchrom[i] = newMatrix.genome.getchrnum(chrom)
-            
+
         newMatrix._set_index(newchrom,
                              self.index.start[start:stop],
                              self.index.end[start:stop],
                              self.index.label[start:stop],
                              self.index.copy[start:stop],
                              [])
-        
+
         submat = self.matrix.csr[start:stop,start:stop]
-        
+
         newMatrix.matrix = matrix.sss_matrix((submat.data,
                                               submat.indices,
                                               submat.indptr,
                                               self.matrix.diagonal[start:stop]
                                               ))
         return newMatrix
-        
+
     def __getitem__(self,key):
         if isinstance(key,(string_types,bytes)):
             if isinstance(key,str):
@@ -428,7 +485,7 @@ class Contactmatrix(object):
             chrstart = np.flatnonzero(self.index.chrom == chrnum)[0]
             chrend   = np.flatnonzero(self.index.chrom == chrnum)[-1]
             return self.__getIntra(chrstart,chrend+1)
-        
+
         elif isinstance(key,slice):
             if key.step is None: step = 1
             else: step = key.step
@@ -444,7 +501,7 @@ class Contactmatrix(object):
         else:
             raise TypeError("Invalid argument type")
     #-------------------
-    
+
     def maskLowCoverage(self,cutoff = 2):
         """
         Removes "cutoff" percent of bins with least counts
@@ -457,31 +514,33 @@ class Contactmatrix(object):
         rowsum   = self.rowsum()
         self.mask= np.flatnonzero(rowsum <= np.percentile(rowsum[rowsum > 0],cutoff))
         print("{} bins are masked.".format(len(self.mask)))
-    
+
     def normalize(self,bias):
         """
         norm matrix by bias vector
-        
+
         Parameters
         ----------
         bias : np.array column vector
-        
+
         """
+        # stores the bias
+        self.bias = bias
         self.matrix.normalize(np.array(bias))
-        
+
     #-
-    
+
     def getKRnormBias(self, mask = None, **kwargs):
         """
-        using KR balancing algorithm to calculate bias vector 
-        
+        using KR balancing algorithm to calculate bias vector
+
         Parameters
         ----------
-        mask : list/array 
+        mask : list/array
             mask is a 1-D vector with the same length as the matrix where 1s specify the row/column to be ignored\
             or a 1-D vector specifing the indexes of row/column to be ignored\
             if no mask is given, row/column with rowsum==0 will be automatically detected and ignored
-            
+
         Returns
         -------
         out : numpy column array
@@ -492,56 +551,86 @@ class Contactmatrix(object):
             self._getMask(mask)
         x = bnewt(self.matrix, mask=self.mask, check=0, **kwargs) * 100
         return x
-        
+
     def krnorm(self, mask = None, force = False, **kwargs):
         """
         using krnorm balacing the matrix (overwriting the matrix!)
-        
+
         Parameters
         ----------
-        mask : list/array 
+        mask : list/array
             mask is a 1-D vector with the same length as the matrix where 1s specify the row/column to be ignored\
             or a 1-D vector specifing the indexes of row/column to be ignored\
             if no mask is given, row/column with rowsum==0 will be automatically detected and ignored
         force : bool
-            force to normalize the matrix  
+            force to normalize the matrix
         """
         x = self.getKRnormBias(mask, **kwargs)
         self.normalize(x)
-    
+
+    def computeConfidenceMatrix(self, M=None):
+        from ._cmtools import CalculatePixelConfidence
+        if M is None:
+            M = self.matrix.toarray()
+        c = np.empty(self.matrix.shape, dtype=np.float32)
+        CalculatePixelConfidence(M, c)
+        c[np.isnan(c)] = 0
+        return c
+
+    def filterByConfidence(self, cut=0.25, passes=2):
+        newM = self.matrix.toarray()
+        for _ in range(passes):
+            c = self.computeConfidenceMatrix(newM)
+            ii = np.where(c < cut)
+            newM[ii] = 0
+        return Contactmatrix(newM, genome=self.genome, resolution=self.index)
+
+    def expectedRestraints(self, cut=0.01):
+        '''
+        Returns the number of expected restraints per structure per bead when theta == cut
+
+        Parameters
+        ----------
+        cut : float
+            the theta cutoff
+        '''
+        ii = self.matrix.data >= cut
+        return 2*np.sum(self.matrix.data[ii])/self.matrix.shape[0]
+
+
     def makeSummaryMatrix(self,step=10):
         """
         Filter the matrix to get a lower resolution matrix. New resolution will be resolution*step
-        
+
         Parameters
         ----------
         step : int/string
             int : The length of submatrix to be checked.
             string : Bed file defining the TAD (fields required:[chrom, start, end, label])
-            
+
         Returns
         -------
         out : contactmatrix instance
             A contactmatrix instance of the lower resolution matrix.
-            
+
         """
 
         if isinstance(step, int) and step == 1:
             newMatrix = self.copy()
             return newMatrix
-            
+
         from ._cmtools import TopmeanSummaryMatrix_func
         DimA = len(self.index)
-        
+
         newMatrix = Contactmatrix(None,genome=None,resolution=None)
         newMatrix._build_genome(self.genome.assembly,
                                 usechr=['#','X','Y'],
                                 chroms = self.genome.chroms,
                                 origins = self.genome.origins,
                                 lengths = self.genome.lengths)
-        
+
         if isinstance(step, string_types):
-            tadDef = np.genfromtxt(step, dtype=None)
+            tadDef = np.genfromtxt(step, dtype=None, encoding=None)
 
             chrom  = tadDef['f0']
             start  = tadDef['f1']
@@ -551,7 +640,7 @@ class Contactmatrix(object):
             else:
                 label = [''] * len(chrom)
             nchrom = np.array([newMatrix.genome.getchrnum(x) for x in chrom])
-            
+
             f_tadDef = np.sort(
                 np.rec.fromarrays([nchrom,start,end,label]),
                 order=['f0','f1']
@@ -564,16 +653,17 @@ class Contactmatrix(object):
             else:
                 label = ['']*len(chrom)
             tad_sizes = end - start
-            if np.count_nonzero(tad_sizes < self.resolution):
-                # it is ok if they are the last beads of a chromosome tho.
-                warnings.warn('%d TAD(s) are too small for this matrix resolution (%d)' %
-                               (np.count_nonzero(tad_sizes < self.resolution),
-                                self.resolution)
-                              )
+            if hasattr(self, 'resolution'):
+                if np.count_nonzero(tad_sizes < self.resolution):
+                    # it is ok if they are the last beads of a chromosome tho.
+                    warnings.warn('%d TAD(s) are too small for this matrix resolution (%d)' %
+                                   (np.count_nonzero(tad_sizes < self.resolution),
+                                    self.resolution)
+                                  )
             newMatrix._set_index(chrom,start,end,label)
         else:
             newMatrix._build_index(self.resolution*step)
-            
+
         DimB = len(newMatrix.index)
 
         _, fwmap, _ = utils.get_index_mappings(newMatrix.index, self.index)
@@ -581,13 +671,13 @@ class Contactmatrix(object):
         mapping = np.empty(DimB+1,dtype=np.int32)
         for i in range(len(fwmap)):
             mapping[i] = fwmap[i][0]
-        mapping[-1] = fwmap[-1][0] + 1
-        
+        mapping[-1] = fwmap[-1][-1] + 1
+
         # row = 0
         # for i in range(DimB):
         #     incStep = int((newMatrix.index.end[i] - newMatrix.index.start[i]) / self.resolution)
         #     row += incStep
-            
+
         #     if (row >= DimA) or (newMatrix.index.chrom[i] != self.index.chrom[row]):
         #         #row = 1 + np.flatnonzero(self.index.chrom == newMatrix.index.chrom[i])[-1]
         #         row = self.index.offset[self.index.chrom[row-incStep]+1]
@@ -605,11 +695,11 @@ class Contactmatrix(object):
         newMatrix.matrix = matrix.sss_matrix((Bx,(Bi,Bj)))
         newMatrix.resolution = -1
         return newMatrix
-    
+
     def fmaxScaling(self,fmax,force=False):
         """
         use fmax to generate probability matrix
-        
+
         """
         if isinstance(fmax,float) or isinstance(fmax,np.float32) or isinstance(fmax,int):
             self.matrix.csr.data /= fmax
@@ -617,106 +707,105 @@ class Contactmatrix(object):
             self.matrix.csr.data = self.matrix.csr.data.clip(max=1)
             self.matrix.diagonal = self.matrix.diagonal.clip(max=1)
             self.matrix.data = self.matrix.csr.data
-     
+
     def copy(self):
         newMatrix = Contactmatrix(None, genome=None, resolution=None)
         newMatrix.index = self.index
         newMatrix.genome = self.genome
         newMatrix.matrix = self.matrix.copy()
         newMatrix.resolution = self.resolution
-        return newMatrix    
-        
+        return newMatrix
+
     def iterativeScaling(self,domain=10,averageContact=24,theta=0.001,tol=0.01):
         """
         Iterative Scale the matrix to probability matrix at lower resolution, such that the average contact for each bin matches the Parameters.
-        
+
         Parameters
         ----------
         domain : int/string
             int : The length of submatrix to be checked.
             string : Bed file defining the TAD (fields required:[chrom, start, end, label])
-        
+
         averageContact : int
             Target average contact for each bin.
-            
+
         theta : float
             Target theta value expected in modeling step.
-        
+
         tol : float
             average contact tolarance in order to converge.
-            
+
         Returns
         -------
-        
+
         out : Contactmatrix instance
             A probability matrix at given resolution
-            
+
         """
         average = 0
-        originalData = np.copy(self.matrix.csr.data)
-        originalDiag = np.copy(self.matrix.diagonal)
-        
+        originalData = self.matrix.csr.data.copy()
+        originalDiag = self.matrix.diagonal.copy()
+
         fmax = self.rowsum().mean()/(averageContact+0.2)
         left = 0
         right = fmax*2
-        
+
         self.fmaxScaling(fmax,force=True)
         newMat = self.makeSummaryMatrix(domain)
         newMat.matrix.data[newMat.matrix.data < theta] = 0
-        
+
         rowsums = newMat.rowsum()
         rowsums = rowsums[rowsums > 0]
         average = rowsums.mean()
-        
+
         print("({}, {}) => {} : {}".format(left, right, fmax, average))
-        
+
         if average < averageContact:
             right = fmax
             fmax = (left+fmax)/2
-            
+
         else:
             left = fmax
             fmax = (right+fmax)/2
-            
-        
+
+
         while abs(average - averageContact)/averageContact > tol :
-            
-            self.matrix.csr.data = np.copy(originalData)
-            self.matrix.diagonal = np.copy(originalDiag)
-            
+
+            self.matrix.csr.data[:] = originalData.copy()
+            self.matrix.diagonal[:] = originalDiag.copy()
+
             self.fmaxScaling(fmax,force=True)
-            
+
             newMat = self.makeSummaryMatrix(domain)
-            
+
             newMat.matrix.data[newMat.matrix.data < theta] = 0
-            
+
             rowsums = newMat.rowsum()
             rowsums = rowsums[rowsums > 0]
             average = rowsums.mean()
-            
+
             print("({}, {}) => {} : {}".format(left, right, fmax, average))
             if average < averageContact:
                 right = fmax
                 fmax = (left+fmax)/2
-                
+
             else:
                 left = fmax
                 fmax = (right+fmax)/2
             #fmax = fmax/averageContact*average
 
         #==
-        
-        newMat = self.makeSummaryMatrix(domain)
-        
+
         # Reset to our original status
-        self.matrix.csr.data = np.copy(originalData)
-        self.matrix.diagonal = np.copy(originalDiag)
-        
+        self.matrix.csr.data[:] = originalData
+        self.matrix.diagonal[:] = originalDiag
+
         print("Fmax = {} Rowmean = {}".format(fmax,average))
+        newMat.matrix.csr.eliminate_zeros()
         return newMat
-        
+
     #=============plotting method
-    
+
     def plot(self, filename, log=False, bin_size=None, **kwargs):
         '''
         Plots the current contact matrix to a file
@@ -729,10 +818,10 @@ class Contactmatrix(object):
             Use a log-scaled color map. Default is False
         bin_size: int, optional
             If set, plots the matrix by separating each bin
-            in the index in equally spaced bins of size 
-            bin_size bases. Useful to plot TAD level matrices on 
-            a fixed kilobase scale. 
-        
+            in the index in equally spaced bins of size
+            bin_size bases. Useful to plot TAD level matrices on
+            a fixed kilobase scale.
+
         Additional keyword arguments
         ----------------------------
 
@@ -754,7 +843,7 @@ class Contactmatrix(object):
         '''
 
         from .plots import plotmatrix,red
-        
+
         mat = self.matrix.toarray()
         if log:
             mat = np.log(mat)
@@ -764,18 +853,18 @@ class Contactmatrix(object):
             nidx = []
             for i, s in enumerate(sizes):
                 if s % bin_size == 0:
-                    n = s // bin_size 
-                else: 
+                    n = s // bin_size
+                else:
                     n = (s // bin_size) + 1
                 nidx += [i] * n
             if len(nidx) > 4096 and 'max_resolution' not in kwargs:
-                warnings.warn('Very large matrix (%d x %d) to be plotted' % 
+                warnings.warn('Very large matrix (%d x %d) to be plotted' %
                               (len(nidx), len(nidx)) )
             mat = mat[nidx]
             mat = mat[:, nidx]
-        
+
         cmap = kwargs.pop('cmap',red)
-        
+
         plotmatrix(filename,mat,cmap=cmap,**kwargs)
 
     def plotComparison(self, m2, chromosome=None, file=None, dpi=300, **kwargs):
@@ -783,31 +872,35 @@ class Contactmatrix(object):
         cmap = kwargs.pop('cmap',red)
         plot_comparison(self, m2, chromosome, file, dpi, cmap=cmap, **kwargs)
 
-        
+
     #=============saveing method
     def save(self,filename,compression='gzip', compression_opts=6):
         """
         save into file
         """
-        
+
         if (filename[-4:] != '.hcs'):
             filename += '.hcs'
-            
+
         h5f = h5py.File(filename, 'w')
         h5f.attrs["resolution"] = self.resolution
         h5f.attrs["version"] = __version__
         h5f.attrs["nbin"] = len(self.index)
         self.genome.save(h5f,compression=compression,compression_opts=compression_opts)
-        
+
         self.index.save(h5f,compression=compression,compression_opts=compression_opts)
-        
+
         mgrp = h5f.create_group("matrix")
         mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)
         mgrp.create_dataset("indices",data=self.matrix.indices, compression=compression,compression_opts=compression_opts)
         mgrp.create_dataset("indptr", data=self.matrix.indptr,  compression=compression,compression_opts=compression_opts)
         mgrp.create_dataset("diagonal",data=self.matrix.diagonal,  compression=compression,compression_opts=compression_opts)
-        
+
         h5f.close()
     #
-    
-        
+    def __del__(self):
+        try:
+            self.h5.close()
+        except:
+            pass
+

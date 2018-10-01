@@ -23,12 +23,15 @@ __version__ = "0.0.1"
 __email__   = "nhua@usc.edu"
 
 import numpy as np
+import warnings
+warnings.simplefilter('ignore', UserWarning)
 import matplotlib
 matplotlib.use('Agg')
 
 from scipy.ndimage.interpolation import zoom
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from .api import Contactmatrix
 
 
 def make_colormap(seq,cmapname='CustomMap'):
@@ -131,6 +134,8 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
 
     plt.show()
     plt.close(fig)
+
+
 def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None, ylab=None,title=None, xlim=None, ylim=None, grid=False, xticklabels=None, yticklabels=None, vline=None, hline=None,  **kwargs):
     """xy plot
     Parameters:
@@ -190,7 +195,16 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
         pp.close()
   
     plt.close(fig)
-def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, **kwargs):
+
+
+def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, title='', **kwargs):
+
+    if not isinstance(m1, Contactmatrix):
+        m1 = Contactmatrix(m1)
+    if not isinstance(m2, Contactmatrix):
+        m2 = Contactmatrix(m2)
+
+
     if chromosome is not None:
         m1 = m1[chromosome]
         m2 = m2[chromosome]
@@ -198,13 +212,71 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, **kwargs):
     cwrb = make_colormap([(1,1,1),(1,0,0),0.5,(1,0,0),(0,0,0)],'wrb')
     cmap     = kwargs.pop('cmap',cwrb)
 
-    m = np.tril( m1.matrix.toarray() ) + np.triu( m2.matrix.toarray() )
+    m = np.tril( m1.matrix.toarray(), -1 ) + np.triu( m2.matrix.toarray(), 1 )
 
     fig = plt.figure(figsize=(10,10))
+    plt.title(title)
     plt.imshow(m, cmap=cmap, **kwargs)
+    if labels:
+        plt.text(0.1, 0.1, labels[0], transform=plt.gca().transAxes)
+        plt.text(0.9, 0.9, labels[1], transform=plt.gca().transAxes, horizontalalignment='right', verticalalignment='top')
     plt.colorbar()
     if file is None:
         plt.show()
     else:
+        plt.tight_layout()
         plt.savefig(file, dpi=dpi)
         plt.close(fig)
+
+def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, subplot_height=2.5,
+                       sharey=True, subtitlesize=20, ticklabelsize=12, xgridstep=50e6,
+                       datalabels=None):
+
+    if not isinstance(index, list):
+        index = [index] * len(data)
+        data = np.array(data)
+        if len(data.shape) == 1:
+            data = np.array([data])
+        assert data.shape[1] == len(index)
+    else:
+        assert len(data) == len(index)
+        for i, d in zip(index, data):
+            assert len(i) == len(d)
+        for i in range(len(data)):
+            data[i] = np.array(data[i])
+
+    if datalabels is not None:
+        len(data) == len(datalabels)
+
+
+    chroms = index[0].get_chromosomes() # multiple data better have the same chromosomes
+    n_chroms = len(chroms)
+    n_cols = 4
+    n_rows = n_chroms // n_cols if n_chroms % n_cols == 0 else n_chroms // n_cols + 1
+    f, plots = plt.subplots(n_rows, n_cols, figsize=(subplot_width * n_cols, subplot_height * n_rows), sharey=sharey)
+    vmin = np.nanmin([ np.nanmin(d) for d in data])
+    vmax = np.nanmax([ np.nanmax(d) for d in data])
+    for i in range(n_chroms):
+        col = i % n_cols
+        row = i // n_cols
+        plots[row, col].set_ylim(vmin, vmax)
+        plots[row, col].set_title(index[0].genome.getchrom(i), fontsize=subtitlesize)
+        for k in range(len(data)):
+            jj = index[k].chrom == chroms[i]
+            xx = index[k].start[jj] * xscale
+            label = datalabels[k] if datalabels else ''
+            plots[row, col].plot(xx, data[k][jj], linewidth=2, label=label)
+        if datalabels:
+            plots[row, col].legend()
+        # sets the grid
+        if xgridstep is not None:
+            xticks = np.arange(index[k].start[jj][0], index[k].end[jj][-1], xgridstep) * xscale
+            plots[row, col].set_xticks(xticks)
+        plots[row, col].grid(True, color='grey', linestyle='--',)
+        # hide tick labels
+        #plots[row, col].set_xticks( np.arange(0, scale*N, 50) )
+        plots[row, col].tick_params(axis='both', which='major', labelsize=ticklabelsize, direction='in')
+        #plots[row, col].set_xticklabels([''] * len(plots[row, col].get_xticklabels()))
+
+    plt.tight_layout()
+    return f, plots
