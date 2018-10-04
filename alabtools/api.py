@@ -295,7 +295,7 @@ class Contactmatrix(object):
     def rowsum(self):
         return self.matrix.sum(axis=1)
 
-    def icp(self):
+    def icp(self, lowp=0, exclude_diagonal=False):
         '''
         Returns the interchromosomal probability for each row, defined as
         the sum of inter-chromosomal pixels divided by rowsum.
@@ -305,11 +305,20 @@ class Contactmatrix(object):
         nchrom = len(self.index.offset) - 1
         for i in range(nchrom):
             s, e = self.index.offset[i], self.index.offset[i+1]
+            xm = self.matrix.csr[s:e, s:e]
+            if lowp > 0:
+                xm = xm.multiply(xm >= lowp)
+
             cis[s:e] = np.array(
-                self.matrix.csr[s:e, s:e].sum(axis=0)
-                + self.matrix.csr[s:e, s:e].sum(axis=1).T
-                + self.matrix.diagonal[s:e]
+                xm.sum(axis=0)
+                + xm.sum(axis=1).T
             )[0]
+
+            if not exclude_diagonal:
+                d = self.matrix.diagonal[s:e]
+                if lowp > 0:
+                    d = np.multiply(d, d >= lowp)
+                cis[s:e] += d
 
         trans = rs - cis
 
@@ -338,6 +347,17 @@ class Contactmatrix(object):
                 raise TypeError("Invalid argument type, numpy.ndarray is required")
 
     def getSubMatrix(self, c0, c1, sum_copies=True, copies=None):
+        '''
+        Select a chromosome-chromosome submatrix
+
+        Parameters
+        ----------
+        c0 : int or str
+            first chromosome
+        c1 : int or str
+
+
+        '''
         if isinstance(c0, string_types):
             c0 = self.genome.getchrnum(c0)
 
@@ -385,7 +405,7 @@ class Contactmatrix(object):
                     ii, jj = jj, ii
                     transpose = True
 
-                chunk = self.matrix.get_triu_row(icpy)[:, jcpy]
+                chunk = self.matrix.get_triu_row(ii)[:, jj]
                 if jj[0] == ii[0]:
                     chunk += chunk.T
                     chunk[np.diag_indices(len(chunk))] /= 2
@@ -585,7 +605,7 @@ class Contactmatrix(object):
             newM[ii] = 0
         return Contactmatrix(newM, genome=self.genome, resolution=self.index)
 
-    def expectedRestraints(self, cut=0.01):
+    def expectedRestraints(self, cut=0.01, which='both'):
         '''
         Returns the number of expected restraints per structure per bead when theta == cut
 
@@ -593,10 +613,24 @@ class Contactmatrix(object):
         ----------
         cut : float
             the theta cutoff
+        which : ['intra', 'inter', 'both']
         '''
         ii = self.matrix.data >= cut
-        return 2*np.sum(self.matrix.data[ii])/self.matrix.shape[0]
+        jj = self.matrix.indices
+        ip = self.matrix.indptr
+        if which == 'intra':
+            kk = np.empty(len(jj), dtype=int)
+            for i in range(len(ip) - 1):
+                kk[ ip[i] : ip[i+1] ] = i
+            ii &= (self.index.chrom[kk] == self.index.chrom[jj])
 
+        elif which == 'inter':
+            kk = np.empty(len(jj), dtype=int)
+            for i in range(len(ip) - 1):
+                kk[ ip[i] : ip[i+1] ] = i
+            ii &= (self.index.chrom[kk] != self.index.chrom[jj])
+
+        return np.sum(self.matrix.data[ii])/self.matrix.shape[0]
 
     def makeSummaryMatrix(self,step=10):
         """

@@ -174,7 +174,7 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
         data = np.array(data)
         if len(data.shape) == 1:
             data = np.array([data])
-        assert data.shape[1] == len(index)
+        assert data.shape[1] == len(index[0])
     else:
         assert len(data) == len(index)
         for i, d in zip(index, data):

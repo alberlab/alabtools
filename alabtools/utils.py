@@ -378,7 +378,7 @@ class Index(object):
                         if c not in nmap:
                             nmap[c] = i
                             i += 1
-                    chrom = [ nmap[c] for c in data['chrom'] ]
+                    self.chrom = [ nmap[c] for c in data['chrom'] ]
                 else:
                     if not isinstance(self.genome, Genome):
                         self.genome = Genome(self.genome)
