@@ -390,9 +390,13 @@ class Index(object):
                 self.end   = data['end']
                 if 'label' in data.dtype.names:
                     self.label = data['label']
+                else:
+                    self.label = []
 
                 if 'copy' in data.dtype.names:
                     self.copy = data['copy']
+                else:
+                    self.copy = []
 
         elif isinstance(chrom, h5py.File):
             self.load_h5f(chrom)
