@@ -18,7 +18,8 @@ import_array();
 %apply (float * IN_ARRAY2, int DIM1, int DIM2) {(float * matrix, int row, int col)};
 %apply (int * INPLACE_ARRAY1, int DIM1) {(int * Bi, int Bi_size),(int * Bj, int Bj_size)};
 %apply (float * INPLACE_ARRAY1, int DIM1) {(float * Bx, int Bx_size)};
-%apply (float * INPLACE_ARRAY2, int DIM1, int DIM2) {(float * confidence, int outi, int outj)};
+%apply (float * INPLACE_ARRAY2, int DIM1, int DIM2) {(float * confidence, int outi1, int outj1)};
+%apply (float * INPLACE_ARRAY2, int DIM1, int DIM2) {(float * expected, int outi2, int outj2)};
 %inline %{
 void TopmeanSummaryMatrix_func(int * Ap, int AP_size,
                                int * Aj, int Aj_size,
@@ -44,9 +45,10 @@ void BuildContactMap_func(float * coordinates, int nbead, int nstruct, int dims,
 }
 
 void CalculatePixelConfidence(float * matrix, int row, int col,
-                              float * confidence, int outi, int outj)
+                              float * confidence, int outi1, int outj1,
+                              float * expected, int outi2, int outj2)
 {
-    PixelConfidence(matrix, row, col, confidence);
+    PixelConfidence(matrix, row, col, confidence, expected);
 }
 
 %}

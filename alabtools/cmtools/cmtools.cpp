@@ -3,6 +3,7 @@
 #include<omp.h>
 #include<iostream>
 #include<cmath>
+#include<limits>
 #define THREADS 16
 float *fetchData(int * Ap,
                  int * Aj,
@@ -334,7 +335,8 @@ const int jincRHS[4][3] = {{0, 0, 0},
                            {1, 2, 3},
                            {1, 2, 3}};
 void PixelConfidence(float * matrix, int row, int col, //matrix and size
-                     float * confidence)
+                     float * confidence,
+                     float * expected)
 {
 #pragma omp parallel num_threads(THREADS)
 {
@@ -343,7 +345,7 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
         //std::cout << i << std::endl;
         for (int j = 0; j < col; ++j){
             float currentValue = matrix[i*col + j];
-            float valsum = 0;
+            float valsum = std::numeric_limits<float>::max(), valweight = 0, expval = 0, expweight = 0;
             for (int k = 0; k < 4; ++k){
                 float lhsValues[3] = {0,0,0};
                 float rhsValues[3] = {0,0,0};
@@ -373,11 +375,23 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
 
                 predictQuadraticRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
                 predictExponentialRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
-                valsum -= std::abs(currentValue - predictedValue)/predictedValue * r * ((lenl+lenr)/6);
+                if ( !std::isnan(predictedValue) and (predictedValue != 0)){
+                    valsum = valsum * valweight + std::abs(currentValue - predictedValue)/predictedValue * r * ((lenl+lenr)/6);
+                    valweight += 1; //this is one because we are taking average of 4 predictions
+                    valsum /= valweight;
+                    
+                    expval = expval * expweight + predictedValue * r * ((lenl+lenr)/6);
+                    expweight += r * ((lenl+lenr)/6);
+                    expval /= expweight;
+                }
+                
+                
 
             }//k
-
-            confidence[i*col+j] = std::exp(valsum/4);
+            
+            confidence[i*col+j] = std::exp(-valsum);
+            if (std::isnan(expval)){ expval = 0; }
+            expected[i*col+j] = expval;
             //printf("%d %d %f %f\n",i, j, currentValue, confidence[i*col+j]);
         }
     }

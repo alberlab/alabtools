@@ -592,17 +592,45 @@ class Contactmatrix(object):
         from ._cmtools import CalculatePixelConfidence
         if M is None:
             M = self.matrix.toarray()
-        c = np.empty(self.matrix.shape, dtype=np.float32)
-        CalculatePixelConfidence(M, c)
-        c[np.isnan(c)] = 0
-        return c
+        cc = np.empty(self.matrix.shape, dtype=np.float32)
+        ee = np.empty(self.matrix.shape, dtype=np.float32)
+        #do confidence calc for each chr-chr block otherwise makes no sense
+        for chr1 in range(len(self.genome.chroms)):
+            id1 = np.flatnonzero(self.index.chrom == chr1)
+            print(self.genome.chroms[chr1])
+            for chr2 in range(len(self.genome.chroms)):
+                id2 = np.flatnonzero(self.index.chrom == chr2)
+                m = M[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1].copy()
+                
+                c = np.zeros(m.shape, dtype=np.float32)
+                e = np.zeros(m.shape, dtype=np.float32)
+                CalculatePixelConfidence(m, c, e)
+                cc[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1] = c
+                ee[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1] = e
+        cc[np.isnan(cc)] = 0
+        return cc, ee
 
     def filterByConfidence(self, cut=0.25, passes=2):
+        from ._cmtools import CalculatePixelConfidence
         newM = self.matrix.toarray()
         for _ in range(passes):
-            c = self.computeConfidenceMatrix(newM)
-            ii = np.where(c < cut)
-            newM[ii] = 0
+            for chr1 in range(len(self.genome.chroms)):
+                id1 = np.flatnonzero(self.index.chrom == chr1)
+                print(self.genome.chroms[chr1])
+                for chr2 in range(len(self.genome.chroms)):
+                    id2 = np.flatnonzero(self.index.chrom == chr2)
+                    m = newM[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1].copy()
+                    
+                    c = np.zeros(m.shape, dtype=np.float32)
+                    e = np.zeros(m.shape, dtype=np.float32)
+                    
+                    CalculatePixelConfidence(m, c, e)
+                    c[np.isnan(c)] = 0
+                    
+                    ii = np.where(c < cut)
+                    m[ii] = e[ii]
+                    newM[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1] = m
+                
         return Contactmatrix(newM, genome=self.genome, resolution=self.index)
 
     def expectedRestraints(self, cut=0.01, which='both'):

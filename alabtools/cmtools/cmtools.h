@@ -17,4 +17,5 @@ void BuildContactMap(float * coordinates,
                      int * Bj,
                      float * Bx);
 void PixelConfidence(float * matrix, int row, int col, //matrix and size
-                     float * confidence);
+                     float * confidence,
+                     float * expected);
