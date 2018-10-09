@@ -32,8 +32,10 @@ import subprocess
 import itertools
 import h5py
 import json
+import scipy
 import sys
 import collections
+import scipy.sparse.linalg
 from six import string_types
 
 if (sys.version_info > (3, 0)):
@@ -1221,7 +1223,8 @@ def block_transpose(x1, x2, max_items=int(1e8)):
         for z in block:
             x2[:, i:i+s] = block
 
-
+def isSymmetric(x):
+    return np.all(x.T == x)
 
 #See details in Imakaev et al. (2012)
 def PCA(A, numPCs=6, verbose=False):
