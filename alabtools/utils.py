@@ -32,8 +32,10 @@ import subprocess
 import itertools
 import h5py
 import json
+import scipy
 import sys
 import collections
+import scipy.sparse.linalg
 from six import string_types
 
 if (sys.version_info > (3, 0)):
@@ -378,7 +380,7 @@ class Index(object):
                         if c not in nmap:
                             nmap[c] = i
                             i += 1
-                    chrom = [ nmap[c] for c in data['chrom'] ]
+                    self.chrom = [ nmap[c] for c in data['chrom'] ]
                 else:
                     if not isinstance(self.genome, Genome):
                         self.genome = Genome(self.genome)
@@ -390,9 +392,13 @@ class Index(object):
                 self.end   = data['end']
                 if 'label' in data.dtype.names:
                     self.label = data['label']
+                else:
+                    self.label = []
 
                 if 'copy' in data.dtype.names:
                     self.copy = data['copy']
+                else:
+                    self.copy = []
 
         elif isinstance(chrom, h5py.File):
             self.load_h5f(chrom)
@@ -1218,3 +1224,67 @@ def block_transpose(x1, x2, max_items=int(1e8)):
         block = x1[i:i+s].swapaxes(0, 1) # get a subset and transpose in memory
         for z in block:
             x2[:, i:i+s] = block
+
+def isSymmetric(x):
+    return np.all(x.T == x)
+
+#See details in Imakaev et al. (2012)
+def PCA(A, numPCs=6, verbose=False):
+    """performs PCA analysis, and returns 6 best principal components
+    result[0] is the first PC, etc"""
+    #A = np.array(A, float)
+    if np.sum(np.sum(A, axis=0) == 0) > 0 :
+        warnings.warn("Columns with zero sum detected. Use zeroPCA instead")
+    M = (A - np.mean(A.T, axis=1)).T
+    covM = np.dot(M, M.T)
+    [latent, coeff] = scipy.sparse.linalg.eigsh(covM, numPCs)
+    if verbose:
+        print("Eigenvalues are:", latent)
+    return (np.transpose(coeff[:, ::-1]), latent[::-1])
+
+
+def EIG(A, numPCs=3):
+    """Performs mean-centered engenvector expansion
+    result[0] is the first EV, etc.;
+    by default returns 3 EV
+    """
+    #A = np.array(A, float)
+    if np.sum(np.sum(A, axis=0) == 0) > 0 :
+        warnings.warn("Columns with zero sum detected. Use zeroEIG instead")
+    M = (A - np.mean(A))  # subtract the mean (along columns)
+    if isSymmetric(A):
+        [latent, coeff] = scipy.sparse.linalg.eigsh(M, numPCs)
+    else:
+        [latent, coeff] = scipy.sparse.linalg.eigs(M, numPCs)
+    alatent = np.argsort(np.abs(latent))
+    print("eigenvalues are:", latent[alatent])
+    coeff = coeff[:, alatent]
+    return (np.transpose(coeff[:, ::-1]), latent[alatent][::-1])
+
+
+def zeroPCA(data, numPCs=3, verbose=False):
+    """
+    PCA which takes into account bins with zero counts
+    """
+    nonzeroMask = np.sum(data, axis=0) > 0
+    data = data[nonzeroMask]
+    data = data[:, nonzeroMask]
+    PCs = PCA(data, numPCs, verbose)
+    PCNew = [np.zeros(len(nonzeroMask), dtype=float) for _ in PCs[0]]
+    for i in range(len(PCs[0])):
+        PCNew[i][nonzeroMask] = PCs[0][i]
+    return PCNew, PCs[1]
+
+
+def zeroEIG(data, numPCs=3):
+    """
+    Eigenvector expansion which takes into account bins with zero counts
+    """
+    nonzeroMask = np.sum(data, axis=0) > 0
+    data = data[nonzeroMask]
+    data = data[:, nonzeroMask]
+    PCs = EIG(data, numPCs)
+    PCNew = [np.zeros(len(nonzeroMask), dtype=float) for _ in PCs[0]]
+    for i in range(len(PCs[0])):
+        PCNew[i][nonzeroMask] = PCs[0][i]
+    return PCNew, PCs[1]

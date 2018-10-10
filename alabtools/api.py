@@ -295,27 +295,43 @@ class Contactmatrix(object):
     def rowsum(self):
         return self.matrix.sum(axis=1)
 
-    def icp(self):
+    def icp(self, lowp=0, exclude_diagonal=True):
         '''
         Returns the interchromosomal probability for each row, defined as
         the sum of inter-chromosomal pixels divided by rowsum.
         '''
-        cis = np.zeros(len(self))
-        rs = self.rowsum()
+        N = len(self)
+        cis = np.zeros(N)
+        trans = np.zeros(N)
+
         nchrom = len(self.index.offset) - 1
         for i in range(nchrom):
             s, e = self.index.offset[i], self.index.offset[i+1]
+            xm = self.matrix.csr[s:e]
+            if lowp > 0:
+                xm = xm.multiply(xm >= lowp)
+
             cis[s:e] = np.array(
-                self.matrix.csr[s:e, s:e].sum(axis=0)
-                + self.matrix.csr[s:e, s:e].sum(axis=1).T
-                + self.matrix.diagonal[s:e]
+                xm[:, s:e].sum(axis=0)
+                + xm[:, s:e].sum(axis=1).T
             )[0]
 
-        trans = rs - cis
+            if e < N:
+                trans[s:e] += np.array(
+                    xm[:, e:].sum(axis=1).T
+                )[0]
+
+                trans[e:] += np.array(xm[:, e:].sum(axis=0))[0]
+
+            if not exclude_diagonal:
+                d = self.matrix.diagonal[s:e]
+                if lowp > 0:
+                    d = np.multiply(d, d >= lowp)
+                cis[s:e] += d
 
         # we are ok when returning nan for 0 rowsum rows, turn off warnings for 0 division
         old_settings = np.seterr(divide='ignore', invalid='ignore')
-        icp = trans / rs
+        icp = trans / (trans + cis)
         np.seterr(**old_settings)
 
         return icp
@@ -338,6 +354,17 @@ class Contactmatrix(object):
                 raise TypeError("Invalid argument type, numpy.ndarray is required")
 
     def getSubMatrix(self, c0, c1, sum_copies=True, copies=None):
+        '''
+        Select a chromosome-chromosome submatrix
+
+        Parameters
+        ----------
+        c0 : int or str
+            first chromosome
+        c1 : int or str
+
+
+        '''
         if isinstance(c0, string_types):
             c0 = self.genome.getchrnum(c0)
 
@@ -385,7 +412,7 @@ class Contactmatrix(object):
                     ii, jj = jj, ii
                     transpose = True
 
-                chunk = self.matrix.get_triu_row(icpy)[:, jcpy]
+                chunk = self.matrix.get_triu_row(ii)[:, jj]
                 if jj[0] == ii[0]:
                     chunk += chunk.T
                     chunk[np.diag_indices(len(chunk))] /= 2
@@ -572,20 +599,48 @@ class Contactmatrix(object):
         from ._cmtools import CalculatePixelConfidence
         if M is None:
             M = self.matrix.toarray()
-        c = np.empty(self.matrix.shape, dtype=np.float32)
-        CalculatePixelConfidence(M, c)
-        c[np.isnan(c)] = 0
-        return c
+        cc = np.empty(self.matrix.shape, dtype=np.float32)
+        ee = np.empty(self.matrix.shape, dtype=np.float32)
+        #do confidence calc for each chr-chr block otherwise makes no sense
+        for chr1 in range(len(self.genome.chroms)):
+            id1 = np.flatnonzero(self.index.chrom == chr1)
+            print(self.genome.chroms[chr1])
+            for chr2 in range(len(self.genome.chroms)):
+                id2 = np.flatnonzero(self.index.chrom == chr2)
+                m = M[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1].copy()
+
+                c = np.zeros(m.shape, dtype=np.float32)
+                e = np.zeros(m.shape, dtype=np.float32)
+                CalculatePixelConfidence(m, c, e)
+                cc[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1] = c
+                ee[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1] = e
+        cc[np.isnan(cc)] = 0
+        return cc, ee
 
     def filterByConfidence(self, cut=0.25, passes=2):
+        from ._cmtools import CalculatePixelConfidence
         newM = self.matrix.toarray()
         for _ in range(passes):
-            c = self.computeConfidenceMatrix(newM)
-            ii = np.where(c < cut)
-            newM[ii] = 0
+            for chr1 in range(len(self.genome.chroms)):
+                id1 = np.flatnonzero(self.index.chrom == chr1)
+                print(self.genome.chroms[chr1])
+                for chr2 in range(len(self.genome.chroms)):
+                    id2 = np.flatnonzero(self.index.chrom == chr2)
+                    m = newM[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1].copy()
+
+                    c = np.zeros(m.shape, dtype=np.float32)
+                    e = np.zeros(m.shape, dtype=np.float32)
+
+                    CalculatePixelConfidence(m, c, e)
+                    c[np.isnan(c)] = 0
+
+                    ii = np.where(c < cut)
+                    m[ii] = e[ii]
+                    newM[id1[0]:id1[-1]+1, id2[0]:id2[-1]+1] = m
+
         return Contactmatrix(newM, genome=self.genome, resolution=self.index)
 
-    def expectedRestraints(self, cut=0.01):
+    def expectedRestraints(self, cut=0.01, which='both'):
         '''
         Returns the number of expected restraints per structure per bead when theta == cut
 
@@ -593,10 +648,24 @@ class Contactmatrix(object):
         ----------
         cut : float
             the theta cutoff
+        which : ['intra', 'inter', 'both']
         '''
         ii = self.matrix.data >= cut
-        return 2*np.sum(self.matrix.data[ii])/self.matrix.shape[0]
+        jj = self.matrix.indices
+        ip = self.matrix.indptr
+        if which == 'intra':
+            kk = np.empty(len(jj), dtype=int)
+            for i in range(len(ip) - 1):
+                kk[ ip[i] : ip[i+1] ] = i
+            ii &= (self.index.chrom[kk] == self.index.chrom[jj])
 
+        elif which == 'inter':
+            kk = np.empty(len(jj), dtype=int)
+            for i in range(len(ip) - 1):
+                kk[ ip[i] : ip[i+1] ] = i
+            ii &= (self.index.chrom[kk] != self.index.chrom[jj])
+
+        return np.sum(self.matrix.data[ii])/self.matrix.shape[0]
 
     def makeSummaryMatrix(self,step=10):
         """
