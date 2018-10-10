@@ -1171,7 +1171,7 @@ class LocStruct:
     def __getitem__(self, c):
         return self.chroms[c]
 
-def underline(*args, char='-', terminal=False):
+def underline(*args, **kwargs):
     '''
     Underlines a string.Takes a variable number of unnamed arguments, and the
         final string is assembled like in the print function. The width of
@@ -1185,6 +1185,8 @@ def underline(*args, char='-', terminal=False):
 
     '''
     import re
+    char = kwargs.pop('char', '-')
+    terminal = kwargs.pop('terminal', False)
     s = ' '.join([str(a) if hasattr(a, '__str__') else repr(a) for a in args ])
     ss = re.split('[\\r\\n]+', s)
     l = max([len(x) for x in ss])
