@@ -289,9 +289,14 @@ class HssFile(h5py.File):
 
     def getBeadRadialPositions(self, beads, nucleusRadius=5000.0):
         allrp = []
+
+        if isinstance(nucleusRadius, tuple):
+            if len(nucleusRadius) != 3:
+                raise ValueError("Please provide 3 axis for radius")
+        
         for i in np.array(beads):
-            beadcrd = self.get_bead_crd(i)
-            rp = np.linalg.norm(beadcrd, axis=1) / nucleusRadius
+            beadcrd = self.get_bead_crd(i) / nucleusRadius
+            rp = np.linalg.norm(beadcrd, axis=1)
             
             allrp.append(rp)
     
@@ -301,7 +306,7 @@ class HssFile(h5py.File):
         rps = []
         for c in self.index.get_chrom_copies(chrnum):
             beads = self.index.get_chrom_pos(chrnum, copy=c)
-            rps.append(self.getBeadRadialPositions(self, beads))
+            rps.append(self.getBeadRadialPositions(self, beads, nucleusRadius))
         rps = np.column_stack(rps)
         #print(rps.shape)
         return rps
