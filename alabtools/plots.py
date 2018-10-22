@@ -144,9 +144,9 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
     format: str
         format to save figure
     color: drawing color
-    linewidth: 
+    linewidth:
     points : True or False, if scatter points are required
-    
+
     xlab/ylab : string, optional
         label for x/y axis
     title : string, optional
@@ -162,7 +162,7 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
     plt.setp(line,linewidth=linewidth)
     if points:
         ax.scatter(x,y, marker='o',c=color,edgecolors=color)
-    
+
     if xlab != None:
         ax.set_xlabel(xlab)
     if ylab != None:
@@ -193,7 +193,7 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
         pp = PdfPages(figurename)
         pp.savefig(fig, dpi=600)
         pp.close()
-  
+
     plt.close(fig)
 
 
@@ -278,5 +278,5 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
         plots[row, col].tick_params(axis='both', which='major', labelsize=ticklabelsize, direction='in')
         #plots[row, col].set_xticklabels([''] * len(plots[row, col].get_xticklabels()))
 
-    plt.tight_layout()
+    #plt.tight_layout()
     return f, plots
