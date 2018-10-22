@@ -18,8 +18,9 @@ install_requires = [
     'pandas>=0.17',
     'h5py>=2.5', 
     'matplotlib>=1.5',
-    'cython',
-    'tqdm'
+    'Cython>=0.25',
+    'tqdm',
+    'six'
 ]
 tests_require = [
     'mock'
