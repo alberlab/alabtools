@@ -345,7 +345,7 @@ class Index(object):
         self.custom_tracks = []
         self.chrom_sizes = chrom_sizes
         self.genome = genome
-
+        self.chromstr = None
         if isinstance(chrom, string_types):
             try:
                 # tries to load a hdf5 file
@@ -376,6 +376,7 @@ class Index(object):
                 data.dtype.names = colnames
 
                 # transform chrom names to integers ids
+                self.chromstr = data['chrom']
                 if self.genome is None:
                     cmap = { s: i for i, s in enumerate(natural_sort(np.unique(data['chrom'])))}
                     self.chrom = [ cmap[c] for c in data['chrom'] ]
@@ -423,8 +424,21 @@ class Index(object):
         # fix datatypes and eventual problems
         if not(len(self.chrom) == len(self.start) == len(self.end)):
             raise RuntimeError("Dimensions do not match.")
-        if len(self.chrom) and not isinstance(self.chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
-            raise RuntimeError("chrom should be a list of integers.")
+
+        if len(self.chrom):
+            try:
+                int(self.chrom[0])
+            except:
+                if isinstance(self.chrom[0], string_types):
+                    self.chromstr = self.chrom
+                    if self.genome is not None:
+                        self.chrom = [self.genome.getchrnum(x) for x in self.chromstr]
+                    else:
+                        cmap = { s: i for i, s in enumerate(natural_sort(np.unique(self.chromstr)))}
+                        self.chrom = [ cmap[c] for c in self.chromstr ]
+                else:
+                    raise RuntimeError("chrom should be a list of integers or strings.")
+
         if len(self.start) and not isinstance(self.start[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("start should be a list of integers.")
         if len(self.end) and not isinstance(self.end[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
@@ -470,11 +484,18 @@ class Index(object):
         for k, v in kwargs.items():
             self.add_custom_track(k, v)
 
-        if self.genome is not None:
-            self.chromstr = self.genome.chroms[self.chrom]
-        else:
-            self.chromstr = np.array([ 'chr%d' % (i + 1) for i in self.chrom])
-    #-
+        if self.chromstr is None:
+            if self.genome is not None:
+                self.chromstr = self.genome.chroms[self.chrom]
+            else:
+                self.chromstr = np.array([ 'chr%d' % (i + 1) for i in self.chrom])
+
+        self._map_chrom_id = {}
+        self._map_id_chrom = {}
+        for i, s in zip(self.chrom, self.chromstr):
+            self._map_chrom_id[s] = i
+            self._map_id_chrom[i] = s
+        #-
 
     @staticmethod
     def _look_for_bed_header(file_descriptor):
@@ -547,6 +568,12 @@ class Index(object):
             genome=self.genome
         )
 
+    def chrom_to_id(self, c):
+        return self._map_chrom_id[c]
+
+    def id_to_chrom(self, c):
+        return self._map_id_chrom[c]
+
     def get_chrom_mask(self, c, copy=None):
         '''
         Return the mask relative to a chromosome
@@ -589,7 +616,7 @@ class Index(object):
         )
 
     def get_chrom_copies(self, c):
-        return np.unique(self.copy[self.chrom == c])
+        return np.unique(self.copy[self.get_chrom_mask(c)])
 
     def get_chromosomes(self):
         return np.unique(self.chrom)
@@ -598,10 +625,7 @@ class Index(object):
         '''
         Returns the unique names of chromosomes in this index
         '''
-        if self.genome is not None:
-            return [self.genome.getchrom(i) for i in self.get_chromosomes()]
-        else:
-            return [ 'chr%d' % (i + 1) for i in self.get_chromosomes()]
+        return np.unique(self.chromstr)
 
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key],
@@ -745,6 +769,12 @@ class Index(object):
                     v = np.array(json.loads(v))
                 setattr(self, k, v)
 
+        try:
+            self.chromstr = h5f["index"]["chromstr"][()]
+        except (KeyError, ValueError):
+            pass
+
+
     def load_txt(self, f):
         pass
 
@@ -827,12 +857,18 @@ class Index(object):
             # scalar datasets don't support compression
             igrp.create_dataset("copy_index", data=json.dumps(self.copy_index))
 
+        if 'chromstr' in igrp:
+            igrp['chromstr'][...] = json.dumps(self.chromstr)
+        else:
+            # scalar datasets don't support compression
+            igrp.create_dataset("chromstr", data=json.dumps(self.chromstr))
+
         for k in self.custom_tracks:
             if k in igrp:
                 try:
                     igrp[k][...] = self.__getattribute__(k)
                 except:
-                    igrp['copy_index'][...] = json.dumps(self.__getattribute__(k).tolist())
+                    igrp[k][...] = json.dumps(self.__getattribute__(k).tolist())
             else:
             # scalar datasets don't support compression
                 try:
@@ -848,7 +884,7 @@ class Index(object):
 
         h5f.flush()
 
-    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";"):
+    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";", cut_chrom_ends=False):
 
         if isinstance(file, str):
             file = open(file, 'w')
@@ -868,16 +904,21 @@ class Index(object):
                 file.write('# ')
             file.write(sep.join(include) + '\n')
 
-        cnames = self.get_chrom_names()
         for i in range(len(self)):
+            if cut_chrom_ends:
+                save_end = self.end[i]
+                if self.end[i] > self.genome.lengths[self.chrom[i]]:
+                    self.end[i] = self.genome.lengths[self.chrom[i]]
             file.write(
                 sep.join([
                     str(self.__getattribute__(col)[i]) if col != 'chrom' else self.chromstr[i] for col in include
                 ]) + '\n'
             )
+            if cut_chrom_ends:
+                self.end[i] = save_end
 
-    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True):
-        self.dump_csv(file, include, exclude, header, sep='\t')
+    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True, cut_chrom_ends=False):
+        self.dump_csv(file, include, exclude, header, sep='\t', cut_chrom_ends=cut_chrom_ends)
 
     def loc(self, chrom, start, end=None, copy=None):
         '''
@@ -1359,3 +1400,11 @@ def zeroEIG(data, numPCs=3):
     for i in range(len(PCs[0])):
         PCNew[i][nonzeroMask] = PCs[0][i]
     return PCNew, PCs[1]
+
+def isiterable(a):
+    try:
+        for _ in a:
+            break
+    except:
+        return False
+    return True
