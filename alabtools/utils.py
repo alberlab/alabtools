@@ -760,6 +760,10 @@ class Index(object):
         except (KeyError, ValueError):
             pass
 
+        try:
+            self.label = np.array(h5f["index"]["chromstr"][()], CHROMS_DTYPE)
+        except:
+            pass
         # tries to load additional data tracks
         if 'custom_tracks' in h5f["index"]:
             self.custom_tracks = json.loads(h5f["index"]["custom_tracks"][()])
@@ -858,10 +862,10 @@ class Index(object):
             igrp.create_dataset("copy_index", data=json.dumps(self.copy_index))
 
         if 'chromstr' in igrp:
-            igrp['chromstr'][...] = json.dumps(self.chromstr)
+            igrp['chromstr'][...] = np.array(self.chromstr, dtype=np.dtype('S10'))
         else:
             # scalar datasets don't support compression
-            igrp.create_dataset("chromstr", data=json.dumps(self.chromstr))
+            igrp.create_dataset("chromstr", data=np.array(self.chromstr, dtype=np.dtype('S10')))
 
         for k in self.custom_tracks:
             if k in igrp:
