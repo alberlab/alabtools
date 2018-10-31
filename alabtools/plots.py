@@ -32,6 +32,7 @@ from scipy.ndimage.interpolation import zoom
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from .api import Contactmatrix
+from .utils import isiterable
 
 
 def make_colormap(seq,cmapname='CustomMap'):
@@ -144,9 +145,9 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
     format: str
         format to save figure
     color: drawing color
-    linewidth: 
+    linewidth:
     points : True or False, if scatter points are required
-    
+
     xlab/ylab : string, optional
         label for x/y axis
     title : string, optional
@@ -162,7 +163,7 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
     plt.setp(line,linewidth=linewidth)
     if points:
         ax.scatter(x,y, marker='o',c=color,edgecolors=color)
-    
+
     if xlab != None:
         ax.set_xlabel(xlab)
     if ylab != None:
@@ -193,7 +194,7 @@ def plotxy(figurename, x, y, color='blue', linewidth=1, points=False, xlab=None,
         pp = PdfPages(figurename)
         pp.savefig(fig, dpi=600)
         pp.close()
-  
+
     plt.close(fig)
 
 
@@ -230,9 +231,14 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, ti
 
 def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, subplot_height=2.5,
                        sharey=True, subtitlesize=20, ticklabelsize=12, xgridstep=50e6,
-                       datalabels=None):
+                       datalabels=None, highlight_zones=None, highlight_colors='red'):
+    '''
+    Plot tracks by chromosomes as subplots
 
-    if not isinstance(index, list):
+    TODO: write docs
+    '''
+
+    if not isinstance(index, list) or isinstance(index, tuple):
         index = [index] * len(data)
         data = np.array(data)
         if len(data.shape) == 1:
@@ -246,8 +252,14 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
             data[i] = np.array(data[i])
 
     if datalabels is not None:
-        len(data) == len(datalabels)
+        assert len(data) == len(datalabels)
 
+
+    if highlight_zones is not None:
+        highlight_zones = np.array(highlight_zones)
+        if not isiterable(highlight_colors):
+            highlight_colors = [highlight_colors] * len(highlight_zones)
+        highlight_colors = np.array(highlight_colors)
 
     chroms = index[0].get_chromosomes() # multiple data better have the same chromosomes
     n_chroms = len(chroms)
@@ -259,8 +271,14 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
     for i in range(n_chroms):
         col = i % n_cols
         row = i // n_cols
+        if highlight_zones is not None:
+            ii = np.flatnonzero(highlight_zones[:, 0] == index[0].id_to_chrom(i))
+            ch = highlight_zones[ii]
+            hgcolors = highlight_colors[ii]
+            for (c, s, e), color in zip(ch, hgcolors):
+                plots[row, col].fill_between([int(s)*xscale, int(e)*xscale], [vmin, vmin], [vmax, vmax], color=color)
         plots[row, col].set_ylim(vmin, vmax)
-        plots[row, col].set_title(index[0].genome.getchrom(i), fontsize=subtitlesize)
+        plots[row, col].set_title(index[0].id_to_chrom(i), fontsize=subtitlesize)
         for k in range(len(data)):
             jj = index[k].chrom == chroms[i]
             xx = index[k].start[jj] * xscale

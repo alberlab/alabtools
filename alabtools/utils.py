@@ -162,12 +162,15 @@ class Genome(object):
         choices = np.zeros(len(chroms),dtype=bool)
 
         if usechr is None:
-            usechr=['#', 'X']
+            # if not specified, use all of them
+            usechr = np.unique(chroms)
 
         for chrnum in usechr:
             if chrnum == '#':
                 choices = np.logical_or([re.search("chr[\d]+$",c) != None for c in chroms], choices)
             else:
+                # if specified with full name, remove chr
+                chrnum = chrnum.replace('chr', '')
                 choices = np.logical_or(chroms == ("chr%s" % chrnum), choices)
         self.chroms = chroms[choices] # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
@@ -329,14 +332,20 @@ class Index(object):
         groups of beads with the same `chrom` value belong to different copies.
     genome: alabtools.utils.Genome, optional
         genome info for the index.
+    usecols: list of ints
+        if reading from a text file, use only a subset of columns
+    ignore_headers: boolean
+        if True and reading from a text file, ignore any column name specification.
+        Defaults to False.
+
     """
 
-    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], **kwargs):
+    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], genome=None, usecols=None, ignore_headers=False, **kwargs):
 
         self.custom_tracks = []
         self.chrom_sizes = chrom_sizes
-        self.genome = kwargs.pop('genome', None)
-
+        self.genome = genome
+        self.chromstr = None
         if isinstance(chrom, string_types):
             try:
                 # tries to load a hdf5 file
@@ -346,48 +355,37 @@ class Index(object):
             except IOError:
                 # if it is not a hdf5 file, try to read as text BED
 
-                cols=[
-                    ('chrom', CHROMS_DTYPE), # note that this is a string type
-                    ('start', START_DTYPE),
-                    ('end', END_DTYPE),
-                    ('label', LABEL_DTYPE),
-                    ('copy', COPY_DTYPE)
-                ]
+                colnames, n_header = self._look_for_bed_header(chrom)
+                if ignore_headers:
+                    colnames = None
 
-                usecols = kwargs.pop('usecols', None)
-                if usecols is None:
-                    # try to determine if it is a 3, 4 or 5 columns bed
-                    with open(chrom) as f:
-                        line = ''
-                        while line == '' or line[0] == '#':
-                            line = f.readline().strip()
-                        ncols = len(line.split())
-                        if ncols < 3:
-                            raise ValueError('bed file appears to have less than'
-                                             ' 3 columns')
-                        usecols = range(ncols)
-                ncols = len(usecols)
+                data = np.genfromtxt(chrom, usecols=usecols, dtype=None, encoding=None, skip_header=n_header)
+                n_fields = len(data.dtype.names)
 
-                # define columns fields
+                if n_fields < 3:
+                    raise ValueError('Provided text file does not seem to have at least 3 columns (chrom, start, end).')
 
-                data = np.genfromtxt(chrom, usecols=usecols, dtype=cols[:ncols])
+                if colnames:
+                    assert len(colnames) == n_fields
+                    if usecols:
+                        colnames = np.array(colnames)[usecols].tolist()
+                        assert(colnames[:3] == ['chrom', 'start', 'end'])
+                else:
+                    colnames = ['chrom', 'start', 'end'] + ['track%d' % i for i in range(n_fields-3)]
 
+                data.dtype.names = colnames
 
+                # transform chrom names to integers ids
+                self.chromstr = data['chrom']
                 if self.genome is None:
-                    # transform chrom names to integers ids
-                    i, nmap = 0, {}
-                    for c in data['chrom']:
-                        if c not in nmap:
-                            nmap[c] = i
-                            i += 1
-                    self.chrom = [ nmap[c] for c in data['chrom'] ]
+                    cmap = { s: i for i, s in enumerate(natural_sort(np.unique(data['chrom'])))}
+                    self.chrom = [ cmap[c] for c in data['chrom'] ]
                 else:
                     if not isinstance(self.genome, Genome):
                         self.genome = Genome(self.genome)
                     self.chrom = np.array([self.genome.getchrnum(c) for c in data['chrom']])
 
                 # set the variables for further processing
-
                 self.start = data['start']
                 self.end   = data['end']
                 if 'label' in data.dtype.names:
@@ -399,6 +397,11 @@ class Index(object):
                     self.copy = data['copy']
                 else:
                     self.copy = []
+
+                # add custom fields as keyword arguments, to be added
+                custom_field_names = set(data.dtype.names) - {'chrom', 'start', 'end', 'copy', 'label'}
+                custom_fields = {n: data[n] for n in custom_field_names}
+                kwargs.update(custom_fields)
 
         elif isinstance(chrom, h5py.File):
             self.load_h5f(chrom)
@@ -421,8 +424,21 @@ class Index(object):
         # fix datatypes and eventual problems
         if not(len(self.chrom) == len(self.start) == len(self.end)):
             raise RuntimeError("Dimensions do not match.")
-        if len(self.chrom) and not isinstance(self.chrom[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
-            raise RuntimeError("chrom should be a list of integers.")
+
+        if len(self.chrom):
+            try:
+                int(self.chrom[0])
+            except:
+                if isinstance(self.chrom[0], string_types):
+                    self.chromstr = self.chrom
+                    if self.genome is not None:
+                        self.chrom = [self.genome.getchrnum(x) for x in self.chromstr]
+                    else:
+                        cmap = { s: i for i, s in enumerate(natural_sort(np.unique(self.chromstr)))}
+                        self.chrom = [ cmap[c] for c in self.chromstr ]
+                else:
+                    raise RuntimeError("chrom should be a list of integers or strings.")
+
         if len(self.start) and not isinstance(self.start[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
             raise RuntimeError("start should be a list of integers.")
         if len(self.end) and not isinstance(self.end[0], (int, np.int32, np.int64, np.uint32, np.uint64)):
@@ -468,11 +484,65 @@ class Index(object):
         for k, v in kwargs.items():
             self.add_custom_track(k, v)
 
-        if self.genome is not None:
-            self.chromstr = self.genome.chroms[self.chrom]
-        else:
-            self.chromstr = np.array([ 'chr%d' % (i + 1) for i in self.chrom])
-    #-
+        if self.chromstr is None:
+            if self.genome is not None:
+                self.chromstr = self.genome.chroms[self.chrom]
+            else:
+                self.chromstr = np.array([ 'chr%d' % (i + 1) for i in self.chrom])
+
+        self._map_chrom_id = {}
+        self._map_id_chrom = {}
+        for i, s in zip(self.chrom, self.chromstr):
+            self._map_chrom_id[s] = i
+            self._map_id_chrom[i] = s
+        #-
+
+    @staticmethod
+    def _look_for_bed_header(file_descriptor):
+        '''
+        Bed is a somewhat inconsistent format. Apparently can have a header or not,
+        and it starts with `track` or `browser`. But I've seen people using the first line
+        as column names, or using comments (#) to put column names.
+        Here I try to find out if there is a header with column names or not.
+        Far from failproof, but should cover the cases I found.
+        '''
+        colnames = None
+        n_head = 0
+
+        if isinstance(file_descriptor, string_types):
+            file_descriptor = open(file_descriptor, 'r')
+
+        for line in file_descriptor:
+            line = line.strip()
+            if line:
+                if line.startswith('#'):
+                    line = line.replace('#', '')
+                    colnames = line.split()
+                else:
+                    # if has a bed header, I don't know exactly how to parse it,
+                    # so check only the other cases
+                    if not ( line.startswith('track') or line.startswith('browser') ):
+                        ss = StringIO(line)
+                        x = np.genfromtxt(ss, dtype=None, encoding=None)
+                        if x.dtype.kind == 'U':
+                            # only unicode string, no integers, maybe a header
+                            colnames = x.tolist()
+                        else:
+                            # in this case, we should be reading the chrom start end version
+                            if colnames:
+                                # if we found column names, unset them if they are not consistent
+                                if len(colnames) != len(line.split()):
+                                    colnames = None
+                                # also, if we have column names, they should start with chrom, start, end
+                                if colnames[:3] != ['chrom', 'start', 'end']:
+                                    colnames = None
+                            break
+
+            # increase the number of header lines
+            n_head += 1
+
+        return colnames, n_head
+
 
     def __eq__(self, other):
         '''
@@ -497,6 +567,12 @@ class Index(object):
             np.concatenate([self.label, other.label]),
             genome=self.genome
         )
+
+    def chrom_to_id(self, c):
+        return self._map_chrom_id[c]
+
+    def id_to_chrom(self, c):
+        return self._map_id_chrom[c]
 
     def get_chrom_mask(self, c, copy=None):
         '''
@@ -540,7 +616,7 @@ class Index(object):
         )
 
     def get_chrom_copies(self, c):
-        return np.unique(self.copy[self.chrom == c])
+        return np.unique(self.copy[self.get_chrom_mask(c)])
 
     def get_chromosomes(self):
         return np.unique(self.chrom)
@@ -549,10 +625,7 @@ class Index(object):
         '''
         Returns the unique names of chromosomes in this index
         '''
-        if self.genome is not None:
-            return [self.genome.getchrom(i) for i in self.get_chromosomes()]
-        else:
-            return [ 'chr%d' % (i + 1) for i in self.get_chromosomes()]
+        return np.unique(self.chromstr)
 
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key],
@@ -573,15 +646,32 @@ class Index(object):
             len(self.chrom)
         )
 
-    def add_custom_track(self, k, v):
+    def add_custom_track(self, k, v, force=False):
         a = np.array(v)
         assert(len(a) == len(self))
+
+        if k in self.custom_tracks:
+            if not force:
+                raise KeyError('track %s already present' % k)
+            else:
+                self.remove_custom_track(k)
         self.custom_tracks.append(k)
         self.__setattr__(k, a)
 
     def remove_custom_track(self, k):
+        if ( not hasattr(self, k) ) or ( k not in self.custom_tracks ):
+            raise KeyError('track %s not present' % k)
         self.custom_tracks.remove(k)
+        t = getattr(self, k)
         delattr(self, k)
+        return t
+
+    def rename_custom_track(self, k, nk):
+        t = self.remove_custom_track(k)
+        self.add_custom_track(nk, t)
+
+    def get_custom_track(self, k):
+        return getattr(self, k)
 
     def get_sub_index(self, keys):
         dt = self[keys]
@@ -670,6 +760,10 @@ class Index(object):
         except (KeyError, ValueError):
             pass
 
+        try:
+            self.label = np.array(h5f["index"]["chromstr"][()], CHROMS_DTYPE)
+        except:
+            pass
         # tries to load additional data tracks
         if 'custom_tracks' in h5f["index"]:
             self.custom_tracks = json.loads(h5f["index"]["custom_tracks"][()])
@@ -678,6 +772,12 @@ class Index(object):
                 if not isinstance(v, np.ndarray):
                     v = np.array(json.loads(v))
                 setattr(self, k, v)
+
+        try:
+            self.chromstr = h5f["index"]["chromstr"][()]
+        except (KeyError, ValueError):
+            pass
+
 
     def load_txt(self, f):
         pass
@@ -761,12 +861,18 @@ class Index(object):
             # scalar datasets don't support compression
             igrp.create_dataset("copy_index", data=json.dumps(self.copy_index))
 
+        if 'chromstr' in igrp:
+            igrp['chromstr'][...] = np.array(self.chromstr, dtype=np.dtype('S10'))
+        else:
+            # scalar datasets don't support compression
+            igrp.create_dataset("chromstr", data=np.array(self.chromstr, dtype=np.dtype('S10')))
+
         for k in self.custom_tracks:
             if k in igrp:
                 try:
                     igrp[k][...] = self.__getattribute__(k)
                 except:
-                    igrp['copy_index'][...] = json.dumps(self.__getattribute__(k).tolist())
+                    igrp[k][...] = json.dumps(self.__getattribute__(k).tolist())
             else:
             # scalar datasets don't support compression
                 try:
@@ -782,7 +888,7 @@ class Index(object):
 
         h5f.flush()
 
-    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";"):
+    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";", cut_chrom_ends=False):
 
         if isinstance(file, str):
             file = open(file, 'w')
@@ -802,16 +908,21 @@ class Index(object):
                 file.write('# ')
             file.write(sep.join(include) + '\n')
 
-        cnames = self.get_chrom_names()
         for i in range(len(self)):
+            if cut_chrom_ends:
+                save_end = self.end[i]
+                if self.end[i] > self.genome.lengths[self.chrom[i]]:
+                    self.end[i] = self.genome.lengths[self.chrom[i]]
             file.write(
                 sep.join([
                     str(self.__getattribute__(col)[i]) if col != 'chrom' else self.chromstr[i] for col in include
                 ]) + '\n'
             )
+            if cut_chrom_ends:
+                self.end[i] = save_end
 
-    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True):
-        self.dump_csv(file, include, exclude, header, sep='\t')
+    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True, cut_chrom_ends=False):
+        self.dump_csv(file, include, exclude, header, sep='\t', cut_chrom_ends=cut_chrom_ends)
 
     def loc(self, chrom, start, end=None, copy=None):
         '''
@@ -919,6 +1030,7 @@ def make_multiploid(index, chroms, copies):
     ncopy  = []
     nlabel = []
     csizes = []
+    add_tracks = {k: [] for k in index.custom_tracks}
     for z in range(max(copies)):
         for cid, cnum in zip(chroms, copies):
             if z < cnum:
@@ -929,14 +1041,18 @@ def make_multiploid(index, chroms, copies):
                 nlabel.append(index.label[idxs])
                 ncopy.append(np.array([z]*len(idxs)))
                 csizes.append(len(idxs))
+                for k in index.custom_tracks:
+                    add_tracks[k].append(index.get_custom_track(k)[idxs])
 
     nchrom = np.concatenate(nchrom)
     nstart = np.concatenate(nstart)
     nend = np.concatenate(nend)
     ncopy = np.concatenate(ncopy)
     nlabel = np.concatenate(nlabel)
+    for k in index.custom_tracks:
+        add_tracks[k] = np.concatenate(add_tracks[k])
 
-    return Index(nchrom, nstart, nend, copy=ncopy, label=nlabel, chrom_sizes=csizes)
+    return Index(nchrom, nstart, nend, copy=ncopy, label=nlabel, chrom_sizes=csizes, **add_tracks)
 
 
 def natural_sort(l):
@@ -1288,3 +1404,11 @@ def zeroEIG(data, numPCs=3):
     for i in range(len(PCs[0])):
         PCNew[i][nonzeroMask] = PCs[0][i]
     return PCNew, PCs[1]
+
+def isiterable(a):
+    try:
+        for _ in a:
+            break
+    except:
+        return False
+    return True
