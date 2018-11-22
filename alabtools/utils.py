@@ -28,6 +28,7 @@ import os
 import re
 import math
 import numpy as np
+import warnings
 import subprocess
 import itertools
 import h5py
@@ -38,7 +39,7 @@ import collections
 import scipy.sparse.linalg
 from six import string_types
 
-if (sys.version_info > (3, 0)):
+if sys.version_info > (3, 0):
     # python 3.x
     def unicode(s):
         if isinstance(s, bytes):
@@ -1240,22 +1241,27 @@ class BucketTree:
         n = len(starts)
         if n == 0:
             return
-        i = n // 2
-        node.data = (ids[i], starts[i], ends[i])
-        node.left = Node()
-        node.right = Node()
-        BucketTree.fill(node.left, ids[:i], starts[:i], ends[:i])
-        BucketTree.fill(node.right, ids[i+1:], starts[i+1:], ends[i+1:])
+        elif n == 1:
+            node.data = (n, ids[0], starts[0], ends[0])
+        else:
+            i = n // 2
+            node.data = (n, None, starts[0], ends[-1])
+            node.left = Node()
+            node.right = Node()
+            BucketTree.fill(node.left, ids[:i], starts[:i], ends[:i])
+            BucketTree.fill(node.right, ids[i:], starts[i:], ends[i:])
 
     @staticmethod
     def _traverse_tree(node, ids, x, y, f=region_intersect):
         if node.data is None:
             return
-        i, s, e = node.data
+        n, i, s, e = node.data
         if f(s, e, x, y):
-            ids.append(i)
-            BucketTree._traverse_tree(node.left, ids, x, y, f)
-            BucketTree._traverse_tree(node.right, ids, x, y, f)
+            if n == 1:
+                ids.append(i)
+            else:
+                BucketTree._traverse_tree(node.left, ids, x, y, f)
+                BucketTree._traverse_tree(node.right, ids, x, y, f)
 
     def get_intersections(self, x, y=None):
         ids = []
@@ -1275,9 +1281,9 @@ class LocStruct:
             ind = np.lexsort((index.start[ii], index.end[ii], ii))
             starts, ends, ids = index.start[ii][ind], index.end[ii][ind], ii[ind]
             nbuckets = ends[-1] // BUCKET_SIZE + 1
-            bS = [list() for x in range(nbuckets)]
-            bE = [list() for x in range(nbuckets)]
-            bI = [list() for x in range(nbuckets)]
+            bS = [list() for _ in range(nbuckets)]
+            bE = [list() for _ in range(nbuckets)]
+            bI = [list() for _ in range(nbuckets)]
             for s, e, i in zip(starts, ends, ids):
                 i0, i1 = s // BUCKET_SIZE, (e-1) // BUCKET_SIZE
                 for k in range(i0, i1+1):
@@ -1332,14 +1338,12 @@ def block_transpose(x1, x2, max_items=int(1e8)):
         max_items: int
             maximum number of matrix elements to be transposed at once
     '''
-    from tqdm import tqdm
     n = x1.shape[0]
     k = max(max_items // n, 1)
-    for i in tqdm(range(0, n, k)):
+    for i in range(0, n, k):
         s = min(k, n-i)
         block = x1[i:i+s].swapaxes(0, 1) # get a subset and transpose in memory
-        for z in block:
-            x2[:, i:i+s] = block
+        x2[:, i:i+s] = block
 
 def isSymmetric(x):
     return np.all(x.T == x)
