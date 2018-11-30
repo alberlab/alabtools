@@ -36,6 +36,7 @@ import json
 import scipy
 import sys
 import collections
+import pandas as pd
 import scipy.sparse.linalg
 from six import string_types
 
@@ -66,7 +67,7 @@ COORD_DTYPE = np.float32
 RADII_DTYPE = np.float32
 
 # size of buckets (in basepairs) for fast search in index (see index.loc function)
-BUCKET_SIZE = 100000
+BUCKET_SIZE = 1000000
 
 class Genome(object):
     """
@@ -620,13 +621,13 @@ class Index(object):
         return np.unique(self.copy[self.get_chrom_mask(c)])
 
     def get_chromosomes(self):
-        return np.unique(self.chrom)
+        return pd.unique(self.chrom)
 
     def get_chrom_names(self):
         '''
         Returns the unique names of chromosomes in this index
         '''
-        return np.unique(self.chromstr)
+        return pd.unique(self.chromstr)
 
     def __getitem__(self,key):
         return np.rec.fromarrays((self.chrom[key],
@@ -951,9 +952,10 @@ class Index(object):
             buckets = self.loctree[ chrom ][ start // BUCKET_SIZE : start // BUCKET_SIZE + 1]
         else:
             buckets = self.loctree[ chrom ][ start // BUCKET_SIZE : (end-1) // BUCKET_SIZE + 1]
-        locs = []
+        locs = [np.array([], dtype=int)]
         for bucket in buckets:
-            locs += bucket.get_intersections(start, end)
+            locs.append(bucket.get_intersections(start, end))
+        locs = np.concatenate(locs)
         if copy is not None:
             if not isinstance(copy, collections.Iterable):
                 copy = [copy]
@@ -1271,6 +1273,19 @@ class BucketTree:
             self._traverse_tree(self.root, ids, x, y)
         return ids
 
+class BucketLinear:
+    def __init__(self, ids, starts, ends):
+        self.starts = np.array(starts, dtype=int)
+        self.ends = np.array(ends, dtype=int)
+        self.ids = np.array(ids, dtype=int)
+
+    def get_intersections(self, x, y=None):
+        if y is None:
+            ii = (self.starts <= x) & (self.ends > x)
+        else:
+            ii = (self.ends > x) & (self.starts < y)
+        return self.ids[ii]
+
 class LocStruct:
     def __init__(self, index):
         self.chroms = {}
@@ -1292,7 +1307,7 @@ class LocStruct:
                     bI[k].append(i)
             self.chroms[c] = list()
             for i in range(nbuckets):
-                self.chroms[c].append( BucketTree(bI[i], bS[i], bE[i]) )
+                self.chroms[c].append( BucketLinear(bI[i], bS[i], bE[i]) )
 
             self.chroms[cid] = self.chroms[c]
 
