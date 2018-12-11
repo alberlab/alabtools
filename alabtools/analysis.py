@@ -29,10 +29,14 @@ import os, errno
 from .api import Contactmatrix
 from .plots import plot_comparison, plotmatrix
 import h5py
-from .utils import unicode, Genome, Index, COORD_DTYPE, RADII_DTYPE
+from .utils import unicode, Genome, Index, COORD_DTYPE, RADII_DTYPE, CatmullRomSpline
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
-
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(a, *args, **kwargs):
+        return a
 
 __hss_version__ = 2.0
 #COORD_CHUNKSIZE = (100, 100, 3)
@@ -60,6 +64,9 @@ class HssFile(h5py.File):
         '''
         See h5py.File constructor.
         '''
+
+        self._index = None
+        self._genome = None
 
         h5py.File.__init__(self, *args, **kwargs)
         try:
@@ -142,7 +149,9 @@ class HssFile(h5py.File):
         -------
             alabtools.Genome
         '''
-        return Genome(self)
+        if self._genome is None:
+            self._genome = Genome(self)
+        return self._genome
 
     def get_index(self):
         '''
@@ -150,7 +159,9 @@ class HssFile(h5py.File):
         -------
             alabtools.Index
         '''
-        return Index(self)
+        if self._index is None:
+            self._index = Index(self)
+        return self._index
 
     def get_coordinates(self, read_to_memory=True):
 
@@ -200,11 +211,20 @@ class HssFile(h5py.File):
 
     def set_genome(self, genome):
         assert isinstance(genome, Genome)
+        self._genome = genome
         genome.save(self)
 
     def set_index(self, index):
         assert isinstance(index, Index)
+        self._index = index
         index.save(self)
+
+    def create_coordinates(self, shape=None, chunks=None, **kwargs):
+        assert('coordinates' not in self)
+        if shape is None:
+            assert(self.nbead != 0 and self.nstruct != 0)
+            shape = (self.nbead, self.nstruct, 3)
+        return self.create_dataset('coordinates', shape=shape, dtype=COORD_DTYPE, chunks=chunks, **kwargs)
 
     def set_coordinates(self, coord):
         assert isinstance(coord, np.ndarray)
@@ -286,7 +306,6 @@ class HssFile(h5py.File):
     nstruct = property(get_nstruct, set_nstruct)
     violation = property(get_violation, set_violation)
 
-
     def getBeadRadialPositions(self, beads, nucleusRadius=5000.0):
         allrp = []
 
@@ -310,6 +329,20 @@ class HssFile(h5py.File):
         rps = np.column_stack(rps)
         #print(rps.shape)
         return rps
+
+    def resampleCoordinates(self, new_index, output_file):
+
+        with HssFile(output_file, 'w') as hss:
+            hss.index = new_index
+            hss.nbead = len(new_index)
+            hss.nstruct = self.nstruct
+            hss.genome = self.genome
+            hss.create_coordinates()
+            for sid in tqdm(range(self.nstruct)):
+                hss.set_struct_crd(
+                    sid,
+                    resample_coordinates(self.get_struct_crd(sid), self.index, new_index)
+                )
 
     def savePDBx(self, output_file, max_struct=None, entry_id="Model", title="Model Population",
                  software=None,
@@ -485,6 +518,7 @@ def get_simulated_hic(hssfname, contactRange=2):
 
     return full_cmap.sumCopies()
 
+
 def compare_hic_maps(M, ref, fname='matrix'):
     dname = fname + '_hic_comparison'
     M = Contactmatrix(M)
@@ -559,8 +593,6 @@ def compare_hic_maps(M, ref, fname='matrix'):
     plt.close()
 
 
-
-
 def common_analysis(hssfname, **kwargs):
 
     if kwargs.get('contacts', True):
@@ -575,3 +607,19 @@ def common_analysis(hssfname, **kwargs):
 
     if kwargs.get('hic_compare', False):
         compare_hic_maps(cmap, kwargs.get('hic_compare'), hssfname)
+
+
+def resample_coordinates(old_crd, old_index, new_index):
+    new_crd = np.empty((len(new_index), 3))
+    for chrom in old_index.get_chromosomes():
+        for ccopy in old_index.get_chrom_copies(chrom):
+            old_chrom_idx = old_index.get_chrom_pos(chrom, ccopy)
+            old_chrom_crd = old_crd[old_chrom_idx]
+            old_chrom_midpts = (old_index.end[old_chrom_idx] + old_index.start[old_chrom_idx]) / 2
+            spline = CatmullRomSpline(old_chrom_crd, old_chrom_midpts)
+
+            new_chrom_idx = new_index.get_chrom_pos(chrom, ccopy)
+            new_chrom_midpts = (new_index.end[new_chrom_idx] + new_index.start[new_chrom_idx]) / 2
+            new_chrom_crd = np.array([spline(x) for x in new_chrom_midpts])
+            new_crd[new_chrom_idx] = new_chrom_crd
+    return new_crd

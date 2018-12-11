@@ -545,7 +545,6 @@ class Index(object):
 
         return colnames, n_head
 
-
     def __eq__(self, other):
         '''
         equality check
@@ -1424,6 +1423,7 @@ def zeroEIG(data, numPCs=3):
         PCNew[i][nonzeroMask] = PCs[0][i]
     return PCNew, PCs[1]
 
+
 def isiterable(a):
     try:
         for _ in a:
@@ -1431,3 +1431,90 @@ def isiterable(a):
     except:
         return False
     return True
+
+
+def spline_4p(t, p):
+    """ Catmull-Rom """
+    # wikipedia Catmull-Rom -> Cubic_Hermite_spline
+    # 0 -> p0,  1 -> p1,  1/2 -> (- p_1 + 9 p0 + 9 p1 - p2) / 16
+    # assert 0 <= t <= 1
+    return (
+           t * ((2 - t) * t - 1) * p[0]
+           + (t * t * (3 * t - 5) + 2) * p[1]
+           + t * ((4 - 3 * t) * t + 1) * p[2]
+           + (t - 1) * t * t * p[3]
+    ) / 2
+
+
+class CatmullRomSpline:
+    """
+    Computes a Catmull-Rom spline curve on n-dimensional points.
+    Optionally, one can specify the value of the curve parameter of each point,
+    usually (but not necessarily) in the range [0, 1]. This is useful for curves
+    which are not equally sampled, for example.
+    When a value of curve parameters outside the extremes of chain_positions
+    (0 and 1 by default) is provided, a linear interpolation using the two
+    last points is used.
+
+    Parameters
+    ----------
+    points: ndarray
+        list of points defining the curve
+    chain_positions: array, optional
+        list of curve parameters for each point. If not specified, points are
+        assumed to be equally spaced
+
+    Notes
+    -----
+    Since spacing between points can be uneven, a search must be done for each call,
+    hurting performance.
+
+    Example
+    -------
+    points = np.random.random((10, 3))
+    cs = CatmullRomSpline(points)
+    resampled_points = np.array([ cs(x) for x in np.linspace(0, 1, 100)])
+    """
+    def __init__(self, points, chain_positions=None):
+        points = np.array(points)
+        # create extension points at beginning and end
+        vb = (points[0] - points[1]) * 0.1
+        ve = (points[-1] - points[-2]) * 0.1
+        if chain_positions is None:
+            chain_positions = np.linspace(0, 1, len(points))
+
+        points = np.concatenate([
+            [points[0] + vb],
+            points,
+            [points[-1] + ve]
+        ])
+
+        self.points = points
+        self.pos = chain_positions
+        self.steps = np.diff(self.pos, 1)
+
+        # try to make average case scenario search faster by creating buckets
+        mean_size = self.steps.mean()
+        n_buckets = int((self.pos[-1] - self.pos[0]) / mean_size) + 1
+        self._buckets = [list() for _ in range(n_buckets)]
+        for z in range(1, len(self.pos)):
+            start = int((self.pos[z - 1] - self.pos[0]) / mean_size)
+            end = int((self.pos[z] - self.pos[0]) / mean_size)
+            for i in range(start, end + 1):
+                self._buckets[i].append(z-1)
+        self._bucket_step = mean_size
+
+    def __call__(self, t):
+        if t < self.pos[0]:
+            q = (self.pos[0] - t) / self.steps[0]
+            return self.points[1] + (self.points[1] - self.points[2]) * q
+        elif t >= self.pos[-1]:
+            q = (t - self.pos[-1]) / self.steps[-1]
+            return self.points[-2] + (self.points[-2] - self.points[-3]) * q
+        else:
+            k = int((t - self.pos[0]) / self._bucket_step)
+            a = self.pos[self._buckets[k]]
+            ib = np.searchsorted(a, t, side='right') - 1  # left interval boundary
+            i = self._buckets[k][ib]
+            q = (t - self.pos[i]) / self.steps[i]
+            return spline_4p(q, self.points[i:i+4])
