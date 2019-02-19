@@ -94,6 +94,7 @@ class Contactmatrix(object):
     def __init__(self, mat=None, genome=None, resolution=None, usechr=['#','X'], tri='upper', lazy=False):
 
         self.resolution = None
+        self.bias = None
         # matrix from file
         if isinstance(mat, string_types):
             if not os.path.isfile(mat):
@@ -176,11 +177,14 @@ class Contactmatrix(object):
     def _set_index(self,chrom,start,end,label=[],copy=[],chrom_sizes=[]):
         self.index = utils.Index(chrom=chrom,start=start,end=end,label=label,copy=copy,chrom_sizes=chrom_sizes)
 
-    def _load_hcs(self,filename, lazy=False):
+    def _load_hcs(self, filename, lazy=False):
         self.h5 = h5py.File(filename, 'r')
         self.resolution = self.h5.attrs["resolution"]
         self.genome = utils.Genome(self.h5)
         self.index = utils.Index(self.h5)
+
+        if 'bias' in self.h5:
+            self.bias = self.h5['bias'][()]
 
         self.matrix = matrix.sss_matrix(self.h5["matrix"], lazy=lazy)
         if not lazy:
@@ -650,22 +654,66 @@ class Contactmatrix(object):
             the theta cutoff
         which : ['intra', 'inter', 'both']
         '''
-        ii = self.matrix.data >= cut
-        jj = self.matrix.indices
-        ip = self.matrix.indptr
-        if which == 'intra':
-            kk = np.empty(len(jj), dtype=int)
-            for i in range(len(ip) - 1):
-                kk[ ip[i] : ip[i+1] ] = i
-            ii &= (self.index.chrom[kk] == self.index.chrom[jj])
-
-        elif which == 'inter':
-            kk = np.empty(len(jj), dtype=int)
-            for i in range(len(ip) - 1):
-                kk[ ip[i] : ip[i+1] ] = i
-            ii &= (self.index.chrom[kk] != self.index.chrom[jj])
+        if which in ['intra', 'cis']:
+            ii = (self.matrix.data >= cut) & self.getIntraMask()
+        elif which in ['inter', 'trans']:
+            ii = (self.matrix.data >= cut) & self.getInterMask()
+        elif which in ['both', 'all']:
+            ii = self.matrix.data >= cut
+        else:
+            raise ValueError('`which` argument not understood: %s.\nAllowed values are "intra", "inter", "both" (default)' % which)
 
         return np.sum(self.matrix.data[ii])/self.matrix.shape[0]
+
+    def getInterSparseMask(self):
+        jj = self.matrix.indices
+        # create row index vector
+        ip = self.matrix.indptr
+        ii = np.empty(len(jj), dtype=int)
+        for i in range(len(ip) - 1):
+            ii[ip[i]: ip[i + 1]] = i
+        return self.index.chrom[ii] != self.index.chrom[jj]
+
+    def getIntraSparseMask(self):
+        jj = self.matrix.indices
+        ip = self.matrix.indptr
+        ii = np.empty(len(jj), dtype=int)
+        for i in range(len(ip) - 1):
+            ii[ip[i]: ip[i + 1]] = i
+        return self.index.chrom[ii] == self.index.chrom[jj]
+
+    def getInterValues(self):
+        return self.matrix.data[self.getInterSparseMask()]
+
+    def getIntraValues(self):
+        return self.matrix.data[self.getIntraSparseMask()]
+
+    def getInterIJV(self):
+        jj = self.matrix.indices
+        ip = self.matrix.indptr
+        ii = np.empty(len(jj), dtype=int)
+        for i in range(len(ip) - 1):
+            ii[ip[i]: ip[i + 1]] = i
+        mask = self.index.chrom[ii] != self.index.chrom[jj]
+        return ii[mask], jj[mask], self.matrix.data[mask]
+
+    def getIntraIJV(self):
+        jj = self.matrix.indices
+        ip = self.matrix.indptr
+        ii = np.empty(len(jj), dtype=int)
+        for i in range(len(ip) - 1):
+            ii[ip[i]: ip[i + 1]] = i
+        mask = self.index.chrom[ii] == self.index.chrom[jj]
+        return ii[mask], jj[mask], self.matrix.data[mask]
+
+    def getInterMask(self):
+        return self.index.chrom[:, None] != self.index.chrom[None, :]
+
+    def getIntraMask(self):
+        return self.index.chrom[:, None] == self.index.chrom[None, :]
+
+    def toarray(self):
+        return self.matrix.toarray()
 
     def makeSummaryMatrix(self,step=10):
         """
@@ -958,6 +1006,9 @@ class Contactmatrix(object):
         self.genome.save(h5f,compression=compression,compression_opts=compression_opts)
 
         self.index.save(h5f,compression=compression,compression_opts=compression_opts)
+
+        if self.bias:
+            h5py.create_dataset('bias', data=self.bias, compression=compression,compression_opts=compression_opts)
 
         mgrp = h5f.create_group("matrix")
         mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)

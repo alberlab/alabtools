@@ -125,7 +125,7 @@ class Genome(object):
             )
             if os.path.isfile(datafile):
                 if not silence:
-                    print("chroms or lengths not given, reading from genomes info file.")
+                    sys.stderr.write("chroms or lengths not given, reading from genomes info file.\n")
                 info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
             else:
                 assembly = h5py.File(assembly, 'r')
@@ -875,7 +875,7 @@ class Index(object):
                 except:
                     igrp[k][...] = json.dumps(self.__getattribute__(k).tolist())
             else:
-            # scalar datasets don't support compression
+                # scalar datasets don't support compression
                 try:
                     igrp.create_dataset(k, data=self.__getattribute__(k))
                 except:
@@ -962,7 +962,7 @@ class Index(object):
         return np.sort(np.unique(locs))
 
 
-#--------------------
+# --------------------
 
 
 def loadstream(filename):
@@ -992,6 +992,7 @@ def make_diploid(index):
     didx['copy'] = np.concatenate([index.__dict__['copy'],
                                    index.__dict__['copy'] + 1 ])
     return Index(didx['chrom'], didx['start'], didx['end'], label=didx['label'], copy=didx['copy'])
+
 
 def make_multiploid(index, chroms, copies):
     '''
@@ -1074,12 +1075,15 @@ def get_index_from_bed(
 
 _ftpi = 4./3. * np.pi
 DEFAULT_NUCLEAR_VOLUME = _ftpi * (5000**3)
+
+
 def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
     sizes = [b.end - b.start for b in index]
     totsize = sum(sizes)
     prefactor = volume * occupancy / (_ftpi * totsize)
     rr = [(prefactor*sz)**(1./3.) for sz in sizes]
     return np.array(rr, dtype=RADII_DTYPE)
+
 
 # if we are dealing with h5py datasets, preloads data for performance
 class H5Batcher():
@@ -1104,6 +1108,7 @@ class H5Batcher():
 
     def __len__(self):
         return self.ds.__len__()
+
 
 def remap(s0, s1):
     '''
@@ -1213,10 +1218,12 @@ def get_index_mappings(idx0, idx1):
 
     return cmap, fwmap, bwmap
 
+
 def region_intersect(b, e, x, y):
     a = x < e
     b = y > b
     return (a and b)
+
 
 def region_intersect_one(b, e, x, y):
     return (x >= b) and (x < e)
@@ -1230,6 +1237,7 @@ class Node:
         self.left = None
         self.data = value
         self.right = None
+
 
 class BucketTree:
     def __init__(self, ids, starts, ends):
@@ -1272,6 +1280,7 @@ class BucketTree:
             self._traverse_tree(self.root, ids, x, y)
         return ids
 
+
 class BucketLinear:
     def __init__(self, ids, starts, ends):
         self.starts = np.array(starts, dtype=int)
@@ -1284,6 +1293,7 @@ class BucketLinear:
         else:
             ii = (self.ends > x) & (self.starts < y)
         return self.ids[ii]
+
 
 class LocStruct:
     def __init__(self, index):
@@ -1313,6 +1323,7 @@ class LocStruct:
     def __getitem__(self, c):
         return self.chroms[c]
 
+
 def underline(*args, **kwargs):
     '''
     Underlines a string.Takes a variable number of unnamed arguments, and the
@@ -1339,6 +1350,7 @@ def underline(*args, **kwargs):
     u = (char * (l // len(char) + 1))[:l]
     return s + '\n' + u
 
+
 def block_transpose(x1, x2, max_items=int(1e8)):
     '''
     Transposes a matrix in blocks smaller than max_items.
@@ -1359,8 +1371,10 @@ def block_transpose(x1, x2, max_items=int(1e8)):
         block = x1[i:i+s].swapaxes(0, 1) # get a subset and transpose in memory
         x2[:, i:i+s] = block
 
+
 def isSymmetric(x):
     return np.all(x.T == x)
+
 
 #See details in Imakaev et al. (2012)
 def PCA(A, numPCs=6, verbose=False):
