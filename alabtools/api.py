@@ -868,7 +868,18 @@ class Contactmatrix(object):
         # Reset to our original status
         self.matrix.csr.data[:] = originalData
         self.matrix.diagonal[:] = originalDiag
+        
+        self.fmaxScaling(fmax,force=True)
 
+        newMat = self.makeSummaryMatrix(domain)
+        rowsums = newMat.rowsum()
+        rowsums = rowsums[rowsums > 0]
+        average = rowsums.mean()
+        
+        # Reset to our original status
+        self.matrix.csr.data[:] = originalData
+        self.matrix.diagonal[:] = originalDiag
+        
         print("Fmax = {} Rowmean = {}".format(fmax,average))
         newMat.matrix.csr.eliminate_zeros()
         return newMat
