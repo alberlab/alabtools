@@ -655,9 +655,9 @@ class Contactmatrix(object):
         which : ['intra', 'inter', 'both']
         '''
         if which in ['intra', 'cis']:
-            ii = (self.matrix.data >= cut) & self.getIntraMask()
+            ii = (self.matrix.data >= cut) & self.getIntraSparseMask()
         elif which in ['inter', 'trans']:
-            ii = (self.matrix.data >= cut) & self.getInterMask()
+            ii = (self.matrix.data >= cut) & self.getInterSparseMask()
         elif which in ['both', 'all']:
             ii = self.matrix.data >= cut
         else:
@@ -914,8 +914,8 @@ class Contactmatrix(object):
         #==
 
         # Reset to our original status
-        self.matrix.csr.data[:] = originalData
-        self.matrix.diagonal[:] = originalDiag
+        self.matrix.csr.data[:] = originalData.copy()
+        self.matrix.diagonal[:] = originalDiag.copy()
         
         self.fmaxScaling(fmax,force=True)
 
@@ -1010,24 +1010,23 @@ class Contactmatrix(object):
         if (filename[-4:] != '.hcs'):
             filename += '.hcs'
 
-        h5f = h5py.File(filename, 'w')
-        h5f.attrs["resolution"] = self.resolution
-        h5f.attrs["version"] = __version__
-        h5f.attrs["nbin"] = len(self.index)
-        self.genome.save(h5f,compression=compression,compression_opts=compression_opts)
+        with h5py.File(filename, 'w') as h5f:
+            h5f.attrs["resolution"] = self.resolution
+            h5f.attrs["version"] = __version__
+            h5f.attrs["nbin"] = len(self.index)
+            self.genome.save(h5f,compression=compression,compression_opts=compression_opts)
 
-        self.index.save(h5f,compression=compression,compression_opts=compression_opts)
+            self.index.save(h5f,compression=compression,compression_opts=compression_opts)
 
-        if self.bias:
-            h5py.create_dataset('bias', data=self.bias, compression=compression,compression_opts=compression_opts)
+            if self.bias is not None:
+                h5py.create_dataset('bias', data=self.bias, compression=compression,compression_opts=compression_opts)
 
-        mgrp = h5f.create_group("matrix")
-        mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)
-        mgrp.create_dataset("indices",data=self.matrix.indices, compression=compression,compression_opts=compression_opts)
-        mgrp.create_dataset("indptr", data=self.matrix.indptr,  compression=compression,compression_opts=compression_opts)
-        mgrp.create_dataset("diagonal",data=self.matrix.diagonal,  compression=compression,compression_opts=compression_opts)
+            mgrp = h5f.create_group("matrix")
+            mgrp.create_dataset("data",   data=self.matrix.data,    compression=compression,compression_opts=compression_opts)
+            mgrp.create_dataset("indices",data=self.matrix.indices, compression=compression,compression_opts=compression_opts)
+            mgrp.create_dataset("indptr", data=self.matrix.indptr,  compression=compression,compression_opts=compression_opts)
+            mgrp.create_dataset("diagonal",data=self.matrix.diagonal,  compression=compression,compression_opts=compression_opts)
 
-        h5f.close()
     #
     def __del__(self):
         try:
