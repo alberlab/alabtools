@@ -32,6 +32,12 @@ import h5py
 from .utils import unicode, Genome, Index, COORD_DTYPE, RADII_DTYPE, CatmullRomSpline
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+from tempfile import mkdtemp
+import scipy.io
+import scipy.sparse
+import shutil
+from uuid import uuid4
+
 try:
     from tqdm import tqdm
 except ImportError:
@@ -264,17 +270,103 @@ class HssFile(h5py.File):
                                 chunks=True, compression="gzip")
         self.attrs['nbead'] = self._nbead = radii.shape[0]
 
-    def buildContactMap(self, contactRange = 2):
+    @staticmethod
+    def _get_number_of_contacts(ci, cj, cutoff):
+        csq = cutoff*cutoff
+        d2 = np.square(ci - cj).sum(axis=1)
+        return np.count_nonzero(d2 <= csq)
+
+    @staticmethod
+    def _get_contact_submatrix(cis, cjs, cutoff, dtype=np.float32):
+        return np.array([
+            [HssFile._get_number_of_contacts(xi, xj, cutoff) for xj in cjs]
+            for xi in cis
+        ], dtype=dtype)
+
+    def _ipyparallel_get_contact_probability_map(self, cutoff, absolute_cutoff=False, client=None, tmpdir=None):
+
+        if client is None:
+            from ipyparallel import Client
+            client = Client()
+
+        lbv = client.load_balanced_view()
+        n_workers = len(client)
+        if n_workers == 0:
+            raise RuntimeError('No workers available')
+
+        # ~4 items per worker
+        n = self.nbead
+        step = max(n // n_workers // 2, 1)
+
+        # prepare directory and write current data, to be sure
+        tdir = mkdtemp(prefix=tmpdir)
+        try:
+            for i in range(0, self.nbead, step):
+                np.save(f'{tdir}/{i}.npy', [self.get_bead_crd(j) for j in range(i, min(i+step, self.nbead))])
+
+            def task(tdir, i, j, cutoff):
+                crdi = np.load(f'{tdir}/{i}.npy')
+                crdj = np.load(f'{tdir}/{j}.npy')
+                sm = HssFile._get_contact_submatrix(crdi, crdj, cutoff)
+                sm = scipy.sparse.csr_matrix(sm)
+                scipy.io.mmwrite(f'{tdir}/{i}_{j}.mtx', sm)
+
+            ii = []
+            jj = []
+            cutoffs = []
+            r = self.radii
+            for i in range(0, self.nbead, step):
+                for j in range(i, self.nbead, step):
+                    ii.append(i)
+                    jj.append(j)
+                    if absolute_cutoff:
+                        cutoffs.append(cutoff)
+                    else:
+                        cutoffs.append(cutoff * (r[i] + r[j]))
+
+            n_a = len(ii)
+
+            ar = lbv.map_async(task, [tdir] * n_a, ii, jj, cutoffs)
+
+            n = len(list(range(0, self.nbead, step)))
+            outs = [[None for _ in range(n)] for _ in range(n)]
+            last = -1
+            for i, j, r in tqdm(zip(ii, jj, ar)):
+                if i != last:
+                    outs[i // step][j // step] = scipy.io.mmread(f'{tdir}/{i}_{j}.mtx') / self.nstruct
+                    if i == j:
+                        outs[i // step][j // step] = scipy.sparse.triu(outs[i // step][j // step])
+
+        finally:
+            shutil.rmtree(tdir)
+
+        idx_or_resolution = self.index.resolution()
+        if idx_or_resolution is None:
+            idx_or_resolution = self.index
+
+        return Contactmatrix(scipy.sparse.bmat(outs),
+                             genome=self.genome,
+                             usechr=self.genome.chroms,
+                             resolution=idx_or_resolution)
+
+    def buildContactMap(self, contactRange = 2, use_ipyparallel=False, absolute_range=False, client=None):
+        if absolute_range and not use_ipyparallel:
+            raise NotImplementedError()
+        if use_ipyparallel:
+            return self._ipyparallel_get_contact_probability_map(contactRange,
+                                                                 absolute_cutoff=absolute_range,
+                                                                 client=client)
         from ._cmtools import BuildContactMap_func
         from .api import Contactmatrix
         from .matrix import sss_matrix
-        mat = Contactmatrix(None, genome=None, resolution=None)
-        mat.genome = self.genome
-        mat.index = self.index
+        idx_or_resolution = self.index.resolution()
+        if idx_or_resolution is None:
+            idx_or_resolution = self.index
+        mat = Contactmatrix(None, genome=self.genome, resolution=idx_or_resolution)
         DimB = len(self.radii)
-        Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
-        Bj = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
-        Bx = np.empty(int(DimB*(DimB+1)/2),dtype=np.float32)
+        Bi = np.empty(int(DimB*(DimB+1)/2), dtype=np.int32)
+        Bj = np.empty(int(DimB*(DimB+1)/2), dtype=np.int32)
+        Bx = np.empty(int(DimB*(DimB+1)/2), dtype=np.float32)
 
         crd = self.coordinates
         if crd.flags['C_CONTIGUOUS'] is not True:
@@ -282,7 +374,6 @@ class HssFile(h5py.File):
         BuildContactMap_func(crd, self.radii, contactRange, Bi, Bj, Bx)
 
         mat.matrix = sss_matrix((Bx, (Bi, Bj)))
-        mat.resolution = np.nan
         return mat
 
     def has_struct_major(self):

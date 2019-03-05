@@ -51,7 +51,7 @@ class Contactmatrix(object):
         read matrix from filename, or initialize the matrix from a scipy
         sparse matrix, or a numpy dense matrix, a cooler file
         or with an empty matrix
-    genome : string
+    genome : alabtools.Genome or str
         Name of the genome assembly e.g.'hg19','mm9'. It is ignored if
         loading from hcs, hdf5, or cooler
     resolution : int or utils.Index
@@ -95,6 +95,8 @@ class Contactmatrix(object):
 
         self.resolution = None
         self.bias = None
+        self.genome = None
+        self.index = None
         # matrix from file
         if isinstance(mat, string_types):
             if not os.path.isfile(mat):
@@ -157,7 +159,7 @@ class Contactmatrix(object):
                                                  mm.indptr, diag))
             # empty matrix
             elif mat is None:
-                if hasattr(self,"index"):
+                if self.index is not None:
                     self.matrix = matrix.sss_matrix(([], [],
                                                     [0] * (len(self.index)+1),
                                                     [0] * len(self.index)))
@@ -465,10 +467,14 @@ class Contactmatrix(object):
         return self.index.__len__()
 
     def __repr__(self):
+        if self.genome:
+            assembly = str(self.genome.assembly).strip()
+        else:
+            assembly = 'Assembly not specified'
         return '<alabtools.Contactmatrix: {:d} x {:d} | {:s} | {:s}>'.format(
             self.matrix.shape[0],
             self.matrix.shape[1],
-            str(self.genome.assembly).strip(),
+            assembly,
             str(self.resolution)
         )
 

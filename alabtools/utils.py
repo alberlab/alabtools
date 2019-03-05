@@ -117,16 +117,16 @@ class Genome(object):
         # Genome assembly name has precedence over hdf5 file names.
         # Will raise a IOError if cannot read any.
         if isinstance(assembly, string_types) and (
-            (chroms is None) or (lengths is None)
-            ):
+                    (chroms is None) or (lengths is None)
+                ):
             datafile = os.path.join(
-                os.path.dirname( os.path.abspath(__file__) ),
+                os.path.dirname(os.path.abspath(__file__)),
                 "genomes/" + assembly + ".info"
             )
             if os.path.isfile(datafile):
                 if not silence:
                     sys.stderr.write("chroms or lengths not given, reading from genomes info file.\n")
-                info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
+                info = np.genfromtxt(datafile, dtype=[("chroms", CHROMS_DTYPE),("lengths", LENGTHS_DTYPE)])
             else:
                 assembly = h5py.File(assembly, 'r')
 
@@ -140,18 +140,18 @@ class Genome(object):
             if lengths is None:
                 lengths = genome.lengths
 
-        if isinstance(assembly,h5py.File):
+        if isinstance(assembly, h5py.File):
             chroms  = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
             origins = assembly["genome"]["origins"]
             lengths = assembly["genome"]["lengths"]
             assembly = unicode(assembly["genome"]["assembly"].value)
-            usechr = ['#','X','Y']
+            usechr = ['#', 'X', 'Y']
 
         if (chroms is None) or (lengths is None):
             chroms = info["chroms"].astype(CHROMS_DTYPE)
             lengths = info["lengths"].astype(LENGTHS_DTYPE)
             origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
-        else :
+        else:
             if origins is None:
                 origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
             if len(chroms) != len(lengths) or len(chroms) != len(origins):
@@ -307,19 +307,19 @@ class Index(object):
 
     Parameters
     ----------
-    chrom : list[int32]
+    chrom : list[int32] or np.ndarray[int]
         numeric chromosome id (starting from 0) for each bin/bead.
         Es.: 0 -> chr1, 1 -> chr2, ..., 22 -> chrX
-    start : list[int32]
+    start : list[int32] or np.ndarray[int]
         genomic starting positions of each bin (in bp, with respect to the
         chromosome start)
-    end : list[int32]
+    end : list[int32] or np.ndarray[int]
         genomic ending positions of each bin (in bp, with respect to the
         chromosome start)
-    label : list[string10]
+    label : list[string10] or np.ndarray[str]
         label for each bin (usually, 'CEN', 'gap', 'domain', although it
         can be any string of less than 10 characters)
-    copy : list[int32], optional
+    copy : list[int32] or np.ndarray[int], optional
         In systems of beads, there may be multiple indistinguishable
         copies of the same chromosome in the system. The copy vector specifies
         which copy of the chromosome each bead maps to. If not specified,
@@ -327,12 +327,12 @@ class Index(object):
         `chrom` value belong to different copies.
         Each bead mapping to the same (chrom, start, end) tuple should,
         in general, have a different copy value.
-    chrom_sizes : list[int32], optional
+    chrom_sizes : list[int32] or np.ndarray[int], optional
         number of bins/beads in each chromosome. It is useful to specify it if
         two copies of the same chromosome appear as contiguous in the index.
         If not specified, it is automatically computed assuming non-contiguous
         groups of beads with the same `chrom` value belong to different copies.
-    genome: alabtools.utils.Genome, optional
+    genome: alabtools.utils.Genome or str, optional
         genome info for the index.
     usecols: list of ints
         if reading from a text file, use only a subset of columns
@@ -568,6 +568,22 @@ class Index(object):
             np.concatenate([self.label, other.label]),
             genome=self.genome
         )
+
+    def resolution(self):
+        '''
+        Checks if all the region sizes are equal (except for the last region of each chromosome).
+        If they are, returns the only size as a resolution. If a resolution cannot be determined
+        returns None.
+        :return: int or None
+        '''
+        sizes = self.end - self.start
+        last_beads = np.array([self.offset[i] - 1 for i in range(1, len(self.offset))])
+        mask = np.ones(len(self), np.bool)
+        mask[last_beads] = False
+        us = np.unique(sizes[mask])
+        if len(us) == 1:
+            return us[0]
+        return None
 
     def chrom_to_id(self, c):
         return self._map_chrom_id[c]
