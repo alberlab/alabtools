@@ -598,7 +598,8 @@ class HssFile(h5py.File):
 
         dcdfh.close()
 
-#================================================
+# ================================================
+
 
 def get_simulated_hic(hssfname, contactRange=2):
     '''
@@ -607,7 +608,7 @@ def get_simulated_hic(hssfname, contactRange=2):
     with HssFile(hssfname, 'r') as f:
         full_cmap = f.buildContactMap(contactRange)
 
-    return full_cmap.sumCopies()
+    return full_cmap.sumCopies(norm='min')
 
 
 def compare_hic_maps(M, ref, fname='matrix'):
@@ -682,22 +683,6 @@ def compare_hic_maps(M, ref, fname='matrix'):
     plt.tight_layout()
     plt.savefig(dname + '/matrix_values_hist2d.pdf')
     plt.close()
-
-
-def common_analysis(hssfname, **kwargs):
-
-    if kwargs.get('contacts', True):
-        with HssFile(hssfname) as f:
-            cmap = f.buildContactMap(2)
-        cmap.save(hssfname + 'full_cmap.hcs')
-        cmap.plot(hssfname + 'full_cmap.png')
-        cmap = cmap.sumCopies()
-        cmap.save(hssfname + 'cmap.hcs')
-        cmap.plot(hssfname + 'cmap.png')
-
-
-    if kwargs.get('hic_compare', False):
-        compare_hic_maps(cmap, kwargs.get('hic_compare'), hssfname)
 
 
 def resample_coordinates(old_crd, old_index, new_index):
