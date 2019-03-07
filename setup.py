@@ -48,7 +48,7 @@ extensions = [
               ),
 ]
 
-if '--no-geotools' not in sys.args:
+if '--no-geotools' not in sys.argv:
     extensions.append(
         Extension("alabtools._geotools", ["alabtools/geotools/geotools.i", "alabtools/geotools/geotools.cpp"],
                   swig_opts=['-c++'],
