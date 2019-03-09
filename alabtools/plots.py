@@ -222,12 +222,11 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, ti
         plt.text(0.1, 0.1, labels[0], transform=plt.gca().transAxes)
         plt.text(0.9, 0.9, labels[1], transform=plt.gca().transAxes, horizontalalignment='right', verticalalignment='top')
     plt.colorbar()
-    if file is None:
-        plt.show()
-    else:
+    if file is not None:
         plt.tight_layout()
         plt.savefig(file, dpi=dpi)
-        plt.close(fig)
+    return fig
+
 
 def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, subplot_height=2.5,
                        sharey=True, subtitlesize=20, ticklabelsize=12, xgridstep=50e6,
