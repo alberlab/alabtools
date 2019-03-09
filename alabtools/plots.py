@@ -231,7 +231,8 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, ti
 
 def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, subplot_height=2.5,
                        sharey=True, subtitlesize=20, ticklabelsize=12, xgridstep=50e6,
-                       datalabels=None, highlight_zones=None, highlight_colors='red'):
+                       datalabels=None, highlight_zones=None, highlight_colors='red', vmin=None, vmax=None,
+                       suptitle=''):
     '''
     Plot tracks by chromosomes as subplots
 
@@ -266,8 +267,11 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
     n_cols = 4
     n_rows = n_chroms // n_cols if n_chroms % n_cols == 0 else n_chroms // n_cols + 1
     f, plots = plt.subplots(n_rows, n_cols, figsize=(subplot_width * n_cols, subplot_height * n_rows), sharey=sharey)
-    vmin = np.nanmin([ np.nanmin(d) for d in data])
-    vmax = np.nanmax([ np.nanmax(d) for d in data])
+    f.suptitle(suptitle)
+    if vmin is None:
+        vmin = np.nanmin([ np.nanmin(d) for d in data])
+    if vmax is None:
+        vmax = np.nanmax([ np.nanmax(d) for d in data])
     for i in range(n_chroms):
         col = i % n_cols
         row = i // n_cols
@@ -296,5 +300,5 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
         plots[row, col].tick_params(axis='both', which='major', labelsize=ticklabelsize, direction='in')
         #plots[row, col].set_xticklabels([''] * len(plots[row, col].get_xticklabels()))
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     return f, plots

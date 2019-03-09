@@ -635,7 +635,7 @@ class HssFile(h5py.File):
 
     def dump_pdb(self, confs, fname='structure_%d.pdb', render=False, high_quality=False,
                  fmt='png', wsize=(1024, 1024), show_bonds=True, **image_kwargs):
-        if isinstance(confs, int):
+        if isinstance(confs, (int, np.integer)):
             confs = [confs]
         elif isinstance(confs, str):
             confs = self._parse_range_string(confs, self.nstruct)
