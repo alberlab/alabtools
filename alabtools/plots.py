@@ -94,9 +94,9 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
 
     clip_min = kwargs.pop('clip_min', -np.inf)
     clip_max = kwargs.pop('clip_max', np.inf)
-
+    
     cwrb = make_colormap([(1,1,1),(1,0,0),0.5,(1,0,0),(0,0,0)],'wrb')
-    cmap     = kwargs.pop('cmap',cwrb)
+    cmap = kwargs.pop('cmap',cwrb)
     fig  = plt.figure()
     if 'ticklabels1' in kwargs:
         plt.yticks(range(matrix.shape[0]))
@@ -111,18 +111,27 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
         if len(matrix) > mr:
             # use linear interpolation to avoid negative values
             matrix = zoom(matrix, float(mr) / len(matrix), order=1)
-
-    plt.imshow(np.clip(matrix, a_min=clip_min, a_max=clip_max),
-                        interpolation='nearest',
-                        cmap=cmap,
-                        **kwargs)
+    
+    clipmat = np.clip(matrix, a_min=clip_min, a_max=clip_max)
+    
+    cmax = kwargs.pop('cmax', clipmat.max())
+    cmin = kwargs.pop('cmin', clipmat.min())
+    
+    print("Color Range: ({}, {})".format(cmin, cmax))
+    
+    im = plt.imshow(clipmat,
+                    interpolation='nearest',
+                    cmap=cmap,
+                    **kwargs)
+    im.set_clim(cmin, cmax)
+    
     if title != None:
         plt.title(title)
 
     if 'label' not in kwargs:
-        plt.colorbar()
+        plt.colorbar(im)
     else:
-        plt.colorbar().set_label(kwargs['label'])
+        plt.colorbar(im).set_label(kwargs['label'])
 
 
     if figurename[-3:] == 'png':
