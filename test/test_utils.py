@@ -38,3 +38,4 @@ def test_index_io():
     os.remove('./teststr.h5')
     os.remove('./testindex5.txt')
 
+

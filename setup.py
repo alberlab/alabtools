@@ -15,8 +15,8 @@ try:
 except AttributeError:
     numpy_include = numpy.get_numpy_include()
 
-cmdclass = {}
 
+cmdclass = {}
 install_requires = [
     'numpy>=1.9',
     'scipy>=0.16',
@@ -45,7 +45,14 @@ extensions = [
               include_dirs=[numpy_include],
               extra_compile_args=["-fopenmp"],
               extra_link_args=["-fopenmp"]
-              ),
+             ),
+    Extension("alabtools._bounding_spheres", ["alabtools/bounding_spheres/c_bounding_spheres.pyx","alabtools/bounding_spheres/bounding_spheres_functions.cpp"],
+              language="c++",
+              include_dirs = [numpy_include, std_include],
+              library_dirs = [std_library],
+              extra_compile_args=["-lCGAL", "-lgmp"],
+              extra_link_args=["-lCGAL", "-lgmp"]
+             )
 ]
 
 if '--no-geotools' not in sys.argv:
