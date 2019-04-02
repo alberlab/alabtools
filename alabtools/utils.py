@@ -144,7 +144,7 @@ class Genome(object):
             chroms = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
             origins = assembly["genome"]["origins"]
             lengths = assembly["genome"]["lengths"]
-            assembly = unicode(assembly["genome"]["assembly"].value)
+            assembly = unicode(assembly["genome"]["assembly"][()])
 
         if (chroms is None) or (lengths is None):
             chroms = info["chroms"].astype(CHROMS_DTYPE)
