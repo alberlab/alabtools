@@ -4,6 +4,7 @@
 #include<iostream>
 #include<cmath>
 #include<limits>
+#include<cstdio>
 #define THREADS 16
 float *fetchData(int * Ap,
                  int * Aj,
@@ -140,7 +141,7 @@ void TopmeanSummaryMatrix(int * Ap,
     }
 }
 
-double SquareDistance(float x1, float y1, float z1, float x2, float y2, float z2){
+inline double SquareDistance(float x1, float y1, float z1, float x2, float y2, float z2){
     return (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2) + (z1-z2)*(z1-z2);
 }
 void BuildContactMap(float * coordinates, //nbead*nstruct*3
@@ -398,6 +399,59 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
 }
 
 }
+
+/*
+ * Create MRC Tomograms from structure coordinates 
+ * input float * coordinates
+ * 
+ */
+
+void TomogramsFromStructure(float * coordinates, int nbead,
+                            float * radii, float radialExpansion, float sratio,
+                            float * Tomogram, int DimA, int DimB, int DimC)
+{
+#pragma omp parallel num_threads(THREADS)
+{
+    #pragma omp for schedule(dynamic, 8)
+    for (int i = 0; i < DimA; ++i){
+        float x = i + 0.5 - DimA/2;
+        
+        for (int j = 0; j < DimB; ++j){
+            float y = j + 0.5 - DimB/2;
+            
+            for (int k = 0; k < DimC; ++k){
+                float z = k + 0.5 - DimC/2;
+                int TomoID = i*DimB*DimC + j*DimC + k;
+                //grid coord (x, y, z)
+                
+                for (int bead = 0; bead < nbead; ++bead){
+                    float bx = coordinates[bead*3];
+                    float by = coordinates[bead*3+1];
+                    float bz = coordinates[bead*3+2];
+                    float sigma = sratio * radii[bead];
+                    
+                    //bead coord (bx, by, bz)
+                    
+                    double dist2 = SquareDistance(x, y, z, bx, by, bz);
+                    if (dist2 <= radialExpansion*radialExpansion*radii[bead]*radii[bead]){
+                        Tomogram[TomoID] += 1.0;
+                    }else{
+                        // gaussian value exp(- d^2 / (2Sigma^2))
+                        Tomogram[TomoID] += std::exp( - dist2 / (2*sigma*sigma)); 
+                    }
+                    //printf("%f %f %f %f\n",bx, by, bz, Tomogram[TomoID]);
+                        
+                }
+            }
+        }
+        
+    }
+}
+
+
+}
+
+
 /*
 int main(){
     std::ifstream f;
