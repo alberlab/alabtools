@@ -313,7 +313,7 @@ void predictExponentialRegression(float * lhsValues, float * rhsValues, int lenl
     float Syy = Slnyi2/n - meanlny * meanlny;
     float Sxy = Sxilnyi/n - meanx * meanlny;
 
-    if ((Sxx == 0) or (Syy == 0)){return;}
+    if ((Sxx == 0) || (Syy == 0)){return;}
 
     float B = std::exp(Sxy/Sxx);
     float A = std::exp(meanlny - meanx * std::log(B));
@@ -358,14 +358,14 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
                     int jrhs = j + jincRHS[k][l];
                     int jlhs = j - jincRHS[k][l];
 
-                    if ((ilhs >= 0) and (ilhs < row) and
-                        (jlhs >= 0) and (jlhs < col)){
+                    if ((ilhs >= 0) && (ilhs < row) &&
+                        (jlhs >= 0) && (jlhs < col)){
                         lhsValues[l] = matrix[ilhs*col + jlhs];
                         lenl++;
                     }//0 otherwise
 
-                    if ((irhs >= 0) and (irhs < row) and
-                        (jrhs >= 0) and (jrhs < col)){
+                    if ((irhs >= 0) && (irhs < row) &&
+                        (jrhs >= 0) && (jrhs < col)){
                         rhsValues[l] = matrix[irhs*col + jrhs];
                         lenr++;
                     }//0 otherwise
@@ -375,7 +375,7 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
 
                 predictQuadraticRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
                 predictExponentialRegression(lhsValues, rhsValues, lenl, lenr, predictedValue, r);
-                if ( !std::isnan(predictedValue) and (predictedValue != 0)){
+                if ( !std::isnan(predictedValue) && (predictedValue != 0)){
                     valsum = valsum * valweight + std::abs(currentValue - predictedValue)/predictedValue * r * ((lenl+lenr)/6);
                     valweight += 1; //this is one because we are taking average of 4 predictions
                     valsum /= valweight;

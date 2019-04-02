@@ -94,9 +94,9 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
 
     clip_min = kwargs.pop('clip_min', -np.inf)
     clip_max = kwargs.pop('clip_max', np.inf)
-
+    
     cwrb = make_colormap([(1,1,1),(1,0,0),0.5,(1,0,0),(0,0,0)],'wrb')
-    cmap     = kwargs.pop('cmap',cwrb)
+    cmap = kwargs.pop('cmap',cwrb)
     fig  = plt.figure()
     if 'ticklabels1' in kwargs:
         plt.yticks(range(matrix.shape[0]))
@@ -111,18 +111,27 @@ def plotmatrix(figurename, matrix, title=None, dpi=300, **kwargs):
         if len(matrix) > mr:
             # use linear interpolation to avoid negative values
             matrix = zoom(matrix, float(mr) / len(matrix), order=1)
-
-    plt.imshow(np.clip(matrix, a_min=clip_min, a_max=clip_max),
-                        interpolation='nearest',
-                        cmap=cmap,
-                        **kwargs)
+    
+    clipmat = np.clip(matrix, a_min=clip_min, a_max=clip_max)
+    
+    cmax = kwargs.pop('cmax', clipmat.max())
+    cmin = kwargs.pop('cmin', clipmat.min())
+    
+    print("Color Range: ({}, {})".format(cmin, cmax))
+    
+    im = plt.imshow(clipmat,
+                    interpolation='nearest',
+                    cmap=cmap,
+                    **kwargs)
+    im.set_clim(cmin, cmax)
+    
     if title != None:
         plt.title(title)
 
     if 'label' not in kwargs:
-        plt.colorbar()
+        plt.colorbar(im)
     else:
-        plt.colorbar().set_label(kwargs['label'])
+        plt.colorbar(im).set_label(kwargs['label'])
 
 
     if figurename[-3:] == 'png':
@@ -222,16 +231,16 @@ def plot_comparison(m1, m2, chromosome=None, file=None, dpi=300, labels=None, ti
         plt.text(0.1, 0.1, labels[0], transform=plt.gca().transAxes)
         plt.text(0.9, 0.9, labels[1], transform=plt.gca().transAxes, horizontalalignment='right', verticalalignment='top')
     plt.colorbar()
-    if file is None:
-        plt.show()
-    else:
+    if file is not None:
         plt.tight_layout()
         plt.savefig(file, dpi=dpi)
-        plt.close(fig)
+    return fig
+
 
 def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, subplot_height=2.5,
                        sharey=True, subtitlesize=20, ticklabelsize=12, xgridstep=50e6,
-                       datalabels=None, highlight_zones=None, highlight_colors='red'):
+                       datalabels=None, highlight_zones=None, highlight_colors='red', vmin=None, vmax=None,
+                       suptitle=''):
     '''
     Plot tracks by chromosomes as subplots
 
@@ -266,8 +275,11 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
     n_cols = 4
     n_rows = n_chroms // n_cols if n_chroms % n_cols == 0 else n_chroms // n_cols + 1
     f, plots = plt.subplots(n_rows, n_cols, figsize=(subplot_width * n_cols, subplot_height * n_rows), sharey=sharey)
-    vmin = np.nanmin([ np.nanmin(d) for d in data])
-    vmax = np.nanmax([ np.nanmax(d) for d in data])
+    f.suptitle(suptitle)
+    if vmin is None:
+        vmin = np.nanmin([ np.nanmin(d) for d in data])
+    if vmax is None:
+        vmax = np.nanmax([ np.nanmax(d) for d in data])
     for i in range(n_chroms):
         col = i % n_cols
         row = i // n_cols
@@ -296,5 +308,5 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
         plots[row, col].tick_params(axis='both', which='major', labelsize=ticklabelsize, direction='in')
         #plots[row, col].set_xticklabels([''] * len(plots[row, col].get_xticklabels()))
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     return f, plots

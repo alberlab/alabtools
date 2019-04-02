@@ -17,12 +17,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
 
-__author__  = "Nan Hua and Guido Polles"
+__author__ = "Nan Hua and Guido Polles"
 
 __license__ = "GPL"
 __version__ = "0.0.3"
-__email__   = "nhua@usc.edu"
-
+__email__ = "nhua@usc.edu"
 
 import os
 import re
@@ -68,6 +67,7 @@ RADII_DTYPE = np.float32
 
 # size of buckets (in basepairs) for fast search in index (see index.loc function)
 BUCKET_SIZE = 1000000
+
 
 class Genome(object):
     """
@@ -120,13 +120,13 @@ class Genome(object):
             (chroms is None) or (lengths is None)
             ):
             datafile = os.path.join(
-                os.path.dirname( os.path.abspath(__file__) ),
+                os.path.dirname(os.path.abspath(__file__)),
                 "genomes/" + assembly + ".info"
             )
             if os.path.isfile(datafile):
                 if not silence:
                     sys.stderr.write("chroms or lengths not given, reading from genomes info file.\n")
-                info = np.genfromtxt(datafile,dtype=[("chroms",CHROMS_DTYPE),("lengths",LENGTHS_DTYPE)])
+                info = np.genfromtxt(datafile, dtype=[("chroms", CHROMS_DTYPE), ("lengths", LENGTHS_DTYPE)])
             else:
                 assembly = h5py.File(assembly, 'r')
 
@@ -140,28 +140,27 @@ class Genome(object):
             if lengths is None:
                 lengths = genome.lengths
 
-        if isinstance(assembly,h5py.File):
-            chroms  = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
+        if isinstance(assembly, h5py.File):
+            chroms = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
             origins = assembly["genome"]["origins"]
             lengths = assembly["genome"]["lengths"]
-            assembly = unicode(assembly["genome"]["assembly"][()])
-            usechr = None
+            assembly = unicode(assembly["genome"]["assembly"].value)
 
         if (chroms is None) or (lengths is None):
             chroms = info["chroms"].astype(CHROMS_DTYPE)
             lengths = info["lengths"].astype(LENGTHS_DTYPE)
-            origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
-        else :
+            origins = np.zeros(len(lengths), dtype=ORIGINS_DTYPE)
+        else:
             if origins is None:
-                origins = np.zeros(len(lengths),dtype=ORIGINS_DTYPE)
+                origins = np.zeros(len(lengths), dtype=ORIGINS_DTYPE)
             if len(chroms) != len(lengths) or len(chroms) != len(origins):
                 raise RuntimeError("Dimension of chroms and lengths do not match.")
 
-            chroms = np.array(chroms,dtype=CHROMS_DTYPE)
-            lengths = np.array(lengths,dtype=LENGTHS_DTYPE)
-            origins = np.array(origins,dtype=ORIGINS_DTYPE)
+            chroms = np.array(chroms, dtype=CHROMS_DTYPE)
+            lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
+            origins = np.array(origins, dtype=ORIGINS_DTYPE)
 
-        choices = np.zeros(len(chroms),dtype=bool)
+        choices = np.zeros(len(chroms), dtype=bool)
 
         if usechr is None:
             # if not specified, use all of them
@@ -174,22 +173,25 @@ class Genome(object):
                 # if specified with full name, remove chr
                 chrnum = chrnum.replace('chr', '')
                 choices = np.logical_or(chroms == ("chr%s" % chrnum), choices)
-        self.chroms = chroms[choices] # convert to unicode for python2/3 compatibility
+        self.chroms = chroms[choices]  # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
         self.assembly = unicode(assembly)
 
-    #-
+    # -
 
     def __eq__(self, other):
-        return (
-            np.all(self.chroms == other.chroms) and
-            np.all(self.origins == other.origins) and
-            np.all(self.lengths == other.lengths) and
-            np.all(self.assembly == other.assembly)
-        )
+        try:
+            return (
+                    np.all(self.chroms == other.chroms) and
+                    np.all(self.origins == other.origins) and
+                    np.all(self.lengths == other.lengths) and
+                    np.all(self.assembly == other.assembly)
+            )
+        except:
+            return False
 
-    def bininfo(self,resolution):
+    def bininfo(self, resolution):
 
         """
         Bin the genome by resolution
@@ -205,23 +207,23 @@ class Genome(object):
 
         """
 
-        binSize    = [int(math.ceil(float(x)/resolution)) for x in self.lengths]
+        binSize = [int(math.ceil(float(x) / resolution)) for x in self.lengths]
 
-        chromList  = []
-        binLabel   = []
+        chromList = []
+        binLabel = []
         for i in range(len(self.chroms)):
             chromList += [i for j in range(binSize[i])]
-            binLabel  += [j+int(self.origins[i]/resolution) for j in range(binSize[i])]
+            binLabel += [j + int(self.origins[i] / resolution) for j in range(binSize[i])]
 
-        startList  = [binLabel[j]*resolution for j in range(sum(binSize))]
-        endList    = [binLabel[j]*resolution + resolution for j in range(sum(binSize))]
+        startList = [binLabel[j] * resolution for j in range(sum(binSize))]
+        endList = [binLabel[j] * resolution + resolution for j in range(sum(binSize))]
 
-        binInfo    = Index(chromList,startList,endList,chrom_sizes=binSize, genome=self)
+        binInfo = Index(chromList, startList, endList, chrom_sizes=binSize, genome=self)
         return binInfo
 
     def getchrnum(self, chrom):
 
-        findidx = np.flatnonzero(self.chroms==unicode(chrom))
+        findidx = np.flatnonzero(self.chroms == unicode(chrom))
 
         if len(findidx) == 0:
             return None
@@ -229,18 +231,21 @@ class Genome(object):
             return findidx[0]
 
     def getchrom(self, chromNum):
-        assert isinstance(chromNum,(int,np.int32,np.int64))
+        assert isinstance(chromNum, (int, np.int32, np.int64))
         return self.chroms[chromNum]
 
     def __getitem__(self, key):
         if isinstance(key, (int, np.int32, np.int64)):
             return self.getchrom(key)
+
     def __len__(self):
         return len(self.chroms)
+
     def __repr__(self):
         represent = "Genome Assembly: " + self.assembly + '\n'
         for i in range(len(self.chroms)):
-            represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(self.origins[i]+self.lengths[i]) + '\n')
+            represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(
+                self.origins[i] + self.lengths[i]) + '\n')
         return represent
 
     def save(self, h5f, compression="gzip", compression_opts=6):
@@ -278,7 +283,7 @@ class Genome(object):
         if 'chroms' in ggrp:
             ggrp['chroms'][...] = np.array(self.chroms, dtype='S10')
         else:
-            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype='S10'), # hdf5 does not like unicode
+            ggrp.create_dataset("chroms", data=np.array(self.chroms, dtype='S10'),  # hdf5 does not like unicode
                                 compression=compression,
                                 compression_opts=compression_opts,
                                 )
@@ -296,7 +301,9 @@ class Genome(object):
             ggrp.create_dataset("lengths", data=self.lengths,
                                 compression=compression,
                                 compression_opts=compression_opts)
-#--------------------
+
+
+# --------------------
 
 
 class Index(object):
@@ -307,19 +314,19 @@ class Index(object):
 
     Parameters
     ----------
-    chrom : list[int32]
+    chrom : list[int32] or np.ndarray[int]
         numeric chromosome id (starting from 0) for each bin/bead.
         Es.: 0 -> chr1, 1 -> chr2, ..., 22 -> chrX
-    start : list[int32]
+    start : list[int32] or np.ndarray[int]
         genomic starting positions of each bin (in bp, with respect to the
         chromosome start)
-    end : list[int32]
+    end : list[int32] or np.ndarray[int]
         genomic ending positions of each bin (in bp, with respect to the
         chromosome start)
-    label : list[string10]
+    label : list[string10] or np.ndarray[str]
         label for each bin (usually, 'CEN', 'gap', 'domain', although it
         can be any string of less than 10 characters)
-    copy : list[int32], optional
+    copy : list[int32] or np.ndarray[int], optional
         In systems of beads, there may be multiple indistinguishable
         copies of the same chromosome in the system. The copy vector specifies
         which copy of the chromosome each bead maps to. If not specified,
@@ -327,12 +334,12 @@ class Index(object):
         `chrom` value belong to different copies.
         Each bead mapping to the same (chrom, start, end) tuple should,
         in general, have a different copy value.
-    chrom_sizes : list[int32], optional
+    chrom_sizes : list[int32] or np.ndarray[int], optional
         number of bins/beads in each chromosome. It is useful to specify it if
         two copies of the same chromosome appear as contiguous in the index.
         If not specified, it is automatically computed assuming non-contiguous
         groups of beads with the same `chrom` value belong to different copies.
-    genome: alabtools.utils.Genome, optional
+    genome: alabtools.utils.Genome or str, optional
         genome info for the index.
     usecols: list of ints
         if reading from a text file, use only a subset of columns
@@ -342,7 +349,8 @@ class Index(object):
 
     """
 
-    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], genome=None, usecols=None, ignore_headers=False, **kwargs):
+    def __init__(self, chrom=[], start=[], end=[], label=[], copy=[], chrom_sizes=[], genome=None, usecols=None,
+                 ignore_headers=False, **kwargs):
 
         self.custom_tracks = []
         self.chrom_sizes = chrom_sizes
@@ -371,17 +379,17 @@ class Index(object):
                     assert len(colnames) == n_fields
                     if usecols:
                         colnames = np.array(colnames)[usecols].tolist()
-                        assert(colnames[:3] == ['chrom', 'start', 'end'])
+                        assert (colnames[:3] == ['chrom', 'start', 'end'])
                 else:
-                    colnames = ['chrom', 'start', 'end'] + ['track%d' % i for i in range(n_fields-3)]
+                    colnames = ['chrom', 'start', 'end'] + ['track%d' % i for i in range(n_fields - 3)]
 
                 data.dtype.names = colnames
 
                 # transform chrom names to integers ids
                 self.chromstr = data['chrom']
                 if self.genome is None:
-                    cmap = { s: i for i, s in enumerate(natural_sort(np.unique(data['chrom'])))}
-                    self.chrom = [ cmap[c] for c in data['chrom'] ]
+                    cmap = {s: i for i, s in enumerate(natural_sort(np.unique(data['chrom'])))}
+                    self.chrom = [cmap[c] for c in data['chrom']]
                 else:
                     if not isinstance(self.genome, Genome):
                         self.genome = Genome(self.genome)
@@ -389,7 +397,7 @@ class Index(object):
 
                 # set the variables for further processing
                 self.start = data['start']
-                self.end   = data['end']
+                self.end = data['end']
                 if 'label' in data.dtype.names:
                     self.label = data['label']
                 else:
@@ -424,7 +432,7 @@ class Index(object):
             self.copy = copy
 
         # fix datatypes and eventual problems
-        if not(len(self.chrom) == len(self.start) == len(self.end)):
+        if not (len(self.chrom) == len(self.start) == len(self.end)):
             raise RuntimeError("Dimensions do not match.")
 
         if len(self.chrom):
@@ -436,8 +444,8 @@ class Index(object):
                     if self.genome is not None:
                         self.chrom = [self.genome.getchrnum(x) for x in self.chromstr]
                     else:
-                        cmap = { s: i for i, s in enumerate(natural_sort(np.unique(self.chromstr)))}
-                        self.chrom = [ cmap[c] for c in self.chromstr ]
+                        cmap = {s: i for i, s in enumerate(natural_sort(np.unique(self.chromstr)))}
+                        self.chrom = [cmap[c] for c in self.chromstr]
                 else:
                     raise RuntimeError("chrom should be a list of integers or strings.")
 
@@ -447,17 +455,17 @@ class Index(object):
             raise RuntimeError("end should be list of integers.")
         self.chrom = np.array(self.chrom, dtype=CHROM_DTYPE)
         self.start = np.array(self.start, dtype=START_DTYPE)
-        self.end   = np.array(self.end, dtype=END_DTYPE)
+        self.end = np.array(self.end, dtype=END_DTYPE)
 
         if len(self.copy) != len(self.chrom):
             self.copy = np.zeros(len(self.chrom), dtype=COPY_DTYPE)
             self._compute_copy_vec()
         else:
-            self.copy= np.array(self.copy, dtype=COPY_DTYPE)
+            self.copy = np.array(self.copy, dtype=COPY_DTYPE)
 
-        if len(self.chrom_sizes) == 0 and len(self.chrom) != 0: # chrom sizes have not been computed yet
+        if len(self.chrom_sizes) == 0 and len(self.chrom) != 0:  # chrom sizes have not been computed yet
             self.chrom_sizes = [
-                len( list(g) )
+                len(list(g))
                 for _, g in itertools.groupby(
                     zip(self.chrom, self.copy)
                 )
@@ -490,14 +498,14 @@ class Index(object):
             if self.genome is not None:
                 self.chromstr = self.genome.chroms[self.chrom]
             else:
-                self.chromstr = np.array([ 'chr%d' % (i + 1) for i in self.chrom])
+                self.chromstr = np.array(['chr%d' % (i + 1) for i in self.chrom])
 
         self._map_chrom_id = {}
         self._map_id_chrom = {}
         for i, s in zip(self.chrom, self.chromstr):
             self._map_chrom_id[s] = i
             self._map_id_chrom[i] = s
-        #-
+        # -
 
     @staticmethod
     def _look_for_bed_header(file_descriptor):
@@ -523,7 +531,7 @@ class Index(object):
                 else:
                     # if has a bed header, I don't know exactly how to parse it,
                     # so check only the other cases
-                    if not ( line.startswith('track') or line.startswith('browser') ):
+                    if not (line.startswith('track') or line.startswith('browser')):
                         ss = StringIO(line)
                         x = np.genfromtxt(ss, dtype=None, encoding=None)
                         if x.dtype.kind == 'U':
@@ -569,6 +577,22 @@ class Index(object):
             genome=self.genome
         )
 
+    def resolution(self):
+        '''
+        Checks if all the region sizes are equal (except for the last region of each chromosome).
+        If they are, returns the only size as a resolution. If a resolution cannot be determined
+        returns None.
+        :return: int or None
+        '''
+        sizes = self.end - self.start
+        last_beads = np.array([self.offset[i] - 1 for i in range(1, len(self.offset))])
+        mask = np.ones(len(self), np.bool)
+        mask[last_beads] = False
+        us = np.unique(sizes[mask])
+        if len(us) == 1:
+            return us[0]
+        return None
+
     def chrom_to_id(self, c):
         return self._map_chrom_id[c]
 
@@ -594,7 +618,7 @@ class Index(object):
         '''
         if isinstance(c, string_types):
             if self.genome is None:
-                c = int(c.replace('chr', ''))  - 1
+                c = int(c.replace('chr', '')) - 1
             else:
                 c = self.genome.getchrnum(c)
         idx = self.chrom == c
@@ -628,15 +652,15 @@ class Index(object):
         '''
         return pd.unique(self.chromstr)
 
-    def __getitem__(self,key):
+    def __getitem__(self, key):
         return np.rec.fromarrays((self.chrom[key],
                                   self.start[key],
                                   self.end[key],
                                   self.label[key]),
-                                 dtype=[("chrom",CHROM_DTYPE),
-                                        ("start",START_DTYPE),
-                                        ("end",END_DTYPE),
-                                        ("label",LABEL_DTYPE)])
+                                 dtype=[("chrom", CHROM_DTYPE),
+                                        ("start", START_DTYPE),
+                                        ("end", END_DTYPE),
+                                        ("label", LABEL_DTYPE)])
 
     def __len__(self):
         return len(self.chrom)
@@ -649,7 +673,7 @@ class Index(object):
 
     def add_custom_track(self, k, v, force=False):
         a = np.array(v)
-        assert(len(a) == len(self))
+        assert (len(a) == len(self))
 
         if k in self.custom_tracks:
             if not force:
@@ -660,7 +684,7 @@ class Index(object):
         self.__setattr__(k, a)
 
     def remove_custom_track(self, k):
-        if ( not hasattr(self, k) ) or ( k not in self.custom_tracks ):
+        if (not hasattr(self, k)) or (k not in self.custom_tracks):
             raise KeyError('track %s not present' % k)
         self.custom_tracks.remove(k)
         t = getattr(self, k)
@@ -703,12 +727,12 @@ class Index(object):
         if len(self.copy) == 0:
             return
         chrom_ids = set(self.chrom)
-        copy_no = { c: -1 for c in chrom_ids}
+        copy_no = {c: -1 for c in chrom_ids}
         copy_no[self.chrom[0]] = 0
         self.copy[0] = 0
         for i in range(1, len(self.chrom)):
             cc = self.chrom[i]
-            if self.chrom[i - 1] != cc or self.start[i] < self.end[i-1]:
+            if self.chrom[i - 1] != cc or self.start[i] < self.end[i - 1]:
                 copy_no[cc] += 1
             self.copy[i] = copy_no[cc]
 
@@ -743,8 +767,8 @@ class Index(object):
     def load_h5f(self, h5f):
         self.chrom = h5f["index"]["chrom"][()]
         self.start = h5f["index"]["start"][()]
-        self.end   = h5f["index"]["end"][()]
-        self.copy  = h5f["index"]["copy"][()]
+        self.end = h5f["index"]["end"][()]
+        self.copy = h5f["index"]["copy"][()]
         self.label = np.array(h5f["index"]["label"][()], LABEL_DTYPE)
         self.chrom_sizes = h5f["index"]["chrom_sizes"][()]
         if 'genome' in h5f:
@@ -757,7 +781,7 @@ class Index(object):
             tmp = json.loads(h5f["index"]["copy_index"][()])
             # it may happen that in json dump/loading keys are considered
             # as strings.
-            self.copy_index = { int(k): v for k, v in tmp.items() }
+            self.copy_index = {int(k): v for k, v in tmp.items()}
         except (KeyError, ValueError):
             pass
 
@@ -777,7 +801,7 @@ class Index(object):
     def load_txt(self, f):
         pass
 
-    def save(self,h5f,compression="gzip", compression_opts=6):
+    def save(self, h5f, compression="gzip", compression_opts=6):
 
         """
         Save index information into a hd5f file handle. The information will
@@ -881,9 +905,13 @@ class Index(object):
             # scalar datasets don't support compression
             igrp.create_dataset("custom_tracks", data=json.dumps(self.custom_tracks))
 
+        if self.genome and "genome" not in h5f:
+            self.genome.save(h5f)
+
         h5f.flush()
 
-    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";", cut_chrom_ends=False):
+    def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";",
+                 cut_chrom_ends=False):
 
         if isinstance(file, str):
             file = open(file, 'w')
@@ -942,9 +970,9 @@ class Index(object):
             self.loctree = LocStruct(self)
 
         if end is None:
-            buckets = self.loctree[ chrom ][ start // BUCKET_SIZE : start // BUCKET_SIZE + 1]
+            buckets = self.loctree[chrom][start // BUCKET_SIZE: start // BUCKET_SIZE + 1]
         else:
-            buckets = self.loctree[ chrom ][ start // BUCKET_SIZE : (end-1) // BUCKET_SIZE + 1]
+            buckets = self.loctree[chrom][start // BUCKET_SIZE: (end - 1) // BUCKET_SIZE + 1]
         locs = [np.array([], dtype=int)]
         for bucket in buckets:
             locs.append(bucket.get_intersections(start, end))
@@ -960,7 +988,6 @@ class Index(object):
 
 
 def loadstream(filename):
-
     """
     Convert a file location, return a file handle
     zipped file are automaticaly unzipped using stream
@@ -969,13 +996,13 @@ def loadstream(filename):
     if not os.path.isfile(filename):
         raise IOError("File %s doesn't exist!\n" % (filename))
     if os.path.splitext(filename)[1] == '.gz':
-        p = subprocess.Popen(["zcat", filename], stdout = subprocess.PIPE)
+        p = subprocess.Popen(["zcat", filename], stdout=subprocess.PIPE)
         f = StringIO(p.communicate()[0])
     elif os.path.splitext(filename)[1] == '.bz2':
-        p = subprocess.Popen(["bzip2 -d", filename], stdout = subprocess.PIPE)
+        p = subprocess.Popen(["bzip2 -d", filename], stdout=subprocess.PIPE)
         f = StringIO(p.communicate()[0])
     else:
-        f = open(filename,'r')
+        f = open(filename, 'r')
     return f
 
 
@@ -984,7 +1011,7 @@ def make_diploid(index):
     for k in ['chrom', 'start', 'end', 'label']:
         didx[k] = np.concatenate([index.__dict__[k], index.__dict__[k]])
     didx['copy'] = np.concatenate([index.__dict__['copy'],
-                                   index.__dict__['copy'] + 1 ])
+                                   index.__dict__['copy'] + 1])
     return Index(didx['chrom'], didx['start'], didx['end'], label=didx['label'], copy=didx['copy'])
 
 
@@ -1023,8 +1050,8 @@ def make_multiploid(index, chroms, copies):
     '''
     nchrom = []
     nstart = []
-    nend   = []
-    ncopy  = []
+    nend = []
+    ncopy = []
     nlabel = []
     csizes = []
     add_tracks = {k: [] for k in index.custom_tracks}
@@ -1036,7 +1063,7 @@ def make_multiploid(index, chroms, copies):
                 nstart.append(index.start[idxs])
                 nend.append(index.end[idxs])
                 nlabel.append(index.label[idxs])
-                ncopy.append(np.array([z]*len(idxs)))
+                ncopy.append(np.array([z] * len(idxs)))
                 csizes.append(len(idxs))
                 for k in index.custom_tracks:
                     add_tracks[k].append(index.get_custom_track(k)[idxs])
@@ -1067,15 +1094,15 @@ def get_index_from_bed(
     return Index(file, genome, usecols)
 
 
-_ftpi = 4./3. * np.pi
-DEFAULT_NUCLEAR_VOLUME = _ftpi * (5000**3)
+_ftpi = 4. / 3. * np.pi
+DEFAULT_NUCLEAR_VOLUME = _ftpi * (5000 ** 3)
 
 
 def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
     sizes = [b.end - b.start for b in index]
     totsize = sum(sizes)
     prefactor = volume * occupancy / (_ftpi * totsize)
-    rr = [(prefactor*sz)**(1./3.) for sz in sizes]
+    rr = [(prefactor * sz) ** (1. / 3.) for sz in sizes]
     return np.array(rr, dtype=RADII_DTYPE)
 
 
@@ -1095,9 +1122,9 @@ class H5Batcher():
         if z != self.b:
             self.b = z
             self.batch = self.ds[
-                self.bsize*z :
-                min(self.n, self.bsize * (z + 1))
-            ][()]
+                         self.bsize * z:
+                         min(self.n, self.bsize * (z + 1))
+                         ][()]
         return self.batch[key % self.bsize]
 
     def __len__(self):
@@ -1131,16 +1158,16 @@ def remap(s0, s1):
         the inverse mapping from s1 to s0.
     '''
 
-    dmap = [list() for _ in range(len(s0)-1)]
-    imap = [list() for _ in range(len(s1)-1)]
+    dmap = [list() for _ in range(len(s0) - 1)]
+    imap = [list() for _ in range(len(s1) - 1)]
 
     # Define an overlap score to generalize the choice of corresponding
     # elements when boundaries do not match. Simply the size of the
     # overlapping section
     def overlap(i, j):
         b = max(s0[i], s1[j])
-        e = min(s0[i+1], s1[j+1])
-        return max(0, e-b)
+        e = min(s0[i + 1], s1[j + 1])
+        return max(0, e - b)
 
     N = len(s0) - 1
     M = len(s1) - 1
@@ -1153,7 +1180,7 @@ def remap(s0, s1):
         dmap[i].append(j)
         imap[j].append(i)
 
-        if i == N-1 and j == M-1:
+        if i == N - 1 and j == M - 1:
             break
 
         # if we get to the end of a segmentation, assign all the rest of
@@ -1164,7 +1191,7 @@ def remap(s0, s1):
             j += 1
         else:
             # decide on which sequence(s) to advance based on overlap
-            v = [overlap(i+1, j), overlap(i, j+1), overlap(i+1, j+1)]
+            v = [overlap(i + 1, j), overlap(i, j + 1), overlap(i + 1, j + 1)]
 
             k = v.index(max(v))
 
@@ -1189,24 +1216,24 @@ def get_index_mappings(idx0, idx1):
     cmap, fwmap, bwmap = [], [], []
     for i in range(n_chrom):
         # create the arrays of boundaries
-        v0 = np.concatenate([ idx0.start[cc0[i]:cc0[i+1]], [ idx0.end[ cc0[ i + 1 ] - 1 ] ] ])
-        v1 = np.concatenate([ idx1.start[cc1[i]:cc1[i+1]], [ idx1.end[ cc1[ i + 1 ] - 1 ] ] ])
+        v0 = np.concatenate([idx0.start[cc0[i]:cc0[i + 1]], [idx0.end[cc0[i + 1] - 1]]])
+        v1 = np.concatenate([idx1.start[cc1[i]:cc1[i + 1]], [idx1.end[cc1[i + 1] - 1]]])
 
         # get the maps chromosome by chromosome
         dm, im = remap(v0, v1)
-        cmap.append( [dm, im] )
+        cmap.append([dm, im])
 
         # the full mapping needs to add the chromosome offset
         # to every element (note, elements in direct map refer to
         # the second segmentation, and viceversa)
         fwmap += [
             [
-                x + idx1.offset[ i ] for x in row
+                x + idx1.offset[i] for x in row
             ] for row in dm
         ]
         bwmap += [
             [
-                x + idx0.offset[ i ] for x in row
+                x + idx0.offset[i] for x in row
             ] for row in im
         ]
 
@@ -1303,14 +1330,14 @@ class LocStruct:
             bE = [list() for _ in range(nbuckets)]
             bI = [list() for _ in range(nbuckets)]
             for s, e, i in zip(starts, ends, ids):
-                i0, i1 = s // BUCKET_SIZE, (e-1) // BUCKET_SIZE
-                for k in range(i0, i1+1):
+                i0, i1 = s // BUCKET_SIZE, (e - 1) // BUCKET_SIZE
+                for k in range(i0, i1 + 1):
                     bS[k].append(s)
                     bE[k].append(e)
                     bI[k].append(i)
             self.chroms[c] = list()
             for i in range(nbuckets):
-                self.chroms[c].append( BucketLinear(bI[i], bS[i], bE[i]) )
+                self.chroms[c].append(BucketLinear(bI[i], bS[i], bE[i]))
 
             self.chroms[cid] = self.chroms[c]
 
@@ -1334,7 +1361,7 @@ def underline(*args, **kwargs):
     import re
     char = kwargs.pop('char', '-')
     terminal = kwargs.pop('terminal', False)
-    s = ' '.join([str(a) if hasattr(a, '__str__') else repr(a) for a in args ])
+    s = ' '.join([str(a) if hasattr(a, '__str__') else repr(a) for a in args])
     ss = re.split('[\\r\\n]+', s)
     l = max([len(x) for x in ss])
     if terminal:
@@ -1361,21 +1388,21 @@ def block_transpose(x1, x2, max_items=int(1e8)):
     n = x1.shape[0]
     k = max(max_items // n, 1)
     for i in range(0, n, k):
-        s = min(k, n-i)
-        block = x1[i:i+s].swapaxes(0, 1) # get a subset and transpose in memory
-        x2[:, i:i+s] = block
+        s = min(k, n - i)
+        block = x1[i:i + s].swapaxes(0, 1)  # get a subset and transpose in memory
+        x2[:, i:i + s] = block
 
 
 def isSymmetric(x):
     return np.all(x.T == x)
 
 
-#See details in Imakaev et al. (2012)
+# See details in Imakaev et al. (2012)
 def PCA(A, numPCs=6, verbose=False):
     """performs PCA analysis, and returns 6 best principal components
     result[0] is the first PC, etc"""
-    #A = np.array(A, float)
-    if np.sum(np.sum(A, axis=0) == 0) > 0 :
+    # A = np.array(A, float)
+    if np.sum(np.sum(A, axis=0) == 0) > 0:
         warnings.warn("Columns with zero sum detected. Use zeroPCA instead")
     M = (A - np.mean(A.T, axis=1)).T
     covM = np.dot(M, M.T)
@@ -1390,8 +1417,8 @@ def EIG(A, numPCs=3):
     result[0] is the first EV, etc.;
     by default returns 3 EV
     """
-    #A = np.array(A, float)
-    if np.sum(np.sum(A, axis=0) == 0) > 0 :
+    # A = np.array(A, float)
+    if np.sum(np.sum(A, axis=0) == 0) > 0:
         warnings.warn("Columns with zero sum detected. Use zeroEIG instead")
     M = (A - np.mean(A))  # subtract the mean (along columns)
     if isSymmetric(A):
@@ -1509,7 +1536,7 @@ class CatmullRomSpline:
             start = int((self.pos[z - 1] - self.pos[0]) / mean_size)
             end = int((self.pos[z] - self.pos[0]) / mean_size)
             for i in range(start, end + 1):
-                self._buckets[i].append(z-1)
+                self._buckets[i].append(z - 1)
         self._bucket_step = mean_size
 
     def __call__(self, t):
@@ -1525,4 +1552,4 @@ class CatmullRomSpline:
             ib = np.searchsorted(a, t, side='right') - 1  # left interval boundary
             i = self._buckets[k][ib]
             q = (t - self.pos[i]) / self.steps[i]
-            return spline_4p(q, self.points[i:i+4])
+            return spline_4p(q, self.points[i:i + 4])

@@ -16,27 +16,35 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
-
-__author__  = "Guido Polles, Nan Hua"
-
-__license__ = "GPL"
-__version__ = "0.0.3"
-__email__   = "polles@usc.edu"
-
 import numpy as np
 import warnings
-import os, errno
+import os
+import sys
+import errno
 from .api import Contactmatrix
 from .plots import plot_comparison, plotmatrix
 import h5py
 from .utils import unicode, Genome, Index, COORD_DTYPE, RADII_DTYPE, CatmullRomSpline
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
+from tempfile import mkdtemp, mktemp
+import scipy.io
+import scipy.sparse
+import shutil
+import colorsys
+from subprocess import Popen, PIPE, STDOUT
+
 try:
     from tqdm import tqdm
 except ImportError:
     def tqdm(a, *args, **kwargs):
         return a
+
+__author__  = "Guido Polles, Nan Hua"
+
+__license__ = "GPL"
+__version__ = "0.0.3"
+__email__   = "polles@usc.edu"
 
 __hss_version__ = 2.0
 #COORD_CHUNKSIZE = (100, 100, 3)
@@ -264,17 +272,103 @@ class HssFile(h5py.File):
                                 chunks=True, compression="gzip")
         self.attrs['nbead'] = self._nbead = radii.shape[0]
 
-    def buildContactMap(self, contactRange = 2):
+    @staticmethod
+    def _get_number_of_contacts(ci, cj, cutoff):
+        csq = cutoff*cutoff
+        d2 = np.square(ci - cj).sum(axis=1)
+        return np.count_nonzero(d2 <= csq)
+
+    @staticmethod
+    def _get_contact_submatrix(cis, cjs, cutoff, dtype=np.float32):
+        return np.array([
+            [HssFile._get_number_of_contacts(xi, xj, cutoff) for xj in cjs]
+            for xi in cis
+        ], dtype=dtype)
+
+    def _ipyparallel_get_contact_probability_map(self, cutoff, absolute_cutoff=False, client=None, tmpdir=None):
+
+        if client is None:
+            from ipyparallel import Client
+            client = Client()
+
+        lbv = client.load_balanced_view()
+        n_workers = len(client)
+        if n_workers == 0:
+            raise RuntimeError('No workers available')
+
+        # ~4 items per worker
+        n = self.nbead
+        step = max(n // n_workers // 2, 1)
+
+        # prepare directory and write current data, to be sure
+        tdir = mkdtemp(prefix=tmpdir)
+        try:
+            for i in range(0, self.nbead, step):
+                np.save(f'{tdir}/{i}.npy', [self.get_bead_crd(j) for j in range(i, min(i+step, self.nbead))])
+
+            def task(tdir, i, j, cutoff):
+                crdi = np.load(f'{tdir}/{i}.npy')
+                crdj = np.load(f'{tdir}/{j}.npy')
+                sm = HssFile._get_contact_submatrix(crdi, crdj, cutoff)
+                sm = scipy.sparse.csr_matrix(sm)
+                scipy.io.mmwrite(f'{tdir}/{i}_{j}.mtx', sm)
+
+            ii = []
+            jj = []
+            cutoffs = []
+            r = self.radii
+            for i in range(0, self.nbead, step):
+                for j in range(i, self.nbead, step):
+                    ii.append(i)
+                    jj.append(j)
+                    if absolute_cutoff:
+                        cutoffs.append(cutoff)
+                    else:
+                        cutoffs.append(cutoff * (r[i] + r[j]))
+
+            n_a = len(ii)
+
+            ar = lbv.map_async(task, [tdir] * n_a, ii, jj, cutoffs)
+
+            n = len(list(range(0, self.nbead, step)))
+            outs = [[None for _ in range(n)] for _ in range(n)]
+            last = -1
+            for i, j, r in tqdm(zip(ii, jj, ar)):
+                if i != last:
+                    outs[i // step][j // step] = scipy.io.mmread(f'{tdir}/{i}_{j}.mtx') / self.nstruct
+                    if i == j:
+                        outs[i // step][j // step] = scipy.sparse.triu(outs[i // step][j // step])
+
+        finally:
+            shutil.rmtree(tdir)
+
+        idx_or_resolution = self.index.resolution()
+        if idx_or_resolution is None:
+            idx_or_resolution = self.index
+
+        return Contactmatrix(scipy.sparse.bmat(outs),
+                             genome=self.genome,
+                             usechr=self.genome.chroms,
+                             resolution=idx_or_resolution)
+
+    def buildContactMap(self, contactRange = 2, use_ipyparallel=False, absolute_range=False, client=None):
+        if absolute_range and not use_ipyparallel:
+            raise NotImplementedError()
+        if use_ipyparallel:
+            return self._ipyparallel_get_contact_probability_map(contactRange,
+                                                                 absolute_cutoff=absolute_range,
+                                                                 client=client)
         from ._cmtools import BuildContactMap_func
         from .api import Contactmatrix
         from .matrix import sss_matrix
-        mat = Contactmatrix(None, genome=None, resolution=None)
-        mat.genome = self.genome
-        mat.index = self.index
+        idx_or_resolution = self.index.resolution()
+        if idx_or_resolution is None:
+            idx_or_resolution = self.index
+        mat = Contactmatrix(None, genome=self.genome, resolution=idx_or_resolution)
         DimB = len(self.radii)
-        Bi = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
-        Bj = np.empty(int(DimB*(DimB+1)/2),dtype=np.int32)
-        Bx = np.empty(int(DimB*(DimB+1)/2),dtype=np.float32)
+        Bi = np.empty(int(DimB*(DimB+1)/2), dtype=np.int32)
+        Bj = np.empty(int(DimB*(DimB+1)/2), dtype=np.int32)
+        Bx = np.empty(int(DimB*(DimB+1)/2), dtype=np.float32)
 
         crd = self.coordinates
         if crd.flags['C_CONTIGUOUS'] is not True:
@@ -282,7 +376,6 @@ class HssFile(h5py.File):
         BuildContactMap_func(crd, self.radii, contactRange, Bi, Bj, Bx)
 
         mat.matrix = sss_matrix((Bx, (Bi, Bj)))
-        mat.resolution = np.nan
         return mat
 
     def has_struct_major(self):
@@ -507,7 +600,219 @@ class HssFile(h5py.File):
 
         dcdfh.close()
 
-#================================================
+    @staticmethod
+    def _parse_range_string(s, vmax=-1):
+        items = s.split(',')
+        out = list()
+        for it in items:
+            if it.strip() == '':
+                continue
+            if ':' in it:  # slice style
+                slice_items = it.split(':')
+                if slice_items[0].strip() == '':
+                    slice_items[0] = 0
+                if slice_items[1].strip() == '':
+                    slice_items[1] = vmax
+                if len(slice_items) == 2:
+                    slice_items.append(1)
+                elif len(slice_items) == 3:
+                    if slice_items[2].strip() == '':
+                        slice_items[2] = 1
+                else:
+                    raise ValueError('Invalid slice %s' % it)
+                slice_items = [int(x) for x in slice_items]
+                out += list(range(*slice_items))
+            elif '-' in it:
+                rngs = it.split('-')
+                if len(rngs) == 2:
+                    out += list(range(int(rngs[0]), int(rngs[1]) + 1))
+                else:
+                    raise ValueError('invalid range %s' % it)
+            else:
+                out.append(int(it))
+
+        return out
+
+    def dump_pdb(self, confs, fname='structure_%d.pdb', render=False, high_quality=False,
+                 fmt='png', wsize=(1024, 1024), show_bonds=True, **image_kwargs):
+        if isinstance(confs, (int, np.integer)):
+            confs = [confs]
+        elif isinstance(confs, str):
+            confs = self._parse_range_string(confs, self.nstruct)
+
+        radii = self.radii
+        idx = self.index
+        genome = self.genome
+        chroms = self.index.get_chromosomes()
+        n_chrom = max(chroms) + 1
+
+        # set the tubewidth relative to the size of the beads
+        tubewidth = min(radii/1000) * 0.6
+
+        # Generate colors
+        h = np.arange(float(n_chrom + 2)) / (n_chrom + 1)
+        color = {}
+        for i in range(n_chrom):
+            color[i] = colorsys.hsv_to_rgb(h[i], 1, 1)
+
+        if not fname.endswith('.pdb'):
+            fname = fname + '.pdb'
+
+        for conf in confs:
+            crd = self.get_struct_crd(conf)
+
+            if '%' in fname:
+                ofname = fname % conf
+            else:
+                ofname = fname
+
+            # Write PDB
+            rn = ''
+            rnum = 0
+            bondlist = ''
+
+            with open(ofname, 'w') as outf:
+                for i, (x, y, z) in enumerate(crd):
+                    cpy = idx.copy[i]
+                    nrn = str(genome.getchrom(idx.chrom[i])).replace('chr', '')
+                    if nrn != rn:
+                        rnum += 1
+                    else:
+                        bondlist += ' {%d %d}' % (i - 1, i)
+                    rn = nrn
+                    vstr = '{:6s}{:5d} {:^4s}{:1s}{:3s}'.format('HETATM', i + 1, 'BDX', ' ', rn)
+                    vstr += ' {:1s}{:4d}{:1s}   '.format(str(cpy), rnum, ' ')
+                    vstr += '{:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}'.format(x / 1000, y / 1000, z / 1000, radii[i] / 1000,
+                                                                         0, 0, 0)
+                    print(vstr, file=outf)
+
+            # Write tcl file
+            script = ''
+            script += 'package require topotools\n'
+            # Set colors
+
+            for i in range(23):
+                cn = i + 1
+                script += 'color change rgb %d %f %f %f\n' % (cn, color[i][0], color[i][1], color[i][2])
+            # Load coordinates
+            script += 'mol new %s type pdb autobonds no\n' % ofname
+            # Set radiuses
+            script += 'mol delrep 0 top\n'
+            script += 'set sel [atomselect top all]\n'
+            script += '$sel set radius [$sel get occupancy]\n'
+            # Create representation
+            script += 'mol representation VDW 1.000000 12.000000\n'
+            script += 'mol color ResName\n'
+            script += 'mol selection {all}\n'
+            script += 'mol material Diffuse\n'
+            script += 'mol addrep top\n'
+
+            script += 'topo setbondlist { %s }\n' % bondlist
+            if show_bonds:
+                script += 'mol representation Bonds %.6f 12.000000\n' % tubewidth
+                script += 'mol selection {all}\n'
+                script += 'mol material Diffuse\n'
+                script += 'mol addrep top\n'
+
+            script += f'''
+                display projection Orthographic
+                axes location Off
+                color Display Background 300
+                color change rgb 300 0.000000 0.000000 0.000000
+                display resize {wsize[0]} {wsize[1]}
+                display height 4
+            '''
+
+            if high_quality:
+                script += 'display ambientocclusion on\n' \
+                          'display shadows on\n'
+
+            scriptname = ofname[:-4] + '.tcl'
+            with open(scriptname, 'w') as outf:
+                outf.write(script)
+
+            if render:
+                imfile = ofname[:-4] + '.tga'
+                rendercmd = f'render TachyonInternal {imfile}\nquit\n'
+
+                tmpfname = mktemp()
+                with open(tmpfname, 'wb') as tmpf:
+                    tmpf.write((script + rendercmd).encode('utf-8'))
+
+                out, err = mktemp(), mktemp()
+                r = os.system(f'vmd -e {tmpfname} -dispdev text > {out} 2> {err}')
+                if r != 0:  # error occured
+                    sys.stderr.write('Error executing vmd.\nDumped logs to hss.render.out and hss.render.err.\n')
+                    shutil.copy(out, 'hss.render.out')
+                    shutil.copy(err, 'hss.render.err')
+                    continue
+                else:
+                    if fmt != 'tga':
+                        try:
+                            from PIL import Image
+                            im = Image.open(imfile)
+                            oifile = ofname[:-4] + '.' + fmt
+                            im.save(oifile, **image_kwargs)
+                            os.remove(imfile)
+                        except ImportError:
+                            pass
+
+                os.remove(tmpfname)
+                os.remove(out)
+                os.remove(err)
+
+    def dump_cmm(self, confs, fname='structure_%d.cmm'):
+        markertemplate = '<marker id="%d" x="%.3f" y="%.3f" z="%.3f" r="%.3f" g="%.3f" b="%.3f" note="" ' \
+                         'radius="%.3f" nr="%.3f" ng="%.3f" nb="%.3f" extra="%s"/>\n'
+        linktemplate = '<link id1="%d" id2="%d" r="%.3f" g="%.3f" b="%.3f" radius="20" />\n'
+
+        if isinstance(confs, int):
+            confs = [confs]
+        elif isinstance(confs, str):
+            confs = self._parse_range_string(confs, self.nstruct)
+
+        r = self.radii
+        chroms = self.index.get_chromosomes()
+        n_chrom = max(chroms) + 1
+        idx = self.index.chrom
+
+        # Generate colors
+        h = np.arange(float(n_chrom + 2)) / (n_chrom + 1)
+        color = {}
+        for i in range(n_chrom):
+            color[i] = colorsys.hsv_to_rgb(h[i], 1, 1)
+
+        for conf in confs:
+            crd = self.get_struct_crd(conf)
+
+            if '%' in fname:
+                ofname = fname % conf
+            else:
+                ofname = fname
+
+            with open(ofname, 'w') as f:
+                f.write('<marker_set name="bead">\n')
+                for i in range(len(crd)):
+                    f.write(markertemplate % (i + 1,
+                                              crd[i, 0], crd[i, 1], crd[i, 2],
+                                              color[idx[i]][0],
+                                              color[idx[i]][1],
+                                              color[idx[i]][2],
+                                              r[i],
+                                              color[idx[i]][0],
+                                              color[idx[i]][1],
+                                              color[idx[i]][2],
+                                              ''))
+                    if i > 0 and idx[i] == idx[i - 1]:
+                        f.write(linktemplate % (i, i + 1,
+                                                color[idx[i]][0],
+                                                color[idx[i]][1],
+                                                color[idx[i]][2]))
+                f.write('</marker_set>\n')
+
+
+# ================================================
+
 
 def get_simulated_hic(hssfname, contactRange=2):
     '''
@@ -516,7 +821,7 @@ def get_simulated_hic(hssfname, contactRange=2):
     with HssFile(hssfname, 'r') as f:
         full_cmap = f.buildContactMap(contactRange)
 
-    return full_cmap.sumCopies()
+    return full_cmap.sumCopies(norm='min')
 
 
 def compare_hic_maps(M, ref, fname='matrix'):
@@ -591,22 +896,6 @@ def compare_hic_maps(M, ref, fname='matrix'):
     plt.tight_layout()
     plt.savefig(dname + '/matrix_values_hist2d.pdf')
     plt.close()
-
-
-def common_analysis(hssfname, **kwargs):
-
-    if kwargs.get('contacts', True):
-        with HssFile(hssfname) as f:
-            cmap = f.buildContactMap(2)
-        cmap.save(hssfname + 'full_cmap.hcs')
-        cmap.plot(hssfname + 'full_cmap.png')
-        cmap = cmap.sumCopies()
-        cmap.save(hssfname + 'cmap.hcs')
-        cmap.plot(hssfname + 'cmap.png')
-
-
-    if kwargs.get('hic_compare', False):
-        compare_hic_maps(cmap, kwargs.get('hic_compare'), hssfname)
 
 
 def resample_coordinates(old_crd, old_index, new_index):

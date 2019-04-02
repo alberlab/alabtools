@@ -17,11 +17,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import division, print_function
 
-__author__  = "Nan Hua"
+__author__ = "Nan Hua"
 
 __license__ = "GPL"
 __version__ = "0.0.3"
-__email__   = "nhua@usc.edu"
+__email__ = "nhua@usc.edu"
 
 import numpy as np
 import h5py
@@ -30,6 +30,7 @@ from scipy.sparse.sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
 from .utils import H5Batcher
 import warnings
+
 warnings.simplefilter('ignore', SparseEfficiencyWarning)
 
 DATA_DTYPE = np.float32
@@ -56,13 +57,13 @@ class sss_matrix(object):
 
     """
 
-    def __init__(self,arg1,shape=None,dtype=DATA_DTYPE,copy=False,mem=True, lazy=False, h5group='.'):
+    def __init__(self, arg1, shape=None, dtype=DATA_DTYPE, copy=False, mem=True, lazy=False, h5group='.'):
 
         if isinstance(arg1, np.ndarray):
             self.csr = csr_matrix(np.triu(arg1), shape, dtype, copy)
             self._pop_diag()
 
-        if isinstance(arg1,str):
+        if isinstance(arg1, str):
             h5 = h5py.File(arg1, 'r')
             self._load_from_h5(h5[h5group], lazy)
 
@@ -72,16 +73,16 @@ class sss_matrix(object):
         elif isinstance(arg1, tuple) and len(arg1) == 4:
 
             (data, indices, indptr, diag) = arg1
-            data    = np.array(data,dtype=dtype)
-            indices = np.array(indices,dtype=INDICES_DTYPE)
-            indptr  = np.array(indptr,dtype=INDPTR_DTYPE)
-            diag    = np.array(diag,dtype=dtype)
+            data = np.array(data, dtype=dtype)
+            indices = np.array(indices, dtype=INDICES_DTYPE)
+            indptr = np.array(indptr, dtype=INDPTR_DTYPE)
+            diag = np.array(diag, dtype=dtype)
             if shape is None:
-                shape = (len(diag),len(diag))
+                shape = (len(diag), len(diag))
             else:
-                shape = (max(shape[0],len(diag)),max(shape[1],len(diag)))
+                shape = (max(shape[0], len(diag)), max(shape[1], len(diag)))
 
-            self.csr = csr_matrix((data,indices,indptr), shape, dtype, copy)
+            self.csr = csr_matrix((data, indices, indptr), shape, dtype, copy)
             self.diagonal = diag
 
         elif isinstance(arg1, dict):
@@ -91,8 +92,8 @@ class sss_matrix(object):
         else:
             self.csr = triu(csr_matrix(arg1, shape=shape, dtype=dtype, copy=copy), format='csr')
             self._pop_diag()
-            #-
-        #--
+            # -
+        # --
 
     def _load_from_h5(self, grp, lazy=False):
         data = grp['data']
@@ -103,16 +104,17 @@ class sss_matrix(object):
 
         if lazy:
             self.csr = csr_matrix(shape)
-            self.csr.data    = data
+            self.csr.data = data
             self.csr.indices = indices
-            self.csr.indptr  = indptr
+            self.csr.indptr = indptr
             self.diagonal = diagonal
         else:
             self.csr = csr_matrix((data, indices, indptr), shape=shape)
             self.diagonal = diagonal[:]
-    #-
 
-    #==
+    # -
+
+    # ==
     @property
     def shape(self):
         return self.csr.shape
@@ -136,19 +138,18 @@ class sss_matrix(object):
     @property
     def indices(self):
         return self.csr.indices
+
     @indices.setter
     def indices(self, x):
         self.csr.indices = x
 
-
-
     def _pop_diag(self):
-        if not hasattr(self,"diagonal"):
-            self.diagonal = np.zeros(self.csr.shape[0],dtype=self.csr.dtype)
+        if not hasattr(self, "diagonal"):
+            self.diagonal = np.zeros(self.csr.shape[0], dtype=self.csr.dtype)
         td = self.csr.diagonal()
         self.diagonal += td
         nonzero = np.flatnonzero(td)
-        self.csr[nonzero,nonzero] = 0
+        self.csr[nonzero, nonzero] = 0
         self.csr.eliminate_zeros()
 
     def get_column(self, key):
@@ -164,7 +165,7 @@ class sss_matrix(object):
         if np.issubdtype(type(key), np.integer):
             i = key
             row = np.zeros(m)
-            row[ self.indices[self.indptr[i]:self.indptr[i+1]] ] = self.data[self.indptr[i]:self.indptr[i+1]]
+            row[self.indices[self.indptr[i]:self.indptr[i + 1]]] = self.data[self.indptr[i]:self.indptr[i + 1]]
             row[i] = self.diagonal[i]
             return row
 
@@ -176,11 +177,11 @@ class sss_matrix(object):
 
         elif isinstance(key, slice):
             start, stop, step = key.start, key.stop, key.step
-            if start == None:
+            if start is None:
                 start = 0
-            if stop == None or stop > n:
+            if stop is None or stop > n:
                 stop = n
-            if step == None:
+            if step is None:
                 step = 1
 
             rng = range(start, stop, step)
@@ -201,9 +202,9 @@ class sss_matrix(object):
         if np.issubdtype(type(key), np.integer):
             i = key
             row = np.zeros(m)
-            row[ self.indices[self.indptr[i]:self.indptr[i+1]] ] = self.data[self.indptr[i]:self.indptr[i+1]]
+            row[self.indices[self.indptr[i]:self.indptr[i + 1]]] = self.data[self.indptr[i]:self.indptr[i + 1]]
             row[i] = self.diagonal[i]
-            #lower diagonal
+            # lower diagonal
             col = self.get_column(i)
             row[:i] = col[:i]
             return row
@@ -216,11 +217,11 @@ class sss_matrix(object):
 
         elif isinstance(key, slice):
             start, stop, step = key.start, key.stop, key.step
-            if start == None:
+            if start is None:
                 start = 0
-            if stop == None or stop > n:
+            if stop is None or stop > n:
                 stop = n
-            if step == None:
+            if step is None:
                 step = 1
 
             rng = range(start, stop, step)
@@ -235,11 +236,11 @@ class sss_matrix(object):
         else:
             raise RuntimeError('Invalid index type')
 
-    def toarray(self,order=None,out=None):
+    def toarray(self, order=None, out=None):
         """See the docstring for `spmatrix.toarray`."""
         mt = self.csr.toarray(order=order, out=out)
         mt = mt + mt.T
-        np.fill_diagonal(mt,self.diagonal)
+        np.fill_diagonal(mt, self.diagonal)
         return mt
 
     def tocsr(self):
@@ -258,7 +259,7 @@ class sss_matrix(object):
         mt.diagonal = self.diagonal.copy()
         return mt
 
-    def sum(self,axis=None):
+    def sum(self, axis=None):
         """
             Sum of the symmetric matrix
 
@@ -274,14 +275,15 @@ class sss_matrix(object):
         if axis is None:
             return self.csr.sum() * 2 + self.diagonal.sum()
         elif (axis == 0) or (axis == 1):
-            return np.array(self.csr.sum(axis = 0) +
-                            self.csr.sum(axis = 1).T +
+            return np.array(self.csr.sum(axis=0) +
+                            self.csr.sum(axis=1).T +
                             self.diagonal)[0]
-        else :
+        else:
             raise ValueError("unrecognized axis usage")
-    #-
 
-    def dot(self,other):
+    # -
+
+    def dot(self, other):
         """
             Ordinary dot product
 
@@ -289,12 +291,13 @@ class sss_matrix(object):
             ----------
             other : np.array
         """
-        d = dia_matrix((self.diagonal,[0]),shape=self.shape)
+        d = dia_matrix((self.diagonal, [0]), shape=self.shape)
 
         return self.csr.dot(other) + d.dot(other) + self.csr.T.dot(other)
-    #-
 
-    def dotv(self,other):
+    # -
+
+    def dotv(self, other):
         """
             Ordinary dot product using MKL with vector
 
@@ -302,9 +305,9 @@ class sss_matrix(object):
             ----------
             other : np.array
         """
-        return SpMV_SM_viaMKL(self.csr, other) + np.array([self.diagonal]).T*other
+        return SpMV_SM_viaMKL(self.csr, other) + np.array([self.diagonal]).T * other
 
-    def normalize(self,bias):
+    def normalize(self, bias):
         """
         normalize matrix by bias vector
 
@@ -316,14 +319,14 @@ class sss_matrix(object):
         from .numutils import NormCSR_ByBiasVector
         bias = bias.flatten()
 
-        if len(bias) != self.shape[0] :
+        if len(bias) != self.shape[0]:
             raise ValueError("unrecognized input shape, should be array of length %s" % (self.shape[0]))
 
-        self.diagonal *= bias*bias
-        NormCSR_ByBiasVector(self.data,self.indices,self.indptr,bias)
-        #for i in xrange(len(self.indptr)-1):
-            #for j in xrange(self.indptr[i],self.indptr[i+1]):
-                #self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
+        self.diagonal *= bias * bias
+        NormCSR_ByBiasVector(self.data, self.indices, self.indptr, bias)
+        # for i in xrange(len(self.indptr)-1):
+        # for j in xrange(self.indptr[i],self.indptr[i+1]):
+        # self.data[j] = self.data[j] * bias[i] * bias[self.indices[j]]
 
     def coo_generator(self, batch_size=100000):
 
@@ -375,11 +378,9 @@ class sss_matrix(object):
         return len(self.data) + np.count_nonzero(self.diagonal != 0)
 
 
+# =================================================
 
-
-#=================================================
-
-def SpMV_viaMKL( A, x ,Atranspose=False):
+def SpMV_viaMKL(A, x, Atranspose=False):
     """
     Wrapper to Intel's SpMV
     (Sparse Matrix-Vector multiply)
@@ -388,11 +389,11 @@ def SpMV_viaMKL( A, x ,Atranspose=False):
     Stephen Becker, April 24 2014
     stephen.beckr@gmail.com
     """
-    from ctypes import POINTER,c_void_p,c_int,c_char,c_float,byref,cdll
+    from ctypes import POINTER, c_void_p, c_int, c_char, c_float, byref, cdll
     mkl = cdll.LoadLibrary("libmkl_rt.so")
     if Atranspose:
         tras = b'N'
-    else :
+    else:
         tras = b'T'
     SpMV = mkl.mkl_cspblas_scsrgemv
     # Dissecting the "cspblas_dcsrgemv" name:
@@ -406,32 +407,32 @@ def SpMV_viaMKL( A, x ,Atranspose=False):
 
     if not isspmatrix_csr(A):
         raise Exception("Matrix must be in csr format")
-    (m,n) = A.shape
+    (m, n) = A.shape
 
     # The data of the matrix
-    data    = A.data.ctypes.data_as(POINTER(c_float))
-    indptr  = A.indptr.ctypes.data_as(POINTER(c_int))
+    data = A.data.ctypes.data_as(POINTER(c_float))
+    indptr = A.indptr.ctypes.data_as(POINTER(c_int))
     indices = A.indices.ctypes.data_as(POINTER(c_int))
 
     # Allocate output, using same conventions as input
     nVectors = 1
     if x.ndim is 1:
-        y = np.empty(m,dtype=np.float32,order='F')
+        y = np.empty(m, dtype=np.float32, order='F')
         if x.size != n:
-            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size,n))
+            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size, n))
     elif x.shape[1] is 1:
-        y = np.empty((m,1),dtype=np.float32,order='F')
+        y = np.empty((m, 1), dtype=np.float32, order='F')
         if x.shape[0] != n:
-            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size,n))
+            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size, n))
     else:
         nVectors = x.shape[1]
-        y = np.empty((m,nVectors),dtype=np.float32,order='F')
+        y = np.empty((m, nVectors), dtype=np.float32, order='F')
         if x.shape[0] != n:
-            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size,n))
+            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size, n))
 
     # Check input
     if x.dtype.type is not np.float32:
-        x = x.astype(np.float32,copy=True)
+        x = x.astype(np.float32, copy=True)
     # Put it in column-major order, otherwise for nVectors > 1 this FAILS completely
     if x.flags['F_CONTIGUOUS'] is not True:
         x = x.copy(order='F')
@@ -440,20 +441,20 @@ def SpMV_viaMKL( A, x ,Atranspose=False):
         np_x = x.ctypes.data_as(POINTER(c_float))
         np_y = y.ctypes.data_as(POINTER(c_float))
         # now call MKL. This returns the answer in np_y, which links to y
-        SpMV(byref(c_char(tras)), byref(c_int(m)),data ,indptr, indices, np_x, np_y )
+        SpMV(byref(c_char(tras)), byref(c_int(m)), data, indptr, indices, np_x, np_y)
     else:
         for columns in xrange(nVectors):
-            xx = x[:,columns]
-            yy = y[:,columns]
+            xx = x[:, columns]
+            yy = y[:, columns]
             np_x = xx.ctypes.data_as(POINTER(c_float))
             np_y = yy.ctypes.data_as(POINTER(c_float))
-            SpMV(byref(c_char(tras)), byref(c_int(m)),data,indptr, indices, np_x, np_y )
+            SpMV(byref(c_char(tras)), byref(c_int(m)), data, indptr, indices, np_x, np_y)
 
     return y
 
-def SpMV_SM_viaMKL( A, x ):
 
-    from ctypes import POINTER,c_void_p,c_int,c_char,c_float,byref,cdll
+def SpMV_SM_viaMKL(A, x):
+    from ctypes import POINTER, c_void_p, c_int, c_char, c_float, byref, cdll
     mkl = cdll.LoadLibrary("libmkl_rt.so")
 
     SpMV = mkl.mkl_cspblas_scsrsymv
@@ -468,32 +469,32 @@ def SpMV_SM_viaMKL( A, x ):
 
     if not isspmatrix_csr(A):
         raise Exception("Matrix must be in csr format")
-    (m,n) = A.shape
+    (m, n) = A.shape
 
     # The data of the matrix
-    data    = A.data.ctypes.data_as(POINTER(c_float))
-    indptr  = A.indptr.ctypes.data_as(POINTER(c_int))
+    data = A.data.ctypes.data_as(POINTER(c_float))
+    indptr = A.indptr.ctypes.data_as(POINTER(c_int))
     indices = A.indices.ctypes.data_as(POINTER(c_int))
 
     # Allocate output, using same conventions as input
     nVectors = 1
     if x.ndim is 1:
-        y = np.empty(m,dtype=np.float32,order='F')
+        y = np.empty(m, dtype=np.float32, order='F')
         if x.size != n:
-            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size,n))
+            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size, n))
     elif x.shape[1] is 1:
-        y = np.empty((m,1),dtype=np.float32,order='F')
+        y = np.empty((m, 1), dtype=np.float32, order='F')
         if x.shape[0] != n:
-            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size,n))
+            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size, n))
     else:
         nVectors = x.shape[1]
-        y = np.empty((m,nVectors),dtype=np.float32,order='F')
+        y = np.empty((m, nVectors), dtype=np.float32, order='F')
         if x.shape[0] != n:
-            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size,n))
+            raise Exception("x must have n entries. x.size is %d, n is %d" % (x.size, n))
 
     # Check input
     if x.dtype.type is not np.float32:
-        x = x.astype(np.float32,copy=True)
+        x = x.astype(np.float32, copy=True)
     # Put it in column-major order, otherwise for nVectors > 1 this FAILS completely
     if x.flags['F_CONTIGUOUS'] is not True:
         x = x.copy(order='F')
@@ -502,13 +503,13 @@ def SpMV_SM_viaMKL( A, x ):
         np_x = x.ctypes.data_as(POINTER(c_float))
         np_y = y.ctypes.data_as(POINTER(c_float))
         # now call MKL. This returns the answer in np_y, which links to y
-        SpMV(byref(c_char(b"U")), byref(c_int(m)),data ,indptr, indices, np_x, np_y )
+        SpMV(byref(c_char(b"U")), byref(c_int(m)), data, indptr, indices, np_x, np_y)
     else:
         for columns in xrange(nVectors):
-            xx = x[:,columns]
-            yy = y[:,columns]
+            xx = x[:, columns]
+            yy = y[:, columns]
             np_x = xx.ctypes.data_as(POINTER(c_float))
             np_y = yy.ctypes.data_as(POINTER(c_float))
-            SpMV(byref(c_char(b"U")), byref(c_int(m)),data,indptr, indices, np_x, np_y )
+            SpMV(byref(c_char(b"U")), byref(c_int(m)), data, indptr, indices, np_x, np_y)
 
     return y
