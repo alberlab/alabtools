@@ -56,6 +56,13 @@ extensions = [
               library_dirs = [std_library],
               extra_compile_args=["-lCGAL","-lmpfr","-lgmp"],
               extra_link_args=["-lCGAL","-lmpfr","-lgmp"]
+             ),
+    Extension("alabtools._bounding_spheres", ["alabtools/bounding_spheres/c_bounding_spheres.pyx","alabtools/bounding_spheres/bounding_spheres_functions.cpp"],
+              language="c++",
+              include_dirs = [numpy_include, std_include],
+              library_dirs = [std_library],
+              extra_compile_args=["-lCGAL", "-lgmp"],
+              extra_link_args=["-lCGAL", "-lgmp"]
              )
 ]
 

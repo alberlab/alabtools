@@ -37,5 +37,3 @@ def test_index_io():
     os.remove('./testindex5.txt')
 
 
-test_genome_io()
-test_index_io()

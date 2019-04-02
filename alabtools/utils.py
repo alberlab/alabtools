@@ -144,8 +144,8 @@ class Genome(object):
             chroms  = np.array(assembly["genome"]["chroms"][:], CHROMS_DTYPE)
             origins = assembly["genome"]["origins"]
             lengths = assembly["genome"]["lengths"]
-            assembly = unicode(assembly["genome"]["assembly"].value)
-            usechr = ['#','X','Y']
+            assembly = unicode(assembly["genome"]["assembly"][()])
+            usechr = None
 
         if (chroms is None) or (lengths is None):
             chroms = info["chroms"].astype(CHROMS_DTYPE)
@@ -169,7 +169,7 @@ class Genome(object):
 
         for chrnum in usechr:
             if chrnum == '#':
-                choices = np.logical_or([re.search("chr[\d]+$",c) != None for c in chroms], choices)
+                choices = np.logical_or([re.search(r"chr[\d]+$",c) != None for c in chroms], choices)
             else:
                 # if specified with full name, remove chr
                 chrnum = chrnum.replace('chr', '')
@@ -536,7 +536,7 @@ class Index(object):
                                 if len(colnames) != len(line.split()):
                                     colnames = None
                                 # also, if we have column names, they should start with chrom, start, end
-                                if colnames[:3] != ['chrom', 'start', 'end']:
+                                elif colnames[:3] != ['chrom', 'start', 'end']:
                                     colnames = None
                             break
 
@@ -762,7 +762,7 @@ class Index(object):
             pass
 
         try:
-            self.label = np.array(h5f["index"]["chromstr"][()], CHROMS_DTYPE)
+            self.chromstr = np.array(h5f["index"]["chromstr"][()], CHROMS_DTYPE)
         except:
             pass
         # tries to load additional data tracks
@@ -773,12 +773,6 @@ class Index(object):
                 if not isinstance(v, np.ndarray):
                     v = np.array(json.loads(v))
                 setattr(self, k, v)
-
-        try:
-            self.chromstr = h5f["index"]["chromstr"][()]
-        except (KeyError, ValueError):
-            pass
-
 
     def load_txt(self, f):
         pass
