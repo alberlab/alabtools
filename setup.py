@@ -42,16 +42,9 @@ extensions = [
     Extension("alabtools._cmtools", ["alabtools/cmtools/cmtools.i", "alabtools/cmtools/cmtools.cpp"],
               swig_opts=['-c++'],
               language="c++",
-              include_dirs=[numpy_include],
+              include_dirs=[numpy_include]+std_include,
               extra_compile_args=["-fopenmp"],
               extra_link_args=["-fopenmp"]
-             ),
-    Extension("alabtools._bounding_spheres", ["alabtools/bounding_spheres/c_bounding_spheres.pyx","alabtools/bounding_spheres/bounding_spheres_functions.cpp"],
-              language="c++",
-              include_dirs = [numpy_include, std_include],
-              library_dirs = [std_library],
-              extra_compile_args=["-lCGAL", "-lgmp"],
-              extra_link_args=["-lCGAL", "-lgmp"]
              )
 ]
 
@@ -60,9 +53,11 @@ if '--no-geotools' not in sys.argv:
         Extension("alabtools._geotools", ["alabtools/geotools/geotools.i", "alabtools/geotools/geotools.cpp"],
                   swig_opts=['-c++'],
                   language="c++",
-                  include_dirs=[numpy_include] + std_include,
-                  library_dirs=std_library,
+                  include_dirs=[numpy_include]+std_include,
+                  library_dirs = std_library,
                   libraries=["CGAL", "mpfr", "gmp"],
+                  extra_compile_args=["-fopenmp"],
+                  extra_link_args=["-fopenmp"]
                   )
     )
 
@@ -88,5 +83,5 @@ setup(
     # extras_require=extras_require,
     scripts=clscripts,
     ext_modules=extensions,
-    include_dirs=[numpy.get_include()]
+    include_dirs=[numpy_include]+std_include
 )

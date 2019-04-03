@@ -134,3 +134,43 @@ def GenerateTomogramFromStructure(size, xyz, r, rexpansion=1.0, sratio=1.0):
     CalculateTomogramsFromStructure(xyz, r, rexpansion, sratio, tomo)
     
     return tomo
+
+
+def compute_bounding_spheres(crds, radii):
+    '''
+        Compute minimum bounding spheres for a group of beads.
+        Parameters
+        ----------
+        crds : np.ndarray[float]
+            A nbeads x nstruct x 3 coordinates vector
+        radii : np.ndarray or iterable
+            Radii of the beads[float]
+        Returns
+        -------
+        bsx : np.ndarray[float]
+            nstruct x 3 coordinates of the center of the bounding spheres
+        bsr : np.ndarray[float]
+            radii of the bounding spheres
+    '''
+    
+    nbead , nstruct = crds.shape[0], crds.shape[1]
+    if nbead != len(radii):
+        raise(RuntimeError, "Dimension not agree, coordinates has {} entries but radii has {}".format(nbead, len(radii)))
+    
+    results = np.zeros((nstruct, 4), dtype=np.float32, order='C')
+    
+    from ._geotools import BoundingSpheresWrapper
+    
+    if crds.dtype.type is not np.float32:
+        crds = crds.astype(np.float32, copy=True)
+    
+    if radii.dtype.type is not np.float32:
+        radii = radii.astype(np.float32, copy=True)
+    
+    BoundingSpheresWrapper(crds, radii, results)
+    
+    bscenters = results[:, :3]
+    bsradii = results[:, 3]
+    
+    return bscenters, bsradii
+    

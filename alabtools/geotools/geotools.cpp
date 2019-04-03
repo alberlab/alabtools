@@ -3,13 +3,32 @@
 #include <CGAL/Polyhedron_3.h>
 #include <CGAL/Nef_polyhedron_3.h>
 #include <CGAL/convex_hull_3.h>
-#include <vector>
 
+#include <CGAL/Cartesian_d.h>
+#include <CGAL/Random.h>
+#include <CGAL/Exact_rational.h>
+#include <CGAL/Min_sphere_of_spheres_d.h>
+
+#include <vector>
+#include <omp.h>
+#define THREADS 4
+
+//For Convex Hull
 typedef CGAL::Simple_cartesian<CGAL::Gmpq>                   Kernel;
 typedef CGAL::Polyhedron_3<Kernel>                           Polyhedron;
 typedef CGAL::Nef_polyhedron_3<Kernel>                       Nef_polyhedron;
 typedef Kernel::Point_3                                      Point_3;
 typedef Polyhedron::Vertex_iterator                          Vertex_iterator;
+
+//For Bounding Sphere
+typedef float                             FT;
+typedef CGAL::Cartesian_d<FT>             K;
+typedef CGAL::Min_sphere_of_spheres_d_traits_d<K,FT,3> Traits;
+typedef CGAL::Min_sphere_of_spheres_d<Traits> Min_sphere;
+typedef K::Point_d                        Point;
+typedef Traits::Sphere                    Sphere;
+
+
 
 /*
  * A, B : 1D array of points unraveled from 2D array
@@ -56,3 +75,41 @@ std::vector<double> ConvexHullIntersection(double * A, int ASize,
     
     return result;
 }
+
+/*
+ * Compute minimum bounding spheres for a group of beads.
+ *
+ * Parameters
+ * ----------
+ * crds : A nbeads x nstruct x 3 coordinates vector
+ * radii : Radii of the beads[float]
+ */
+
+void bounding_spheres(float* crd, float* radii, int n_bead, int n_struct, float* results) {
+    
+#pragma omp parallel num_threads(THREADS)
+{
+    #pragma omp for schedule(dynamic, 5)
+    for (int i=0; i<n_struct; ++i) {
+        std::vector<Sphere> S;
+        int offs;
+        
+        for (int j=0; j<n_bead; ++j) {
+            offs = (n_struct * j + i) * 3;
+            Point p(3, &crd[offs], &crd[offs + 3]);
+            S.push_back(Sphere(p, radii[j]));
+        }
+        
+        Min_sphere ms(S.begin(),S.end());
+        
+        int k = 0;
+        for (Min_sphere::Cartesian_const_iterator it = ms.center_cartesian_begin(); it != ms.center_cartesian_end(); ++it){
+            results[i*4 + k] = *it;
+            ++k;
+        }
+        results[i*4 + 3] = ms.radius();
+    }
+}
+
+}
+
