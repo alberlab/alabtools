@@ -95,9 +95,10 @@ ENV/
 *.cool
 *.png
 *.hcs
-numutils.c
 *_wrap.c*
-cmtools.py
-geotools.py
+
+alabtools/numutils.c
+alabtools/cmtools/cmtools.py
+alabtools/geotools/geotools.py
 
 .idea/
