@@ -412,11 +412,11 @@ void TomogramsFromStructure(float * coordinates, int nbead,
 {
 #pragma omp parallel num_threads(THREADS)
 {
-    #pragma omp for schedule(dynamic, 8)
+    #pragma omp for schedule(dynamic, 8) collapse(2)
     for (int i = 0; i < DimA; ++i){
-        float x = i + 0.5 - DimA/2;
-        
+        //float x = i + 0.5 - DimA/2;
         for (int j = 0; j < DimB; ++j){
+            float x = i + 0.5 - DimA/2;
             float y = j + 0.5 - DimB/2;
             
             for (int k = 0; k < DimC; ++k){
