@@ -1083,7 +1083,7 @@ class Contactmatrix(object):
             self.index.save(h5f, compression=compression, compression_opts=compression_opts)
 
             if self.bias is not None:
-                h5py.create_dataset('bias', data=self.bias, compression=compression, compression_opts=compression_opts)
+                h5f.create_dataset('bias', data=self.bias, compression=compression, compression_opts=compression_opts)
 
             mgrp = h5f.create_group("matrix")
             mgrp.create_dataset("data", data=self.matrix.data, compression=compression,
