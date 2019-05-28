@@ -111,3 +111,66 @@ def RadiusOfGyration(xyz,r):
     return np.sqrt(np.sum(((xyz - r0)**2) * mass)/np.sum(mass))
 
     
+def GenerateTomogramFromStructure(size, xyz, r, rexpansion=1.0, sratio=1.0):
+    """
+    Calculate MRC grids for xyz
+    """
+    
+    if isinstance(size, int):
+        dim1 = dim2 = dim3 = size
+    elif isinstance(size, tuple):
+        assert(len(size) == 3)
+        dim1, dim2, dim3 = size
+    else:
+        raise(RuntimeError, "Size should be 1 dim or 3 dim")
+    
+    tomo = np.zeros((dim1, dim2, dim3), dtype= np.float32, order='C')
+    from ._cmtools import CalculateTomogramsFromStructure
+    if xyz.dtype.type is not np.float32:
+        xyz = xyz.astype(np.float32, copy=True)
+    if r.dtype.type is not np.float32:
+        r = r.astype(np.float32, copy=True)
+        
+    CalculateTomogramsFromStructure(xyz, r, rexpansion, sratio, tomo)
+    
+    return tomo
+
+
+def compute_bounding_spheres(crds, radii):
+    '''
+        Compute minimum bounding spheres for a group of beads.
+        Parameters
+        ----------
+        crds : np.ndarray[float]
+            A nbeads x nstruct x 3 coordinates vector
+        radii : np.ndarray or iterable
+            Radii of the beads[float]
+        Returns
+        -------
+        bsx : np.ndarray[float]
+            nstruct x 3 coordinates of the center of the bounding spheres
+        bsr : np.ndarray[float]
+            radii of the bounding spheres
+    '''
+    
+    nbead , nstruct = crds.shape[0], crds.shape[1]
+    if nbead != len(radii):
+        raise(RuntimeError, "Dimension not agree, coordinates has {} entries but radii has {}".format(nbead, len(radii)))
+    
+    results = np.zeros((nstruct, 4), dtype=np.float32, order='C')
+    
+    from ._geotools import BoundingSpheresWrapper
+    
+    if crds.dtype.type is not np.float32:
+        crds = crds.astype(np.float32, copy=True)
+    
+    if radii.dtype.type is not np.float32:
+        radii = radii.astype(np.float32, copy=True)
+    
+    BoundingSpheresWrapper(crds, radii, results)
+    
+    bscenters = results[:, :3]
+    bsradii = results[:, 3]
+    
+    return bscenters, bsradii
+    
