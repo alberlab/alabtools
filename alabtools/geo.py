@@ -111,7 +111,7 @@ def RadiusOfGyration(xyz,r):
     return np.sqrt(np.sum(((xyz - r0)**2) * mass)/np.sum(mass))
 
     
-def GenerateTomogramFromStructure(size, xyz, r, rexpansion=1.0, sratio=1.0):
+def GenerateTomogramFromStructure(size, xyz, r, values = 1.0, rexpansion=1.0, sratio=1.0):
     """
     Calculate MRC grids for xyz
     """
@@ -130,8 +130,13 @@ def GenerateTomogramFromStructure(size, xyz, r, rexpansion=1.0, sratio=1.0):
         xyz = xyz.astype(np.float32, copy=True)
     if r.dtype.type is not np.float32:
         r = r.astype(np.float32, copy=True)
-        
-    CalculateTomogramsFromStructure(xyz, r, rexpansion, sratio, tomo)
+    
+    if np.isscalar(values):
+        values = np.ones(len(xyz), dtype=np.float32, order='C')*np.float32(values)
+    else:
+        assert(len(xyz) == len(r) == len(values))
+        values = np.array(values, dtype=np.float32, order='C')
+    CalculateTomogramsFromStructure(xyz, r, values, rexpansion, sratio, tomo)
     
     return tomo
 

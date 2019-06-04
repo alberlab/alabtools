@@ -407,7 +407,7 @@ void PixelConfidence(float * matrix, int row, int col, //matrix and size
  */
 
 void TomogramsFromStructure(float * coordinates, int nbead,
-                            float * radii, float radialExpansion, float sratio,
+                            float * radii, float * values, float radialExpansion, float sratio,
                             float * Tomogram, int DimA, int DimB, int DimC)
 {
 #pragma omp parallel num_threads(THREADS)
@@ -434,10 +434,10 @@ void TomogramsFromStructure(float * coordinates, int nbead,
                     
                     double dist2 = SquareDistance(x, y, z, bx, by, bz);
                     if (dist2 <= radialExpansion*radialExpansion*radii[bead]*radii[bead]){
-                        Tomogram[TomoID] += 1.0;
+                        Tomogram[TomoID] += values[bead];
                     }else{
                         // gaussian value exp(- d^2 / (2Sigma^2))
-                        Tomogram[TomoID] += std::exp( - dist2 / (2*sigma*sigma)); 
+                        Tomogram[TomoID] += values[bead]*std::exp( - dist2 / (2*sigma*sigma)); 
                     }
                     //printf("%f %f %f %f\n",bx, by, bz, Tomogram[TomoID]);
                         

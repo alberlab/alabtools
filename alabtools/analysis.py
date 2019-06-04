@@ -304,14 +304,14 @@ class HssFile(h5py.File):
         tdir = mkdtemp(prefix=tmpdir)
         try:
             for i in range(0, self.nbead, step):
-                np.save(f'{tdir}/{i}.npy', [self.get_bead_crd(j) for j in range(i, min(i+step, self.nbead))])
+                np.save('{}/{}.npy'.format(tdir, i), [self.get_bead_crd(j) for j in range(i, min(i+step, self.nbead))])
 
             def task(tdir, i, j, cutoff):
-                crdi = np.load(f'{tdir}/{i}.npy')
-                crdj = np.load(f'{tdir}/{j}.npy')
+                crdi = np.load('{}/{}.npy'.format(tdir, i))
+                crdj = np.load('{}/{}.npy'.format(tdir, j))
                 sm = HssFile._get_contact_submatrix(crdi, crdj, cutoff)
                 sm = scipy.sparse.csr_matrix(sm)
-                scipy.io.mmwrite(f'{tdir}/{i}_{j}.mtx', sm)
+                scipy.io.mmwrite('{}/{}_{}.mtx'.format(tdir, i, j), sm)
 
             ii = []
             jj = []
@@ -335,7 +335,7 @@ class HssFile(h5py.File):
             last = -1
             for i, j, r in tqdm(zip(ii, jj, ar)):
                 if i != last:
-                    outs[i // step][j // step] = scipy.io.mmread(f'{tdir}/{i}_{j}.mtx') / self.nstruct
+                    outs[i // step][j // step] = scipy.io.mmread('{}/{}_{}.mtx'.format(tdir, i, j)) / self.nstruct
                     if i == j:
                         outs[i // step][j // step] = scipy.sparse.triu(outs[i // step][j // step])
 
@@ -714,14 +714,14 @@ class HssFile(h5py.File):
                 script += 'mol material Diffuse\n'
                 script += 'mol addrep top\n'
 
-            script += f'''
-                display projection Orthographic
+            script += '''
+                display proOrtc
                 axes location Off
                 color Display Background 300
                 color change rgb 300 0.000000 0.000000 0.000000
                 display resize {wsize[0]} {wsize[1]}
                 display height 4
-            '''
+            '''.format(jection , hographi)
 
             if high_quality:
                 script += 'display ambientocclusion on\n' \
@@ -733,14 +733,14 @@ class HssFile(h5py.File):
 
             if render:
                 imfile = ofname[:-4] + '.tga'
-                rendercmd = f'render TachyonInternal {imfile}\nquit\n'
+                rendercmd = 'render TachyonInternal {}\nquit\n'.format(imfile)
 
                 tmpfname = mktemp()
                 with open(tmpfname, 'wb') as tmpf:
                     tmpf.write((script + rendercmd).encode('utf-8'))
 
                 out, err = mktemp(), mktemp()
-                r = os.system(f'vmd -e {tmpfname} -dispdev text > {out} 2> {err}')
+                r = os.system('vmd -e {} -dispdev text > {} 2> {}'.format(tmpfname, out, err))
                 if r != 0:  # error occured
                     sys.stderr.write('Error executing vmd.\nDumped logs to hss.render.out and hss.render.err.\n')
                     shutil.copy(out, 'hss.render.out')
