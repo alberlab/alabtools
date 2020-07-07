@@ -1322,7 +1322,7 @@ class LocStruct:
         chromids = index.get_chromosomes()
         chroms = index.get_chrom_names()
         for cid, c in zip(chromids, chroms):
-            ii = index.get_chrom_pos(c)
+            ii = index.get_chrom_pos(cid)
             ind = np.lexsort((index.start[ii], index.end[ii], ii))
             starts, ends, ids = index.start[ii][ind], index.end[ii][ind], ii[ind]
             nbuckets = ends[-1] // BUCKET_SIZE + 1
