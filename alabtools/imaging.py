@@ -305,11 +305,12 @@ class CtFile(h5py.File):
         
         return new_ct      
     
-    def set_from_fofct(self, fofct_file):
+    def set_from_fofct(self, fofct_file, in_assembly=None):
         """
         Set the data from a FOF-CT file.
         
         @param fofct_file: path to the FOF-CT file
+        @param in_assembly: assembly of the FOF-CT file. If None, it will be inferred from the file name.
         """
         
         if self.mode == 'r':
@@ -317,10 +318,15 @@ class CtFile(h5py.File):
         
         # READ THE FOF-CT FILE
         assembly, col_names, data = self._read_fofct(fofct_file)
+        
+        # check that the file is in the correct format
         if 'X' not in col_names or 'Y' not in col_names or 'Z' not in col_names \
             or 'Chrom' not in col_names or 'Chrom_Start' not in col_names or 'Chrom_End' not in col_names \
                 or 'Cell_ID' not in col_names or 'Trace_ID' not in col_names:
                     raise ValueError('FOF-CT file is not in the correct format.')
+        
+        if in_assembly is not None:
+            assembly = in_assembly
         
         # FIND THE DOMAINS
         chrstr, start, end = self._domains_from_fofct(data, col_names)
@@ -536,6 +542,11 @@ class CtFile(h5py.File):
                 break
         header_lines = lines[:i_header_stop]
         data_lines = lines[i_header_stop:]
+        
+        if len(header_lines) == 0:
+            raise ValueError('The header is empty.')
+        if len(data_lines) == 0:
+            raise ValueError('The data is empty.')
 
         # CLEAN THE HEADER
         header = []
