@@ -319,14 +319,25 @@ class CtFile(h5py.File):
         # READ THE FOF-CT FILE
         assembly, col_names, data = self._read_fofct(fofct_file)
         
-        # check that the file is in the correct format
-        if 'X' not in col_names or 'Y' not in col_names or 'Z' not in col_names \
-            or 'Chrom' not in col_names or 'Chrom_Start' not in col_names or 'Chrom_End' not in col_names \
-                or 'Cell_ID' not in col_names or 'Trace_ID' not in col_names:
-                    raise ValueError('FOF-CT file is not in the correct format.')
-        
-        if in_assembly is not None:
-            assembly = in_assembly
+        # CHECK THE ASSEMBLY
+        if assembly is not None:  # include lower case version of assembly
+            # because in alabtools, assembly names are often lower case
+            assembly = assembly + [a.lower() for a in assembly]
+        if in_assembly is not None:  # overwrite the assembly if provided
+            if assembly is None:
+                sys.stdout.write('Assembly not found in FOF-CT file. Using the one provided.\n')
+            if assembly is not None:
+                sys.stdout.write('Assembly found in FOF-CT file. Overwriting with the one provided.\n')
+                match = False
+                for a in assembly:
+                    if a == in_assembly:
+                        match = True
+                if not match:
+                    warnings.warn('The assembly provided {} does not match the one \
+                        in the FOF-CT file {}.'.format(in_assembly, assembly))
+            assembly = [in_assembly]
+        if assembly is None and in_assembly is None:
+            raise ValueError('Assembly not found in FOF-CT file. Please provide it.')
         
         # FIND THE DOMAINS
         chrstr, start, end = self._domains_from_fofct(data, col_names)
@@ -334,10 +345,6 @@ class CtFile(h5py.File):
         self.set_ndomain(ndomain)
         
         # SET GENOME
-        # assembly is a list. check that at least one of the elements is in ./genomes
-        # the convention in our folder is to lowercase the letters,
-        # so I include both the original and the lowercase version.
-        assembly = assembly + [a.lower() for a in assembly]
         found_assembly = False
         for a in assembly:
             # Path to the assembly file
@@ -349,7 +356,7 @@ class CtFile(h5py.File):
                 found_assembly = True
                 break            
         if not found_assembly:
-            raise ValueError('Assembly not found in alabtools/genomes. Need to include it.')
+            raise ValueError('Assembly {} not found in alabtools/genomes. Need to include it.'.format(a))
         self.set_genome(genome)
                 
         # SET INDEX
@@ -389,8 +396,15 @@ class CtFile(h5py.File):
         chrstr = data[:, col_names == 'Chrom'].transpose()[0]
         start = data[:, col_names == 'Chrom_Start'].transpose()[0].astype(np.int32)
         end = data[:, col_names == 'Chrom_End'].transpose()[0].astype(np.int32)
-        cellID = data[:, col_names == 'Cell_ID'].transpose()[0]
         traceID = data[:, col_names == 'Trace_ID'].transpose()[0]
+        if 'Cell_ID' in col_names:
+            cellID = data[:, col_names == 'Cell_ID'].transpose()[0]
+        else:
+            # if Cell_ID is not present, assume Cell_ID = Trace_ID
+            # these should be the cases where imaging is performed only on one chromosome,
+            # and thus there is no need to distinguish between chromosomes in the same cell.
+            cellID = np.copy(traceID)
+            warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
         
         # TAKE SOME STATS AND LABELS
         ncell = len(np.unique(cellID))
@@ -418,7 +432,7 @@ class CtFile(h5py.File):
             ncopy_cell = []  # number of copies for a cell
             for dom in zip(self.index.chromstr, self.index.start, self.index.end):
                 if dom[0] not in self.genome.chroms:
-                    sys.stderr.write("warning: {} not present in Genome. Removed.\n".format(dom[0]))
+                    warnings.warn("{} not present in Genome. Removed.".format(dom[0]), UserWarning)
                     continue
                 x_dom = x_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
                 y_dom = y_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
@@ -538,11 +552,16 @@ class CtFile(h5py.File):
         for line in lines:
             if line[0] == '#' or line[1] == '#':  # header lines can start with #, ## or "#
                 i_header_stop += 1
+            elif 'Trace_ID' in line:
+                # Some files don't have # at the beginning of the header lines,
+                # and only contain the colum_names line.
+                # This line should contain at least Trace_ID, so this condition should be enough
+                i_header_stop += 1
             else:
                 break
         header_lines = lines[:i_header_stop]
         data_lines = lines[i_header_stop:]
-        
+                
         if len(header_lines) == 0:
             raise ValueError('The header is empty.')
         if len(data_lines) == 0:
@@ -552,7 +571,7 @@ class CtFile(h5py.File):
         header = []
         for line in header_lines:
             while line[0] == '#' or line[0] == '"':
-                line = line[1:]  # remove specil characters at the beginning of the line (e.g. #, ##, ")
+                line = line[1:]  # remove specail characters at the beginning of the line (e.g. #, ##, ")
             if line[-1] == '\n':
                 line = line[:-1]  # if the line ends with a line break, remove it
             while line[-1] == ',':
@@ -577,6 +596,22 @@ class CtFile(h5py.File):
                     line = line[:-1]  # if there is a ')' at the end, remove it
                 col_names = line.split(',')  # split the line at the commas
                 col_names = np.array(col_names)
+            if 'Trace_ID' in line and '=' not in line:
+                # This is to deal with files that just have a column_names line like
+                #   Spot_ID,Trace_ID,X,Y,Z,Chrom,Chrom_Start,Chrom_End
+                # so they are missing the 'columns=' part
+                if line[0] == '(':
+                    line = line[1:]  # if there is a '(' at the beginning, remove it
+                if line[-1] == ')':
+                    line = line[:-1]  # if there is a ')' at the end, remove it
+                col_names = line.split(',')  # split the line at the commas
+                col_names = np.array(col_names)
+        
+        # CHECK IF COLUMN NAMES ARE CORRECT
+        if 'X' not in col_names or 'Y' not in col_names or 'Z' not in col_names \
+            or 'Chrom' not in col_names or 'Chrom_Start' not in col_names or 'Chrom_End' not in col_names \
+                or 'Trace_ID' not in col_names:
+                    raise ValueError('FOF-CT file is not in the correct format.')
 
         # CONVERT DATA TO NUMPY ARRAY
         data = []
