@@ -285,6 +285,10 @@ class CtFile(h5py.File):
         new_ct.set_ncopy_max(int(np.max([self.ncopy_max, other.ncopy_max])))
         
         new_cell_labels = []
+        if tag1 is None:
+            tag1 = ''
+        if tag2 is None:
+            tag2 = ''
         new_cell_labels.extend([cellID + tag1 for cellID in self.cell_labels])
         new_cell_labels.extend([cellID + tag2 for cellID in other.cell_labels])
         new_cell_labels = np.array(new_cell_labels)
@@ -507,7 +511,9 @@ class CtFile(h5py.File):
         chrint = []  # convert the chromosome string to an integer (e.g. 'chr1' -> 1)
         for c in chrstr:
             c = c.split('chr')[1]  # remove the 'chr' part
-            if c == 'X':
+            if c.isdigit():  # if it's a number
+                c = int(c)
+            elif c == 'X':
                 c = 23  # if it's mouse this should be 20, but it doesn't matter
             elif c == 'Y':
                 c = 24
