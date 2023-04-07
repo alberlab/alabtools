@@ -249,6 +249,17 @@ class CtFile(h5py.File):
     nspot = property(get_nspot, set_nspot, doc='number of spots. np.array(ncell, ndomain, ntrace_max)')
     ncopy = property(get_ncopy, set_ncopy, doc='number of copies. np.array(ncell, ndomain)')
     
+    def get_cellnum(self, cellID):
+        findidx = np.flatnonzero(self.cell_labels == cellID)
+        if len(findidx) == 0:
+            return None
+        else:
+            return findidx[0]
+    
+    def get_cellID(self, cellnum):
+        assert isinstance(cellnum, (int, np.int32, np.int64))
+        return self.cell_labels[cellnum]
+
     def merge(self, other, new_name, tag1=None, tag2=None):
         """
         Merge two CtFile instances.
