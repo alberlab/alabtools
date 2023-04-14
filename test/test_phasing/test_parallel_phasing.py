@@ -6,7 +6,6 @@ from alabtools.imaging.phasing import WSPhaser
 
 
 ct_name = 'ct_takei_comb.ct'
-# include absolute path to the ct file
 ct_name = os.path.join(os.getcwd(), ct_name)
 ct = CtFile(ct_name)  # load the ct file
 print(ct.coordinates.shape)
