@@ -11,11 +11,11 @@ from ..ctfile import CtFile
 from .phaser import Phaser
 
 
-class TakeiPhaser(Phaser):
+class WSPhaser(Phaser):
     """
-    A class that implements Takei's phasing method.
     
-    It implements a combination of Ward and Spectral clustering.
+    It implements a combination of Ward and Spectral clustering,
+    as described in Takei et al. Nature (2021). 
     
     Reference: https://www.nature.com/articles/s41586-020-03126-2
     
