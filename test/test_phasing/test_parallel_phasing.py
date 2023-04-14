@@ -1,23 +1,30 @@
 import numpy as np
 import time
+import os
 from alabtools.imaging.ctfile import CtFile
 from alabtools.imaging.phasing import WSPhaser
 
 
-ct_name = 'ct_test.ct'
+ct_name = 'ct_takei_comb.ct'
+# include absolute path to the ct file
+ct_name = os.path.join(os.getcwd(), ct_name)
 ct = CtFile(ct_name)  # load the ct file
 print(ct.coordinates.shape)
-print(type(ct.cell_labels))
 ct.close()
 
 config = {'ct_name': ct_name,
-          'parallel': {'controller': 'serial'},
+          'parallel': {'controller': 'ipyparallel'},
           'additional_parameters': {'st': 1.2, 'ot': 2.5}}
 phaser = WSPhaser(config)
 
 t1 = time.time()
-phaser.phasing()
+ct_phased = phaser.phasing()
 t2 = time.time()
 
-print(phaser.phase.shape)
 print('Execution time: {} s'.format(t2 - t1))
+
+print(ct_phased.coordinates.shape)
+print(np.max(ct_phased.nspot), ct_phased.nspot_max)
+print(np.max(ct_phased.ncopy), ct_phased.ncopy_max)
+
+ct_phased.close()

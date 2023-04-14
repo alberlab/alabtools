@@ -284,9 +284,9 @@ class CtFile(h5py.File):
             if not np.all(nan_map[:, :, cp, :, :]):
                 # If the copy is not redundant, we can exit the loop
                 break
-            sys.stdout.write('Trimming copy {}...'.format(cp))
-            self.ncopy_max = cp + 1
-            self.coordinates = self.coordinates[:, :, :self.ncopy_max, :, :]
+            sys.stdout.write('Trimming copy {}...\n'.format(cp))
+            self.ncopy_max = self.ncopy_max - 1
+            self.coordinates = self.coordinates[:, :, :cp, :, :]
             self.nspot = self.nspot[:, :, :self.ncopy_max]
             # Update the map of NaN values
             nan_map = np.isnan(self.coordinates)
@@ -295,9 +295,9 @@ class CtFile(h5py.File):
         for sp in range(self.nspot_max - 1, -1, -1):
             if not np.all(nan_map[:, :, :, sp, :]):
                 break
-            sys.stdout.write('Trimming spot {}...'.format(sp))
-            self.nspot_max = sp + 1
-            self.coordinates = self.coordinates[:, :, :, :self.nspot_max, :]
+            sys.stdout.write('Trimming spot {}...\n'.format(sp))
+            self.nspot_max = self.nspot_max - 1
+            self.coordinates = self.coordinates[:, :, :, :sp, :]
             nan_map = np.isnan(self.coordinates)
 
     def merge(self, other, new_name, tag1=None, tag2=None):
@@ -408,16 +408,19 @@ class CtFile(h5py.File):
         self.ncopy_max = coordinates.shape[2]
         self.nspot_max = coordinates.shape[3]
         
-        # compute ncopy and nspot
-        ncopy = np.zeros((self.ncell, self.ndomain), dtype=np.int32)
-        nspot = np.zeros((self.ncell, self.ndomain, self.ncopy_max), dtype=np.int32)
-        for cellnum in range(len(self.ncell)):
-            for domnum in range(len(self.ndomain)):
-                for copynum in range(len(self.ncopy_max)):
-                    nspot[cellnum, domnum, copynum] = np.sum(~np.isnan(self.coordinates[cellnum, domnum, copynum, :, 0]))
-                ncopy[cellnum, domnum] = np.sum(~np.isnan(self.coordinates[cellnum, domnum, :, 0, 0]))
-        self.ncopy = ncopy
+        # compute nspot and ncopy
+        # nonan_map is a boolean array that is True if the coordinates are not nan
+        nonan_map = ~np.isnan(coordinates)  # (ncell, ndomain, ncopy_max, nspot_max, 3)
+        # remove the last axis by taking the x coordinate
+        nonan_map = nonan_map[:, :, :, :, 0]  # (ncell, ndomain, ncopy_max, nspot_max) 
+        # now sum over the last axis to get the number of spots in each copy
+        nspot = np.sum(nonan_map, axis=3)  # (ncell, ndomain, ncopy_max)
+        # remove the last axis from nonan_map again by taking the first spot for each copy
+        nonan_map = nonan_map[:, :, :, 0]  # (ncell, ndomain, ncopy_max)
+        # now sum over the last axis to get the number of copies in each domain
+        ncopy = np.sum(nonan_map, axis=2)  # (ncell, ndomain)
         self.nspot = nspot
+        self.ncopy = ncopy
         
         # compute nspot_tot
         nspot_tot = np.sum(self.nspot)
@@ -431,7 +434,7 @@ class CtFile(h5py.File):
         # and sum them over all cells and chromosomes
         for chrom in self.genome.chroms:
             # compute number of copies of each domain of the chromosome in each cell
-            ncopy_chrom = self.ncopy[:, self.index[chrom]]  # np.array(ncell, ndomain_chrom)
+            ncopy_chrom = self.ncopy[:, self.index.chromstr == chrom]  # np.array(ncell, ndomain_chrom)
             # in each cell, find the maximum number of copies across all domains of the chromosome
             ncopy_max_chrom = np.nanmax(ncopy_chrom, axis=1)  # np.array(ncell)
             # sum over all cells to get the total number of traces of the chromosome

@@ -54,7 +54,7 @@ class Phaser(object):
         self.reduce_task = partial(self._reduce_phasing,
                                    cfg=self.cfg)
     
-    def phasing(self):
+    def phasing(self, out_name=None):
         """Performs the phasing on the CtFile.
         Uses the parallel_task and reduce_task saved as attributes.
         Creates a temporary directory for the nodes, and deletes it after the phasing.
@@ -63,12 +63,25 @@ class Phaser(object):
         assert self.ct.ncopy_max == 1, "CtFile already phased."
         
         # Parallelize the phasing, and save the results in the temporary directory
-        self.phase = self.controller.map_reduce(self.parallel_task,
-                                                self.reduce_task,
-                                                args=self.ct.cell_labels)
+        coordinates_phsd = self.controller.map_reduce(self.parallel_task,
+                                                      self.reduce_task,
+                                                      args=self.ct.cell_labels)
         
         # Delete the temporary directory and its contents
         os.system('rm -r {}'.format(self.temp_dir))
+        
+        # Create a CtFile with the phasing results
+        if out_name is None:
+            out_name = self.ct_name.replace('.ct', '_phased.ct')
+        assert isinstance(out_name, str), "out_name must be a string."
+        assert out_name.endswith('.ct'), "out_name must end with .ct."
+        ct_phased = CtFile(out_name, 'w')
+        ct_phased.set_manually(coordinates_phsd,
+                               self.ct.genome,
+                               self.ct.index,
+                               self.ct.cell_labels)
+        
+        return ct_phased
     
     @staticmethod
     def _parallel_phasing(cellnum, *args):
@@ -89,7 +102,7 @@ class Phaser(object):
             phase (np.array(ncell, ndomains, nspot_max): phase array
         """
         
-        # get ct_name, temp_dir from cfg
+        # get ct_name from cfg
         try:
             ct_name = cfg['ct_name']
         except KeyError:
@@ -98,8 +111,11 @@ class Phaser(object):
         # open ct file
         ct = CtFile(ct_name, 'r')
         
-        # initialize phase array
-        phase = np.zeros((ct.ncell, ct.ndomain, ct.nspot_max), dtype=int)
+        # check that the output size is correct
+        assert len(out_names) == ct.ncell, "Number of output files does not match number of cells."
+        
+        # list of coordinates, outputs from the child nodes
+        crd_list = [None for _ in range(ct.ncell)]
         
         # Read the results from the temporary directory and store them in the phase array
         for out_name in out_names:
@@ -109,57 +125,96 @@ class Phaser(object):
             cellID = os.path.basename(out_name).split('.')[0]  # get cellID from file name
             cellnum = ct.get_cellnum(cellID)  # get cell number from cellID
             
-            # read cell phase from file
+            # read coordinates from temp file
             try:
-                phs = np.load(out_name)  # np.array(ndomain, nspot_max)
+                crd = np.load(out_name)  # np.array(ndomain, ncpoy_max, nspot_max, 3)
             except IOError:
                 "File {} not found.".format(out_name)
             
-            # fill in the phase array
-            phase[cellnum, :, :] = phs
+            # store coordinates in the list
+            crd_list[cellnum] = crd
         
-        return phase
+        # stack the list of coordinates into a single array
+        coordinates_phsd = np.stack(crd_list, axis=0)  # np.array(ncell, ndomain, ncopy_max, nspot_max, 3)
+        for cellnum in range(ct.ncell):
+            assert np.array_equal(coordinates_phsd[cellnum, :, :, :, :], crd_list[cellnum],
+                                  equal_nan=True), "Coordinates do not match."
+                
+        return coordinates_phsd
+
+
+
+# Auxiliary functions
+
+def phase_cell_coordinates(crd, phs, ncopy_max):
+    """Phases the coordinates, creating a new array with multiple copy labels.
+
+    Args:
+        crd (np.array(ndomain, nspot_max, 3), np.float32)
+        phs (np.array(ndomain, nspot_max), np.int32)
+    Returns:
+        crd_phased (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)
+    """
     
+    # get attributes
+    ndomain, nspot_max, _ = crd.shape
+        
+    # initialize the phased coordinates array
+    crd_phsd = np.full((ndomain, ncopy_max, nspot_max, 3),
+                       np.nan)  # np.array(ndomain, ncopy_max, nspot_max, 3)
     
-    def separate_alleles(self, out_name):
+    # loop over the phase labels
+    for cp in np.unique(phs):
         
-        if self.phase is None:
-            raise ValueError("Phasing must be performed before allele separation.")
+        # The spots with phase label 0, i.e. outliers, are ignored
+        if cp == 0:
+            continue
         
-        # initialize the phased coordinates array
-        coordinates_phased = np.copy(self.ct.coordinates)  # np.array(ncell, ndomain, ncopy_max, nspot_max, 3)
+        # create a mask for the current phase label
+        cp_mask = phs == cp  # np.array(ndomain, nspot_max) of bool
         
-        # loop over the phase labels
-        for lbl in np.unique(self.phase):
-            
-            # The spots with phase label 0, i.e. outliers, are ignored
-            if lbl == 0:
-                continue
-            
-            # create a mask for the current phase label
-            lbl_mask = self.phase == lbl  # np.array(ncell, ndomain, nspot_max)
-            
-            # expand the mask to match the shape of the coordinates array
-            lbl_mask_exp = np.expand_dims(lbl_mask, axis=2)  # np.array(ncell, ndomain, 1, nspot_max)
-            lbl_mask_exp = np.expand_dims(lbl_mask_exp, axis=4)  # np.array(ncell, ndomain, 1, nspot_max, 1)
-            lbl_mask_exp = np.repeat(lbl_mask_exp, repeats=3, axis=4)  # np.array(ncell, ndomain, 1, nspot_max, 3)
-            
-            # check that the mask is correct
-            for i in range(3):
-                assert np.array_equal(lbl_mask[:, :, :], lbl_mask_exp[:, :, 0, :, i]),\
-                    "Mask for coordinates is not correct."
-            
-            # set the coordinates to nan where the mask is False
-            coordinates_phased[lbl_mask_exp] = np.nan
+        # extend the mask to match the shape of the coordinates array
+        cp_mask_ext = np.expand_dims(cp_mask, axis=2)  # np.array(ndomain, nspot_max, 1)
+        cp_mask_ext = np.repeat(cp_mask_ext, repeats=3, axis=2)  # np.array(ndomain, nspot_max, 3)
+                
+        # check that the mask is correct
+        for i in range(3):
+            assert np.array_equal(cp_mask[:, :], cp_mask_ext[:, :, i]),\
+                "Mask for coordinates is not correct."
         
-        # create a new CtFile instance with the phased coordinates
-        if out_name is None:
-            raise ValueError("out_name must be specified.")
-        ct_phased = CtFile(out_name, 'w')
-        ct_phased.set_manually(coordinates_phased,
-                               self.ct.genome,
-                               self.ct.index,
-                               self.ct.cell_labels)
+        # create copy of crd that is nan outside the mask
+        crd_cp = np.full(crd.shape, np.nan)  # np.array(ndomain, nspot_max, 3)
+        crd_cp[cp_mask_ext] = crd[cp_mask_ext]
         
-        return ct_phased
+        # create a copy of crd_phsd that is not-nan for the current copy
+        # this is required to avoid shape mismatch when updating crd_phsd
+        crd_phsd_cp = np.full(crd_phsd.shape, np.nan)  # np.array(ndomain, ncopy_max, nspot_max, 3)
+        crd_phsd_cp[:, cp-1, :, :] = crd_cp[:, :, :]
+        
+        # update the phased coordinates
+        crd_phsd[~np.isnan(crd_phsd_cp)] = crd_phsd_cp[~np.isnan(crd_phsd_cp)]
+        
+        return crd_phsd
+    
+
+def reorder_spots(crd):
+    """Reorders the coordinate spots by putting the NaNs at the end.
+    
+    Args:
+        crd (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)
+    
+    Returns:
+        crd_reord (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)
+    """
+    
+    ndomain, ncopy_max, nspot_max, _ = crd.shape
+    
+    crd_reord = np.copy(crd)
+    
+    for d in range(ndomain):
+        for c in range(ncopy_max):
+            crd_reord[d, c, :, :] = crd[d, c, np.argsort(np.isnan(crd[d, c, :, 0])), :]
+    
+    return crd_reord
+    
     

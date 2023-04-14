@@ -8,7 +8,7 @@ from scipy.spatial import distance
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import AgglomerativeClustering
 from ..ctfile import CtFile
-from .phaser import Phaser
+from .phaser import Phaser, reorder_spots, phase_cell_coordinates
 
 
 class WSPhaser(Phaser):
@@ -41,7 +41,7 @@ class WSPhaser(Phaser):
             None
         """
         
-        # get ct_name, temp_dir, st, ot from cfg
+        # get ct_name, st, ot from cfg
         try:
             ct_name = cfg['ct_name']
         except KeyError:
@@ -56,7 +56,10 @@ class WSPhaser(Phaser):
         ct = CtFile(ct_name, 'r')
                         
         # initialize phasing labels of the cell to 0
-        cell_phase = np.zeros((ct.ndomain, ct.nspot_max))
+        cell_phase = np.zeros((ct.ndomain, ct.nspot_max),
+                              dtype=np.int32)  # np.array(ndomain, nspot_max)
+        cell_coordinates = ct.coordinates[ct.get_cellnum(cellID),
+                                          :, 0, :, :]  # np.array(ndomain, nspot_max, 3)
 
         # loop over chromosomes
         for chrom in ct.genome.chroms:
@@ -65,12 +68,12 @@ class WSPhaser(Phaser):
             ncluster = 2 if chrom != 'chrX' and chrom != 'chrY' else 1
             
             # get coordinates for chromosome/cell
-            crd = ct.coordinates[ct.get_cellnum(cellID),
-                                 ct.index.chromstr==chrom,
-                                 0, :, :]  # np.array(ndomain_chrom, nspot_max, 3)
+            crd = cell_coordinates[ct.index.chromstr==chrom,
+                                   :, :]  # np.array(ndomain_chrom, nspot_max, 3)
             
             # initialize phasing labels to 0
-            phs = np.zeros((crd.shape[0], crd.shape[1]))
+            phs = np.zeros((crd.shape[0], crd.shape[1]),
+                           dtype=np.int32)  # np.array(ndomain_chrom, nspot_max)
             
             # flatten coordinates and remove NaNs
             # crd_flat_nonan: np.array(nspot, 3)
@@ -110,9 +113,17 @@ class WSPhaser(Phaser):
             # fill in the phasing labels in the global array
             cell_phase[ct.index.chromstr == chrom, :] = phs
         
+        # phase cell coordinates
+        cell_coordinates_phased = phase_cell_coordinates(cell_coordinates,
+                                                         cell_phase,
+                                                         ncopy_max=2)
+        
+        # reorder spots
+        cell_coordinates_phased = reorder_spots(cell_coordinates_phased)
+        
         # save cell_phase
         out_name = os.path.join(temp_dir, f'{cellID}.npy')
-        np.save(out_name, cell_phase)
+        np.save(out_name, cell_coordinates_phased)
         
         return out_name
 
