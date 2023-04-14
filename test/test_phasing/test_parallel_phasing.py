@@ -1,6 +1,6 @@
 import numpy as np
-from alabtools.imaging import CtFile
-from alabtools.phasing import TakeiPhaser
+from alabtools.imaging.phasing.imaging import CtFile
+from alabtools.imaging.phasing.imaging import TakeiPhaser
 import time
 
 
