@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 import os
 import sys
-from .utils import Genome, Index
+from ..utils import Genome, Index
 
 __author__ = "Francesco Musella"
 __ct_version__ = 0.1
@@ -258,7 +258,47 @@ class CtFile(h5py.File):
     
     def get_cellID(self, cellnum):
         assert isinstance(cellnum, (int, np.int32, np.int64))
-        return self.cell_labels[cellnum]
+        return self.cell_labels[cellnum]      
+    
+    def trim(self):
+        """
+        Trims the data to remove redundant copies and spots.
+        
+        This operation might be required if the data have an excessive max-padding.
+        
+        A copy label c is reduntant if:
+            self.coordinates[:, :, c, :, :] is all NaN
+        A spot label s is redundant if:
+            self.coordinates[:, :, :, s, :] is all NaN
+        
+        By default, the data data are organized so that the reduntant copies and spots
+        are at the end of the array. So the trimming is performed in reverse order.
+        """
+        
+        # Defines the map of NaN values from self.coordinates
+        nan_map = np.isnan(self.coordinates)  # np.array(ncell, ndomain, ncopy_max, nspot_max, 3)
+        
+        # Trim copies
+        # Loop over copies in reverse order
+        for cp in range(self.ncopy_max - 1, -1, -1):
+            if not np.all(nan_map[:, :, cp, :, :]):
+                # If the copy is not redundant, we can exit the loop
+                break
+            sys.stdout.write('Trimming copy {}...'.format(cp))
+            self.ncopy_max = cp + 1
+            self.coordinates = self.coordinates[:, :, :self.ncopy_max, :, :]
+            self.nspot = self.nspot[:, :, :self.ncopy_max]
+            # Update the map of NaN values
+            nan_map = np.isnan(self.coordinates)
+        
+        # Trim spots
+        for sp in range(self.nspot_max - 1, -1, -1):
+            if not np.all(nan_map[:, :, :, sp, :]):
+                break
+            sys.stdout.write('Trimming spot {}...'.format(sp))
+            self.nspot_max = sp + 1
+            self.coordinates = self.coordinates[:, :, :, :self.nspot_max, :]
+            nan_map = np.isnan(self.coordinates)
 
     def merge(self, other, new_name, tag1=None, tag2=None):
         """
@@ -318,7 +358,91 @@ class CtFile(h5py.File):
         new_ncopy = np.concatenate((self.ncopy, other.ncopy), axis=0)
         new_ct.set_ncopy(new_ncopy)
         
-        return new_ct      
+        return new_ct
+    
+    def set_manually(self, coordinates, genome, index, cell_labels=None):
+        """Set the CtFile attributes by manually inputting the data.
+           ncopy and nspot are inferred from the coordinates array.
+
+        Args:
+            coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3), np.float32)
+            genome (Genome)
+            index (Index)
+            cell_labels (np.array(ncell, dtype='U10'), optional):
+                If None, set as np.arange(ncell).astype('U10'). Defaults to None.
+
+        Returns:
+            None
+        """
+        
+        # set the genome
+        assert isinstance(genome, Genome), 'genome must be a Genome instance'
+        self.genome = genome
+        
+        # set the index
+        assert isinstance(index, Index), 'index must be a Index instance'
+        assert index.genome == self.genome, 'genome in index must match input genome'
+        self.index = index
+        
+        # set the coordinates
+        assert len(coordinates.shape) == 5, 'coordinates must be a 5D array'
+        assert coordinates.shape[1] == len(index),\
+            'coordinates must have the same number of domains as the index'
+        assert coordinates.shape[4] == 3, 'spatial coordinates must be 3D'
+        try:
+            self.coordinates = coordinates.astype(np.float32)
+        except ValueError:
+            "Coordinates must be numeric."
+        
+        # set the cell labels
+        if cell_labels is None:
+            cell_labels = np.arange(coordinates.shape[0]).astype('U10')
+        assert len(cell_labels) == coordinates.shape[0],\
+            'cell_labels must have the same length as coordinates.shape[0]'
+        assert cell_labels.dtype == 'U10', 'cell_labels must be of dtype U10'
+        self.cell_labels = cell_labels
+        
+        # set the attribues from coordinates.shape
+        self.ncell = coordinates.shape[0]
+        self.ndomain = coordinates.shape[1]
+        self.ncopy_max = coordinates.shape[2]
+        self.nspot_max = coordinates.shape[3]
+        
+        # compute ncopy and nspot
+        ncopy = np.zeros((self.ncell, self.ndomain), dtype=np.int32)
+        nspot = np.zeros((self.ncell, self.ndomain, self.ncopy_max), dtype=np.int32)
+        for cellnum in range(len(self.ncell)):
+            for domnum in range(len(self.ndomain)):
+                for copynum in range(len(self.ncopy_max)):
+                    nspot[cellnum, domnum, copynum] = np.sum(~np.isnan(self.coordinates[cellnum, domnum, copynum, :, 0]))
+                ncopy[cellnum, domnum] = np.sum(~np.isnan(self.coordinates[cellnum, domnum, :, 0, 0]))
+        self.ncopy = ncopy
+        self.nspot = nspot
+        
+        # compute nspot_tot
+        nspot_tot = np.sum(self.nspot)
+        self.nspot_tot = nspot_tot
+        
+        # compute ntrace_tot
+        ntrace_tot = 0
+        # I can't count it simply as np.sum(self.ncopy), because the copies of spots
+        # of the same trace in the same chromosome count as 1
+        # So I have to count the maximum number of copies of a trace in each chromosome,
+        # and sum them over all cells and chromosomes
+        for chrom in self.genome.chroms:
+            # compute number of copies of each domain of the chromosome in each cell
+            ncopy_chrom = self.ncopy[:, self.index[chrom]]  # np.array(ncell, ndomain_chrom)
+            # in each cell, find the maximum number of copies across all domains of the chromosome
+            ncopy_max_chrom = np.nanmax(ncopy_chrom, axis=1)  # np.array(ncell)
+            # sum over all cells to get the total number of traces of the chromosome
+            ntrace_tot += np.sum(ncopy_max_chrom)
+        self.ntrace_tot
+        
+        # trim the data
+        self.trim()
+
+        return None
+    
     
     def set_from_fofct(self, fofct_file, in_assembly=None):
         """

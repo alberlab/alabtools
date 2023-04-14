@@ -10,8 +10,7 @@ This is the new build of lab tools
 from .api import Contactmatrix
 from .utils import Genome, Index
 from .analysis import HssFile
-from .imaging import CtFile
 from . import plots, analysis
 
-from . import phasing
+from . import imaging
 from . import parallel
