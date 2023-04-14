@@ -1,17 +1,19 @@
 import numpy as np
-from alabtools.imaging.phasing.imaging import CtFile
-from alabtools.imaging.phasing.imaging import TakeiPhaser
 import time
+from alabtools.imaging.ctfile import CtFile
+from alabtools.imaging.phasing import WSPhaser
 
 
-ct_name = 'ct_takei_comb.ct'
+ct_name = 'ct_test.ct'
 ct = CtFile(ct_name)  # load the ct file
 print(ct.coordinates.shape)
 print(type(ct.cell_labels))
 ct.close()
 
-config = {'ct_name': ct_name, 'parallel': {'controller': 'ipyparallel'}}
-phaser = TakeiPhaser(config)
+config = {'ct_name': ct_name,
+          'parallel': {'controller': 'serial'},
+          'additional_parameters': {'st': 1.2, 'ot': 2.5}}
+phaser = WSPhaser(config)
 
 t1 = time.time()
 phaser.phasing()

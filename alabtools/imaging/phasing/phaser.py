@@ -62,9 +62,6 @@ class Phaser(object):
         
         assert self.ct.ncopy_max == 1, "CtFile already phased."
         
-        # Create a temporary directory for the controller
-        os.mkdir(self.temp_dir)
-        
         # Parallelize the phasing, and save the results in the temporary directory
         self.phase = self.controller.map_reduce(self.parallel_task,
                                                 self.reduce_task,
@@ -120,6 +117,8 @@ class Phaser(object):
             
             # fill in the phase array
             phase[cellnum, :, :] = phs
+        
+        return phase
     
     
     def separate_alleles(self, out_name):

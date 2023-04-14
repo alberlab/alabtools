@@ -1,2 +1,2 @@
-from .ctfile import CTFile
+from .ctfile import CtFile
 from . import phasing
