@@ -70,8 +70,8 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.0.0',
-    author='Nan Hua',
+    version='1.0.0+img',
+    author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',
     description='Alber lab toolbox',
