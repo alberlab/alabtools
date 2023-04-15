@@ -45,8 +45,8 @@ class Phaser(object):
         
         # Create a temporary directory for the controller, make sure it doesn't exist
         self.temp_dir = tempfile.mkdtemp(dir=os.getcwd())
-        sys.stdout.write("Nodes' results will be saved in {}.\
-                          The directory will be removed after phasing.\n".format(self.temp_dir))
+        sys.stdout.write("Nodes' results will be saved in {}."\
+                         "\nThe directory will be removed after phasing.\n".format(self.temp_dir))
         
         # Create the parallel task (to be overwritten by the child classes)
         self.parallel_task = partial(self._parallel_phasing, *args)
@@ -62,6 +62,8 @@ class Phaser(object):
         
         assert self.ct.ncopy_max == 1, "CtFile already phased."
         
+        sys.stdout.write("Performing phasing...\n")
+                
         # Parallelize the phasing, and save the results in the temporary directory
         coordinates_phsd = self.controller.map_reduce(self.parallel_task,
                                                       self.reduce_task,
@@ -194,7 +196,7 @@ def phase_cell_coordinates(crd, phs, ncopy_max):
         # update the phased coordinates
         crd_phsd[~np.isnan(crd_phsd_cp)] = crd_phsd_cp[~np.isnan(crd_phsd_cp)]
         
-        return crd_phsd
+    return crd_phsd
     
 
 def reorder_spots(crd):

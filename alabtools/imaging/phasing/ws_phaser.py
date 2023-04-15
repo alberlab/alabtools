@@ -112,7 +112,7 @@ class WSPhaser(Phaser):
             
             # fill in the phasing labels in the global array
             cell_phase[ct.index.chromstr == chrom, :] = phs
-        
+                
         # phase cell coordinates
         cell_coordinates_phased = phase_cell_coordinates(cell_coordinates,
                                                          cell_phase,
