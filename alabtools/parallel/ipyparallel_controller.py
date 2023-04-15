@@ -10,12 +10,11 @@ import sqlite3
 import time
 import six
 from .parallel_controller import ParallelController
-import logging
+import logging  # check dependencies!
 from tqdm import tqdm
 
-# Set up the logging format (commented out for some reason)
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # check dependencies!
 
 class IppFunctionWrapper(object):
     """This class wraps a function to be executed in a child process.
@@ -125,6 +124,8 @@ class BasicIppController(ParallelController):
         except TimeoutError:
             raise RuntimeError('Cannot connect to the ipyparallel client. Is it running?')
         
+        # asynchronous means that the results are returned as soon as they are available,
+        # while synchronous means that the results are returned only when all the tasks are finished.
         ar = None  # async result, AsyncResult object
         try:
             # use cloudpickle to serialize objects

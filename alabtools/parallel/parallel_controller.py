@@ -27,8 +27,10 @@ class ParallelController(object):
     def map(self, parallel_task, args):
         """Defines a map function for mapping parallel jobs to workers
         (i.e. processes or threads).
+        
         @param parallel_task: a function to be executed in parallel
         @param args: a list of arguments to be passed to the parallel task
+        
         @return: a list of results from the parallel tasks
         """
         raise NotImplementedError()
@@ -36,12 +38,14 @@ class ParallelController(object):
     def reduce(self, reduce_task, outs):
         """Defines a reduce function for reducing the results of the parallel tasks
            (i.e. combining the results of the parallel tasks).
+           
            @param reduce_task: a function to be executed to reduce the results.
            @param outs: a list of results from the parallel tasks."""
         return reduce_task(outs)
 
     def map_reduce(self, parallel_task, reduce_task, args):
         """Combines the map and reduce functions into a single function.
+        
            @param parallel_task: a function to be executed in parallel.
            @param reduce_task: a function to be executed to reduce the results.
            @param args: a list of arguments to be passed to the parallel task.
@@ -57,8 +61,10 @@ class ParallelController(object):
 class SerialController(ParallelController):
     """A serial controller that executes the parallel tasks in serial.
     """
+    
     def map(self, parallel_task, args):
         """Executes the parallel tasks in serial.
+        
            @param parallel_task: a function to be executed.
            @param args: a list of arguments to be passed to the parallel task."""
         return [parallel_task(a) for a in tqdm(args, desc="(SERIAL)")]
