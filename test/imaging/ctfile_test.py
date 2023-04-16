@@ -16,6 +16,11 @@ class TestCtFile(unittest.TestCase):
         self.data = self.generate_data()
         self.fofct_file = self.write_fofct_file(self.data)
     
+    def tearDown(self):
+        del self.data
+        del self.fofct_file
+        os.remove('test_fofct.csv')
+    
     def test_set_from_fofct(self):
         """Test the set_from_fofct method of CtFile.
         """
