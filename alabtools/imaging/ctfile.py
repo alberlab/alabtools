@@ -490,7 +490,8 @@ class CtFile(h5py.File):
         found_assembly = False
         for a in assembly:
             # Path to the assembly file
-            assembly_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'genomes/' + a + '.info')
+            genome_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/genomes/'
+            assembly_file = os.path.join(genome_dir, a + '.info')
             if os.path.isfile(assembly_file):
                 sys.stdout.write('Assembly {} found in alabtools/genomes. Using this.\n'.format(a))
                 # Note: if some chromosomes in np.unique(chrstr) are not in the assembly file, they will be ignored.
