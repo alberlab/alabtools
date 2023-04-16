@@ -133,8 +133,6 @@ class TestCtFile(unittest.TestCase):
                 chrom_end = data['end'][domainnum]
                 for copynum in range(data['ncopy'][cellnum, domainnum]):
                     for spotnum in range(data['nspot'][cellnum, domainnum, copynum]):
-                        # I can update here to make x,y,z separated in space
-                        # for different copies, to test phasing
                         x = data['coordinates'][cellnum, domainnum, copynum, spotnum, 0]
                         y = data['coordinates'][cellnum, domainnum, copynum, spotnum, 1]
                         z = data['coordinates'][cellnum, domainnum, copynum, spotnum, 2]
@@ -222,6 +220,18 @@ class TestCtFile(unittest.TestCase):
             for domainnum in range(ndomain):
                 for copynum in range(ncopy[cellnum, domainnum]):
                     for spotnum in range(nspot[cellnum, domainnum, copynum]):
+                        # I can generate the coordinates with by separating
+                        # the traces. E.g.
+                        # if copynum == 0:
+                        #    generate_coordinates_for_copy0()
+                        # this function can generate a cloud of points for copy0
+                        # and I can make sure that all the clouds are completely separated
+                        # This way I can test the phasing algorithm.
+                        # In the test function then, I can do this:
+                        # first collapse the coordinates into a single copy
+                        # then create a ct file from the collapsed coordinates
+                        # perform phasing, thus obtaining a phased file
+                        # check that the phased coordinates match the initial coordinates
                         coordinates[cellnum, domainnum, copynum, spotnum, :] = 300 * np.random.rand(3)
         
         # compute final attributes
