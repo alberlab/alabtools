@@ -622,7 +622,7 @@ class CtFile(h5py.File):
                         for i in range(3):
                             coord_homo[cell, dom, trc, spot, i] = coord[cell][dom][trc][spot][i]
         coord = coord_homo
-        nspot = nspot_homo
+        nspot = nspot_homo.astype(np.int32)
         
         return ncell, nspot_tot, ntrace_tot, nspot_max, ncopy_max, cell_labels, coord, nspot, ncopy
     
