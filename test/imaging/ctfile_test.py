@@ -17,8 +17,7 @@ class TestCtFile(unittest.TestCase):
         self.fofct_file = self.write_fofct_file(self.data)
     
     def test_set_from_fofct(self):
-        """Test the FoF-CT file reading.
-        This is done in the set_from_fofct method of CtFile.
+        """Test the set_from_fofct method of CtFile.
         """
         ct = CtFile('test_ct.ct', 'w')
         ct.set_from_fofct(self.fofct_file)

@@ -612,7 +612,7 @@ class CtFile(h5py.File):
         
         # CREATE HOMOGENEOUS ARRAYS (coord and nspot)
         coord_homo = np.nan * np.zeros((ncell, self.ndomain, ncopy_max, nspot_max, 3), dtype=np.float32)
-        nspot_homo = np.nan * np.zeros((ncell, self.ndomain, ncopy_max), dtype=np.int32)
+        nspot_homo = np.zeros((ncell, self.ndomain, ncopy_max), dtype=np.int32)
         ncopy = np.array(ncopy).astype(np.int32)  # already homogeneous
         for cell in range(ncell):  # Loop to go heterogeneous -> homogeneous
             for dom in range(self.ndomain):
