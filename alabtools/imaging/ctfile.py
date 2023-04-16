@@ -1,4 +1,4 @@
-# This file contains functions used to process and analyze imaging data
+# This file contains functions used to process and analyze chromatin tracing data.
 # Author: Francesco Musella, University of California Los Angeles
 # Date: April 3, 2023
 
