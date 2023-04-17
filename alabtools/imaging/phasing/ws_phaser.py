@@ -41,11 +41,15 @@ class WSPhaser(Phaser):
             None
         """
         
-        # get ct_name, st, ot from cfg
+        # get ct_name, ncluster, st, ot from cfg
         try:
             ct_name = cfg['ct_name']
         except KeyError:
             "ct_name not found in cfg."
+        try:
+            ncluster = cfg['ncluster']
+        except KeyError:
+            "ncluster not found in cfg."
         try:
             st = cfg['additional_parameters']['st']
             ot = cfg['additional_parameters']['ot']
@@ -54,6 +58,17 @@ class WSPhaser(Phaser):
         
         # open ct file
         ct = CtFile(ct_name, 'r')
+        
+        # assert ncluster is correct and fill it autosomes if '#' is present
+        assert isinstance(ncluster, dict), "ncluster must be a dictionary."
+        for chrom in ncluster.keys():
+            assert chrom == '#' or chrom in ct.genome.chroms,\
+                "Invalid chromosome name in ncluster."
+        if '#' in ncluster.keys():
+            for chrom in ct.genome.chroms:
+                if chrom == 'chrX' or chrom == 'chrY':
+                    continue
+                ncluster[chrom] = ncluster['#']
                         
         # initialize phasing labels of the cell to 0
         cell_phase = np.zeros((ct.ndomain, ct.nspot_max),
@@ -63,9 +78,6 @@ class WSPhaser(Phaser):
 
         # loop over chromosomes
         for chrom in ct.genome.chroms:
-            
-            # I can also read it from cfg!               
-            ncluster = 2 if chrom != 'chrX' and chrom != 'chrY' else 1
             
             # get coordinates for chromosome/cell
             crd = cell_coordinates[ct.index.chromstr==chrom,
@@ -81,32 +93,31 @@ class WSPhaser(Phaser):
             
             # if there are not enough spots to phase, skip
             nspot = crd_flat_nonan.shape[0]
-            if nspot <= ncluster:  # not enough spots to phase
+            if nspot <= ncluster[chrom]:  # not enough spots to phase
                 warnings.warn(f"Cell # {cellID} has {nspot} spots on chromosome {chrom},\
                               too few to phase. Skipping.")
                 continue
             
             # phase
-            if ncluster == 1:  # no need to cluster
+            if ncluster[chrom] == 1:  # no need to cluster
                 phs_flat_nonan = np.ones(crd_flat_nonan.shape[0])
             else:  # apply Ward and/or Spectral clustering
-                phs_flat_nonan = clustering('ward', crd_flat_nonan, ncluster)
+                phs_flat_nonan = clustering('ward', crd_flat_nonan, ncluster[chrom])
                 if not are_separated(crd_flat_nonan, phs_flat_nonan, st):
-                    phs_flat_nonan = clustering('spectral', crd_flat_nonan, ncluster)
+                    phs_flat_nonan = clustering('spectral', crd_flat_nonan, ncluster[chrom])
             
             # remove outliers
             phs_flat_nonan_noout = remove_outliers(crd_flat_nonan, phs_flat_nonan, ot)
             
             # if the phase labels are skipping an integer (e.g. 0, 2 - missing 1),
             # map them to increasing integers (e.g. 0, 1)
-            if len(np.unique(phs_flat_nonan_noout)) != ncluster + 1:
+            if len(np.unique(phs_flat_nonan_noout)) != ncluster[chrom] + 1:
                 phs_flat_nonan_noout_cp = np.copy(phs_flat_nonan_noout)
                 for i, lbl in enumerate(np.unique(phs_flat_nonan_noout)):
                     if lbl == 0:
                         continue
                     phs_flat_nonan_noout[phs_flat_nonan_noout_cp == lbl] = i + 1
                 del phs_flat_nonan_noout_cp
-            print('\n\n')
             
             # assign phasing labels to original coordinates
             for w, ij in enumerate(idx_nonan):

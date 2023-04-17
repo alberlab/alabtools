@@ -29,7 +29,7 @@ class Phaser(object):
         self.controller = Controller(cfg)
         sys.stdout.write("Using a {} controller.\n".format(type(self.controller)))
         
-        # Read ct name and open the file
+        # Read ct name (appending working directory) and open the CtFile
         try:
             ct_name = os.path.join(os.getcwd(), cfg.get('ct_name'))
             self.ct_name = ct_name
@@ -40,10 +40,7 @@ class Phaser(object):
         except IOError:
             raise IOError("{} must be a valid CtFile.".format(self.ct_name))
         
-        # Initialize the phase array as None
-        self.phase = None
-        
-        # Create a temporary directory for the controller, make sure it doesn't exist
+        # Create a temporary directory for nodes' results
         self.temp_dir = tempfile.mkdtemp(dir=os.getcwd())
         sys.stdout.write("Nodes' results will be saved in {}."\
                          "\nThe directory will be removed after phasing.\n".format(self.temp_dir))
@@ -54,10 +51,10 @@ class Phaser(object):
         self.reduce_task = partial(self._reduce_phasing,
                                    cfg=self.cfg)
     
-    def phasing(self, out_name=None):
-        """Performs the phasing on the CtFile.
+    def run(self, out_name=None):
+        """Run the phasing.
         Uses the parallel_task and reduce_task saved as attributes.
-        Creates a temporary directory for the nodes, and deletes it after the phasing.
+        Creates a temporary directory for the nodes' results, and deletes it after reducing.
         """
         
         assert self.ct.ncopy_max == 1, "CtFile already phased."
@@ -78,7 +75,7 @@ class Phaser(object):
         assert isinstance(out_name, str), "out_name must be a string."
         assert out_name.endswith('.ct'), "out_name must end with .ct."
         ct_phased = CtFile(out_name, 'w')
-        ct_phased.set_manually(coordinates_phsd,
+        ct_phased.set_manually(coordinates_phsd,  # set data manually
                                self.ct.genome,
                                self.ct.index,
                                self.ct.cell_labels)
@@ -149,7 +146,9 @@ class Phaser(object):
 # Auxiliary functions
 
 def phase_cell_coordinates(crd, phs, ncopy_max):
-    """Phases the coordinates, creating a new array with multiple copy labels.
+    """Phases the coordinates of a single cell, creating a new array with multiple copy labels.
+    
+    This function is called the parallel task in the child classes.
 
     Args:
         crd (np.array(ndomain, nspot_max, 3), np.float32)
@@ -200,7 +199,9 @@ def phase_cell_coordinates(crd, phs, ncopy_max):
     
 
 def reorder_spots(crd):
-    """Reorders the coordinate spots by putting the NaNs at the end.
+    """Reorders the coordinate spots of a single cell by putting the NaNs at the end.
+    
+    This function is called in the parallel task in the child classes.
     
     Args:
         crd (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)

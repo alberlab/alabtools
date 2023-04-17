@@ -56,11 +56,12 @@ class TestWSPhaser(unittest.TestCase):
         # configure the phaser and initialize it
         config = {'ct_name': 'test_ct.ct',
                   'parallel': {'controller': 'serial'},
+                  'ncluster': {'#': 2, 'chrX': 1},
                   'additional_parameters': {'st': 1.2, 'ot': 2.5}}
         phaser = WSPhaser(config)
         
         # run the phasing
-        ct_phsd = phaser.phasing()
+        ct_phsd = phaser.run()
         
         # check the results
         assert ct_phsd.genome.assembly == self.data['assembly']
