@@ -8,6 +8,11 @@ from alabtools.imaging.phasing import WSPhaser
 
 class TestWSPhaser(unittest.TestCase):
     """Test class for WSPhaser.
+    
+    Attention: This test might fail if the test data sample is small,
+               due to spots potentially deemd outliers.
+               Additionally, the test data sample should be nicely
+               separated into clusters, so that there is no misclassification.
 
     Args:
         unittest (unittest.TestCase): Test class for unittest.
@@ -25,9 +30,6 @@ class TestWSPhaser(unittest.TestCase):
         """
         
         # collapse the coordinates to a single copy
-        # self.data['coordinates'] has shape ncell x ndomain x ncopy_max x nspot_max x 3
-        # we want to collapse axis=2 to axis=3, i.e. create an array of shape:
-        #     ncell x ndomain x 1 x (ncopy_max * nspot_max) x 3
         coordinates_collapsed = np.reshape(self.data['coordinates'],
                                            (self.data['ncell'],
                                             self.data['ndomain'],

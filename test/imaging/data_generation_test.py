@@ -87,7 +87,7 @@ def generate_ct_data():
     
     # set the attributes
     ncell = 4
-    ndomain = 150
+    ndomain = 50
     ncopy_max = 2
     nspot_max = 4
     
