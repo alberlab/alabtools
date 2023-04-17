@@ -87,8 +87,8 @@ def generate_ct_data():
     
     # set the attributes
     ncell = 4
-    ndomain = 15
-    ncopy_max = 3
+    ndomain = 150
+    ncopy_max = 2
     nspot_max = 4
     
     # create the index
@@ -121,6 +121,8 @@ def generate_ct_data():
     # For now I am not allowing for ncopy to be 0, but this feature
     # can be added in the future.
     ncopy = np.random.randint(1, ncopy_max + 1, size=(ncell, ndomain))
+    ncopy[:, chromstr == 'chrX'] = 1  # force ncopy=1 for chrX
+    ncopy[:, chromstr == 'chrY'] = 1  # force ncopy=1 for chr2
     
     # create nspot
     nspot = np.zeros((ncell, ndomain, ncopy_max), dtype=int)

@@ -95,24 +95,27 @@ class WSPhaser(Phaser):
                     phs_flat_nonan = clustering('spectral', crd_flat_nonan, ncluster)
             
             # remove outliers
-            phs_flat_nonan_corrected = remove_outliers(crd_flat_nonan, phs_flat_nonan, ot)
+            phs_flat_nonan_noout = remove_outliers(crd_flat_nonan, phs_flat_nonan, ot)
             
             # if the phase labels are skipping an integer (e.g. 0, 2 - missing 1),
             # map them to increasing integers (e.g. 0, 1)
-            if np.max(phs_flat_nonan_corrected) != len(np.unique(phs_flat_nonan_corrected)) - 1:
-                phs_flat_nonan_corrected_cp = np.copy(phs_flat_nonan_corrected)
-                for i, lbl in enumerate(np.unique(phs_flat_nonan_corrected)):
-                    phs_flat_nonan_corrected[phs_flat_nonan_corrected_cp == lbl] = i
-                del phs_flat_nonan_corrected_cp
+            if len(np.unique(phs_flat_nonan_noout)) != ncluster + 1:
+                phs_flat_nonan_noout_cp = np.copy(phs_flat_nonan_noout)
+                for i, lbl in enumerate(np.unique(phs_flat_nonan_noout)):
+                    if lbl == 0:
+                        continue
+                    phs_flat_nonan_noout[phs_flat_nonan_noout_cp == lbl] = i + 1
+                del phs_flat_nonan_noout_cp
+            print('\n\n')
             
             # assign phasing labels to original coordinates
             for w, ij in enumerate(idx_nonan):
                 i, j = ij
-                phs[i,j] = phs_flat_nonan_corrected[w]
+                phs[i,j] = phs_flat_nonan_noout[w]
             
             # fill in the phasing labels in the global array
             cell_phase[ct.index.chromstr == chrom, :] = phs
-                
+        
         # phase cell coordinates
         cell_coordinates_phased = phase_cell_coordinates(cell_coordinates,
                                                          cell_phase,
