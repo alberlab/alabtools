@@ -439,7 +439,7 @@ class CtFile(h5py.File):
             ncopy_max_chrom = np.nanmax(ncopy_chrom, axis=1)  # np.array(ncell)
             # sum over all cells to get the total number of traces of the chromosome
             ntrace_tot += np.sum(ncopy_max_chrom)
-        self.ntrace_tot
+        self.ntrace_tot = ntrace_tot
         
         # trim the data
         self.trim()
