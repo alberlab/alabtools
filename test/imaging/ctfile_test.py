@@ -176,11 +176,13 @@ class TestCtFile(unittest.TestCase):
         nspot_max = 4
         
         # create the index
-        sizes = np.random.rand(len(chroms))
+        # first partition the domains among the chromosomes
+        sizes = np.random.rand(len(chroms))  # list of # of domains for each chromosome
         sizes = ndomain * sizes / np.sum(sizes)
-        sizes = np.round(sizes).astype(int)        
-        if np.sum(sizes) != ndomain:
-            raise ValueError('The sum of sizes must be equal to ndomain.')
+        sizes = np.round(sizes).astype(int)
+        sizes[0] += ndomain - np.sum(sizes)  # adjust the sizes to have ndomain
+        if np.any(sizes <= 0):
+            raise ValueError('One of the sizes is <= 0. Try again.')
         chromstr = []
         start = []
         end = []
@@ -215,24 +217,19 @@ class TestCtFile(unittest.TestCase):
                     nspot[cellnum, domainnum, copynum] = np.random.randint(1, nspot_max + 1)
 
         # create coordinates
+        # create boxes to confine the coordinates of each copy, making them highly separated
+        boxsize = 500  # length of the box side
+        separation = 5000  # minimum distance between centroids of boxes
+        centers = np.linspace(0, separation * (ncopy_max - 1), ncopy_max)  # same for x, y, and z
+        # initialize coordinates
         coordinates = np.full((ncell, ndomain, ncopy_max, nspot_max, 3), np.nan)
+        # loop over cells, domains, copies, and spots to generate coordinates
         for cellnum in range(ncell):
             for domainnum in range(ndomain):
                 for copynum in range(ncopy[cellnum, domainnum]):
                     for spotnum in range(nspot[cellnum, domainnum, copynum]):
-                        # I can generate the coordinates with by separating
-                        # the traces. E.g.
-                        # if copynum == 0:
-                        #    generate_coordinates_for_copy0()
-                        # this function can generate a cloud of points for copy0
-                        # and I can make sure that all the clouds are completely separated
-                        # This way I can test the phasing algorithm.
-                        # In the test function then, I can do this:
-                        # first collapse the coordinates into a single copy
-                        # then create a ct file from the collapsed coordinates
-                        # perform phasing, thus obtaining a phased file
-                        # check that the phased coordinates match the initial coordinates
-                        coordinates[cellnum, domainnum, copynum, spotnum, :] = 300 * np.random.rand(3)
+                        x, y, z = centers[copynum] + boxsize * (np.random.rand(3) - 0.5)
+                        coordinates[cellnum, domainnum, copynum, spotnum, :] = [x, y, z]
         
         # compute final attributes
         nspot_tot = np.sum(nspot)
