@@ -4,6 +4,7 @@ import numpy as np
 import pickle as pkl
 from alabtools.imaging import CtFile
 from alabtools.utils import Genome, Index
+from alabtools.imaging.phasing import WSPhaser
 
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
@@ -118,6 +119,54 @@ class TestCtFile(unittest.TestCase):
         # close and remove the CtFile
         ct.close()
         os.remove('test_ct.ct')
+    
+    def test_phasing(self):
+        """Test the phasing method of WSPhaser.
+        """
+        
+        # collapse the coordinates to a single copy
+        coordinates_collapsed = np.reshape(self.data['coordinates'],
+                                           (self.data['ncell'],
+                                            self.data['ndomain'],
+                                            1,
+                                            self.data['ncopy_max'] * self.data['nspot_max'],
+                                            3))
+        # check that the coordinates are collapsed correctly
+        for cellnum in range(self.data['ncell']):
+            for domainnum in range(self.data['ndomain']):
+                for i in range(3):
+                    assert np.array_equal(self.data['coordinates'][cellnum, domainnum, :, :, i].flatten(),
+                                          coordinates_collapsed[cellnum, domainnum, 0, :, i],
+                                          equal_nan=True), 'Coordinates are not collapsed correctly.'
+        
+        # create CtFile object and set data manually
+        ct = CtFile('test_ct.ct', 'w')
+        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        index = Index(chrom=self.data['chromstr'],
+                      start=self.data['start'],
+                      end=self.data['end'],
+                      genome=genome)
+        ct.set_manually(coordinates_collapsed, genome, index)  # use collapsed coordinates
+        
+        # configure the phaser and initialize it
+        config = {'ct_name': 'test_ct.ct',
+                  'parallel': {'controller': 'serial'},
+                  'ncluster': {'#': 2, 'chrX': 1},
+                  'additional_parameters': {'st': 1.2, 'ot': 2.5}}
+        phaser = WSPhaser(config)
+        
+        # run the phasing
+        ct_phsd = phaser.run()
+        
+        # check the results
+        self._assertCtFile(ct_phsd)
+        
+        # clean up
+        ct.close()
+        ct_phsd.close()
+        os.remove('test_ct.ct')
+        os.remove('test_ct_phased.ct')
+    
     
     def _assertCtFile(self, ct, merged=False):
         """Assert the CtFile object.
