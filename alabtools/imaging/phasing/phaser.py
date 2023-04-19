@@ -3,8 +3,8 @@ from functools import partial
 import sys
 import os
 import tempfile
-from ..ctfile import CtFile
-from ...parallel import Controller
+from alabtools.imaging import CtFile
+from alabtools.parallel import Controller
 
 
 class Phaser(object):
