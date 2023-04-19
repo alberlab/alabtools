@@ -64,19 +64,19 @@ class TestWSPhaser(unittest.TestCase):
         ct_phsd = phaser.run()
         
         # check the results
-        assert ct_phsd.genome.assembly == self.data['assembly']
-        assert np.array_equal(ct_phsd.index.chromstr, self.data['chromstr'])
-        assert np.array_equal(ct_phsd.index.start, self.data['start'])
-        assert np.array_equal(ct_phsd.index.end, self.data['end'])
-        assert ct_phsd.ncell == self.data['ncell']
-        assert ct_phsd.ndomain == self.data['ndomain']
-        assert ct_phsd.ncopy_max == self.data['ncopy_max']
-        assert ct_phsd.nspot_max == self.data['nspot_max']
-        assert ct_phsd.nspot_tot == self.data['nspot_tot']
-        assert ct_phsd.ntrace_tot == self.data['ntrace_tot']
-        assert np.array_equal(ct_phsd.ncopy, self.data['ncopy'])
-        assert np.array_equal(ct_phsd.nspot, self.data['nspot'])
-        assert np.allclose(ct_phsd.coordinates, self.data['coordinates'], equal_nan=True)
+        self.assertTrue(ct_phsd.genome.assembly, self.data['assembly'])
+        self.assertTrue(np.array_equal(ct_phsd.index.chromstr, self.data['chromstr']))
+        self.assertTrue(np.array_equal(ct_phsd.index.start, self.data['start']))
+        self.assertTrue(np.array_equal(ct_phsd.index.end, self.data['end']))
+        self.assertTrue(ct_phsd.ncell, self.data['ncell'])
+        self.assertTrue(ct_phsd.ndomain, self.data['ndomain'])
+        self.assertTrue(ct_phsd.ncopy_max, self.data['ncopy_max'])
+        self.assertTrue(ct_phsd.nspot_max, self.data['nspot_max'])
+        self.assertTrue(ct_phsd.nspot_tot, self.data['nspot_tot'])
+        self.assertTrue(ct_phsd.ntrace_tot, self.data['ntrace_tot'])
+        self.assertTrue(np.array_equal(ct_phsd.ncopy, self.data['ncopy']))
+        self.assertTrue(np.array_equal(ct_phsd.nspot, self.data['nspot']))
+        self.assertTrue(np.allclose(ct_phsd.coordinates, self.data['coordinates'], equal_nan=True))
         
         # clean up
         ct.close()
