@@ -66,9 +66,13 @@ class WSPhaser(Phaser):
                 "Invalid chromosome name in ncluster."
         if '#' in ncluster.keys():
             for chrom in ct.genome.chroms:
-                if chrom == 'chrX' or chrom == 'chrY':
+                try:  # check if chrom is an autosome (e.g. chr1, chr2, ...)
+                    chrom_num = chrom.split('chr')[1]
+                    chrom_num = int(chrom_num)
+                except ValueError:  # if not, continue
                     continue
-                ncluster[chrom] = ncluster['#']
+                else:  # if so, fill in ncluster[chrom]
+                    ncluster[chrom] = ncluster['#']
                         
         # initialize phasing labels of the cell to 0
         cell_phase = np.zeros((ct.ndomain, ct.nspot_max),
