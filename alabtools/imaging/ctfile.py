@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 import os
 import sys
-from ..utils import Genome, Index
+from alabtools import Genome, Index
 
 __author__ = "Francesco Musella"
 __ct_version__ = 0.1
