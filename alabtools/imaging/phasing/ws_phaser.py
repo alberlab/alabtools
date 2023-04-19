@@ -7,7 +7,7 @@ import warnings
 from scipy.spatial import distance
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import AgglomerativeClustering
-from ..ctfile import CtFile
+from alabtools.imaging import CtFile
 from .phaser import Phaser, reorder_spots, phase_cell_coordinates
 
 
