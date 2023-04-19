@@ -2,9 +2,9 @@ import unittest
 import os
 import numpy as np
 import pickle as pkl
-from alabtools.imaging import CtFile
-from alabtools.utils import Genome, Index
-from alabtools.imaging.phasing import WSPhaser
+from alabtools import Genome, Index
+from alabtools import CtFile
+from alabtools import WSPhaser
 
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
