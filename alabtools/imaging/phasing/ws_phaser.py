@@ -77,6 +77,8 @@ class WSPhaser(Phaser):
         # initialize phasing labels of the cell to 0
         cell_phase = np.zeros((ct.ndomain, ct.nspot_max),
                               dtype=np.int32)  # np.array(ndomain, nspot_max)
+        
+        # get coordinates for cell
         cell_coordinates = ct.coordinates[ct.get_cellnum(cellID),
                                           :, 0, :, :]  # np.array(ndomain, nspot_max, 3)
 
