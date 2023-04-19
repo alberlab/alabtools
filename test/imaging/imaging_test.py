@@ -6,6 +6,8 @@ from alabtools import Genome, Index
 from alabtools import CtFile
 from alabtools import WSPhaser
 
+dir = os.path.dirname(os.path.abspath(__file__))
+
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
 
@@ -16,16 +18,16 @@ class TestCtFile(unittest.TestCase):
     def setUp(self):
         super().setUp()
         # load the test data
-        with open('test_data.pkl', 'rb') as f:
+        with open(dir + '/test_data.pkl', 'rb') as f:
             self.data = pkl.load(f)
-        self.fofct_file = 'test_fofct.csv'
+        self.fofct_file = dir + '/test_fofct.csv'
     
     def test_set_from_fofct(self):
         """Test the set_from_fofct method of CtFile.
         """
         
         # create a CtFile object and set the data from fofct
-        ct = CtFile('test_ct.ct', 'w')
+        ct = CtFile(dir + 'test_ct.ct', 'w')
         ct.set_from_fofct(self.fofct_file)
         
         # check the results
@@ -33,18 +35,18 @@ class TestCtFile(unittest.TestCase):
         
         # close and delete the file
         ct.close()
-        os.remove('test_ct.ct')
+        os.remove(dir + 'test_ct.ct')
     
     def test_merge(self):
         """Test the merge method of CtFile.
         """
         
         # create two CtFile objects and merge them
-        ct1 = CtFile('test_ct1.ct', 'w')
+        ct1 = CtFile(dir + 'test_ct1.ct', 'w')
         ct1.set_from_fofct(self.fofct_file)
-        ct2 = CtFile('test_ct2.ct', 'w')
+        ct2 = CtFile(dir + 'test_ct2.ct', 'w')
         ct2.set_from_fofct(self.fofct_file)
-        ct = ct1.merge(ct2, 'test_ct_merged.ct', tag1='1', tag2='2')
+        ct = ct1.merge(ct2, dir + 'test_ct_merged.ct', tag1='1', tag2='2')
         
         # check the results
         self._assertCtFile(ct, merged=True)
@@ -53,16 +55,16 @@ class TestCtFile(unittest.TestCase):
         ct1.close()
         ct2.close()
         ct.close()
-        os.remove('test_ct1.ct')
-        os.remove('test_ct2.ct')
-        os.remove('test_ct_merged.ct')
+        os.remove(dir + 'test_ct1.ct')
+        os.remove(dir + 'test_ct2.ct')
+        os.remove(dir + 'test_ct_merged.ct')
     
     def test_set_manually(self):
         """Test the manual setting of CtFile.
         """
         
         # open a CtFile object and set the data manually
-        ct = CtFile('test_ct.ct', 'w')
+        ct = CtFile(dir + 'test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
@@ -75,7 +77,7 @@ class TestCtFile(unittest.TestCase):
         
         # close and delete the file
         ct.close()
-        os.remove('test_ct.ct')
+        os.remove(dir + 'test_ct.ct')
     
     def test_trimming(self):
         """Test the trim method of CtFile for trimming.
@@ -102,7 +104,7 @@ class TestCtFile(unittest.TestCase):
                                             axis=3)
 
         # create CtFile object and set data manually
-        ct = CtFile('test_ct.ct', 'w')
+        ct = CtFile(dir + 'test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
@@ -118,7 +120,7 @@ class TestCtFile(unittest.TestCase):
         
         # close and remove the CtFile
         ct.close()
-        os.remove('test_ct.ct')
+        os.remove(dir + 'test_ct.ct')
     
     def test_phasing(self):
         """Test the phasing method of WSPhaser.
@@ -140,7 +142,7 @@ class TestCtFile(unittest.TestCase):
                                           equal_nan=True), 'Coordinates are not collapsed correctly.'
         
         # create CtFile object and set data manually
-        ct = CtFile('test_ct.ct', 'w')
+        ct = CtFile(dir + 'test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
@@ -149,7 +151,7 @@ class TestCtFile(unittest.TestCase):
         ct.set_manually(coordinates_collapsed, genome, index)  # use collapsed coordinates
         
         # configure the phaser and initialize it
-        config = {'ct_name': 'test_ct.ct',
+        config = {'ct_name': dir + 'test_ct.ct',
                   'parallel': {'controller': 'serial'},
                   'ncluster': {'#': 2, 'chrX': 1},
                   'additional_parameters': {'st': 1.2, 'ot': 2.5}}
@@ -164,8 +166,8 @@ class TestCtFile(unittest.TestCase):
         # clean up
         ct.close()
         ct_phsd.close()
-        os.remove('test_ct.ct')
-        os.remove('test_ct_phased.ct')
+        os.remove(dir + 'test_ct.ct')
+        os.remove(dir + 'test_ct_phased.ct')
     
     
     def _assertCtFile(self, ct, merged=False):
