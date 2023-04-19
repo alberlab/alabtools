@@ -28,19 +28,7 @@ class TestCtFile(unittest.TestCase):
         ct.set_from_fofct(self.fofct_file)
         
         # check the results
-        self.assertTrue(ct.genome.assembly, self.data['assembly'])
-        self.assertTrue(np.array_equal(ct.index.chromstr, self.data['chromstr']))
-        self.assertTrue(np.array_equal(ct.index.start, self.data['start']))
-        self.assertTrue(np.array_equal(ct.index.end, self.data['end']))
-        self.assertTrue(ct.ncell, self.data['ncell'])
-        self.assertTrue(ct.ndomain, self.data['ndomain'])
-        self.assertTrue(ct.ncopy_max, self.data['ncopy_max'])
-        self.assertTrue(ct.nspot_max, self.data['nspot_max'])
-        self.assertTrue(ct.nspot_tot, self.data['nspot_tot'])
-        self.assertTrue(ct.ntrace_tot, self.data['ntrace_tot'])
-        self.assertTrue(np.array_equal(ct.ncopy, self.data['ncopy']))
-        self.assertTrue(np.array_equal(ct.nspot, self.data['nspot']))
-        self.assertTrue(np.allclose(ct.coordinates, self.data['coordinates'], equal_nan=True))
+        self._assertCtFile(ct)
         
         # close and delete the file
         ct.close()
@@ -58,26 +46,7 @@ class TestCtFile(unittest.TestCase):
         ct = ct1.merge(ct2, 'test_ct_merged.ct', tag1='1', tag2='2')
         
         # check the results
-        self.assertTrue(ct.genome.assembly, self.data['assembly'])
-        self.assertTrue(np.array_equal(ct.index.chromstr, self.data['chromstr']))
-        self.assertTrue(np.array_equal(ct.index.start, self.data['start']))
-        self.assertTrue(np.array_equal(ct.index.end, self.data['end']))
-        self.assertTrue(ct.ncell, self.data['ncell'] * 2)
-        self.assertTrue(ct.ndomain, self.data['ndomain'])
-        self.assertTrue(ct.ncopy_max, self.data['ncopy_max'])
-        self.assertTrue(ct.nspot_max, self.data['nspot_max'])
-        self.assertTrue(ct.nspot_tot, self.data['nspot_tot'] * 2)
-        self.assertTrue(ct.ntrace_tot, self.data['ntrace_tot'] * 2)
-        self.assertTrue(np.array_equal(ct.ncopy, np.concatenate((self.data['ncopy'],
-                                                                 self.data['ncopy']),
-                                                                axis=0)))
-        self.assertTrue(np.array_equal(ct.nspot, np.concatenate((self.data['nspot'],
-                                                                 self.data['nspot']),
-                                                                axis=0)))
-        self.assertTrue(np.allclose(ct.coordinates, np.concatenate((self.data['coordinates'],
-                                                                    self.data['coordinates']),
-                                                                   axis=0),
-                           equal_nan=True))
+        self._assertCtFile(ct, merged=True)
         
         # close and delete the files
         ct1.close()
@@ -101,19 +70,9 @@ class TestCtFile(unittest.TestCase):
         ct.set_manually(self.data['coordinates'], genome, index)
         
         # check the results
-        self.assertTrue(ct.genome.assembly, self.data['assembly'])
-        self.assertTrue(np.array_equal(ct.index.chromstr, self.data['chromstr']))
-        self.assertTrue(np.array_equal(ct.index.start, self.data['start']))
-        self.assertTrue(np.array_equal(ct.index.end, self.data['end']))
-        self.assertTrue(ct.ncell, self.data['ncell'])
-        self.assertTrue(ct.ndomain, self.data['ndomain'])
-        self.assertTrue(ct.ncopy_max, self.data['ncopy_max'])
-        self.assertTrue(ct.nspot_max, self.data['nspot_max'])
-        self.assertTrue(ct.nspot_tot, self.data['nspot_tot'])
-        self.assertTrue(ct.ntrace_tot, self.data['ntrace_tot'])
-        self.assertTrue(np.array_equal(ct.ncopy, self.data['ncopy']))
-        self.assertTrue(np.array_equal(ct.nspot, self.data['nspot']))
-        self.assertTrue(np.allclose(ct.coordinates, self.data['coordinates'], equal_nan=True))
+        self._assertCtFile(ct)
+        
+        # close and delete the file
         ct.close()
         os.remove('test_ct.ct')
     
@@ -154,25 +113,50 @@ class TestCtFile(unittest.TestCase):
         ct.trim()
         
         # check the results
-        self.assertTrue(ct.genome.assembly, self.data['assembly'])
-        self.assertTrue(np.array_equal(ct.index.chromstr, self.data['chromstr']))
-        self.assertTrue(np.array_equal(ct.index.start, self.data['start']))
-        self.assertTrue(np.array_equal(ct.index.end, self.data['end']))
-        self.assertTrue(ct.ncell, self.data['ncell'])
-        self.assertTrue(ct.ndomain, self.data['ndomain'])
-        self.assertTrue(ct.ncopy_max, self.data['ncopy_max'])
-        self.assertTrue(ct.nspot_max, self.data['nspot_max'])
-        self.assertTrue(ct.nspot_tot, self.data['nspot_tot'])
-        self.assertTrue(ct.ntrace_tot, self.data['ntrace_tot'])
-        self.assertTrue(np.array_equal(ct.ncopy, self.data['ncopy']))
-        self.assertTrue(np.array_equal(ct.nspot, self.data['nspot']))
-        self.assertTrue(np.allclose(ct.coordinates, self.data['coordinates'], equal_nan=True))
+        self._assertCtFile(ct)
         
         # close and remove the CtFile
         ct.close()
         os.remove('test_ct.ct')
-        
     
+    def _assertCtFile(self, ct, merged=False):
+        """Assert the CtFile object.
+
+        Args:
+            ct (CtFile)
+        """
+            
+        self.assertEqual(ct.genome.assembly, self.data['assembly'])
+        np.testing.assert_array_equal(ct.index.chromstr, self.data['chromstr'])
+        np.testing.assert_array_equal(ct.index.start, self.data['start'])
+        np.testing.assert_array_equal(ct.index.end, self.data['end'])
+        self.assertEqual(ct.ndomain, self.data['ndomain'])
+        self.assertEqual(ct.ncopy_max, self.data['ncopy_max'])
+        self.assertEqual(ct.nspot_max, self.data['nspot_max'])
+                
+        if not merged:
+            self.assertEqual(ct.ncell, self.data['ncell'])
+            self.assertEqual(ct.nspot_tot, self.data['nspot_tot'])
+            self.assertEqual(ct.ntrace_tot, self.data['ntrace_tot'])
+            np.testing.assert_array_equal(ct.ncopy, self.data['ncopy'])
+            np.testing.assert_array_equal(ct.nspot, self.data['nspot'])
+            np.testing.assert_allclose(ct.coordinates, self.data['coordinates'], equal_nan=True)
+        
+        else:
+            self.assertEqual(ct.ncell, 2 * self.data['ncell'])
+            self.assertEqual(ct.nspot_tot, 2 * self.data['nspot_tot'])
+            self.assertEqual(ct.ntrace_tot, 2 * self.data['ntrace_tot'])
+            np.testing.assert_array_equal(ct.ncopy, np.concatenate((self.data['ncopy'],
+                                                                    self.data['ncopy']),
+                                                                   axis=0))
+            np.testing.assert_array_equal(ct.nspot, np.concatenate((self.data['nspot'],
+                                                                    self.data['nspot']),
+                                                                   axis=0))
+            np.testing.assert_allclose(ct.coordinates, np.concatenate((self.data['coordinates'],
+                                                                       self.data['coordinates']),
+                                                                      axis=0),
+                                       equal_nan=True)  
+
 
 if __name__ == '__main__':
     unittest.main()
