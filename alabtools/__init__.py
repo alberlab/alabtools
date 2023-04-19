@@ -12,5 +12,7 @@ from .utils import Genome, Index
 from .analysis import HssFile
 from . import plots, analysis
 
-from . import imaging
-from . import parallel
+from .imaging import CtFile
+from .imaging.phasing import WSPhaser
+
+from .parallel import Controller
