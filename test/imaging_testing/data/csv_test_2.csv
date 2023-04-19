@@ -1,4 +1,0 @@
-(Spot_ID,Trace_ID,X,Y,Z,Chrom,Chrom_Start,Chrom_End,Cell_ID,Extra_Cell_ROI_ID)
-1,1_1,1.1,2.,3.,chr1,0,5000,1,0
-2,1_2,3.5,7.,9.1,chr2,5000,11200,2,0
-3,3_2,5.4,6.,8.9,chr2,5000,11200,3,0
