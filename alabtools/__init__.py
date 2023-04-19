@@ -13,6 +13,6 @@ from .analysis import HssFile
 from . import plots, analysis
 
 from .imaging import CtFile
-from .imaging.phasing import WSPhaser
+from .imaging.phasing import *
 
 from .parallel import Controller
