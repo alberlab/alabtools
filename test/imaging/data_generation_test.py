@@ -184,18 +184,18 @@ def generate_ct_data():
 
 if __name__ == '__main__':
     
-    # get the path of the current file
-    dir = os.path.dirname(os.path.abspath(__file__))
+    # set file directory as the working directory
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     
     # generate data
     data = generate_ct_data()
     
     # create the FoF-CT file
-    fofct_filename = dir + '/test_fofct.csv'
+    fofct_filename = 'test_fofct.csv'
     write_fofct_file(fofct_filename, data)
     
     # save data as a pickle file
-    pkl_filename = dir + '/test_data.pkl'
+    pkl_filename = 'test_data.pkl'
     with open(pkl_filename, 'wb') as f:
         pkl.dump(data, f)
     
