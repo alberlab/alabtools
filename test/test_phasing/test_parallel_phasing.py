@@ -13,11 +13,12 @@ ct.close()
 
 config = {'ct_name': ct_name,
           'parallel': {'controller': 'ipyparallel'},
+          'ncluster': {'#': 2, 'chrX': 1},
           'additional_parameters': {'st': 1.2, 'ot': 2.5}}
 phaser = WSPhaser(config)
 
 t1 = time.time()
-ct_phased = phaser.phasing()
+ct_phased = phaser.run()
 t2 = time.time()
 
 print('Execution time: {} s'.format(t2 - t1))
