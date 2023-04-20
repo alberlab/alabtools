@@ -1,10 +1,10 @@
 import unittest
 import os
 import numpy as np
-import pickle as pkl
 from alabtools import Genome, Index
 from alabtools import CtFile
 from alabtools import WSPhaser
+
 
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
@@ -269,7 +269,6 @@ def writeFofctFile(filename, data):
     fofct_file.close()
     
     return None
-    
 
 def createTestData():
     """Generates random chromating tracing data for testing.
