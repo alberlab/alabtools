@@ -3,6 +3,7 @@ import os
 import numpy as np
 from alabtools import Genome, Index
 from alabtools import CtFile
+from alabtools.imaging.utils_imaging import flatten_coordinates
 from alabtools import WSPhaser
 
 
@@ -175,6 +176,24 @@ class TestCtFile(unittest.TestCase):
         os.remove('test_ct.ct')
         os.remove('test_ct_phased.ct')
     
+    def test_flatten_coordinates(self):
+        """Test the flatten_coordinates function in imaging utils.
+        """
+        # test with different number of dimensions
+        n_tests = [(3, 2),  # n1=3, n2=2 (np.array((3, 2, 3)))
+                   (3, 2, 4),  # n1=3, n2=2, n3=4
+                   (3, 2, 4, 6),  # n1=3, n2=2, n3=4, n4=6
+                   (3, 2, 4, 6, 1)]  # n1=3, n2=2, n3=4, n4=6, n5=1
+        for n in n_tests:
+            # create random coordinates (np.array(n1, n2, ..., nK, 3))
+            crd = np.random.rand(*n, 3)
+            # flatten the coordinates (np.array(n1*n2*...*nK, 3)
+            # and the corresponding indices (np.array(n1*n2*...*nK, K))
+            crd_flat, idx = flatten_coordinates(crd)
+            # check that the flattened coordinates are the same as the original coordinates
+            for w, ijk in enumerate(idx):
+                np.testing.assert_allclose(crd[tuple(ijk)], crd_flat[w])
+    
     
     def _assertCtFile(self, ct, merged=False):
         """Assert the CtFile object.
@@ -212,7 +231,7 @@ class TestCtFile(unittest.TestCase):
             np.testing.assert_allclose(ct.coordinates, np.concatenate((self.data['coordinates'],
                                                                        self.data['coordinates']),
                                                                       axis=0),
-                                       equal_nan=True)  
+                                       equal_nan=True)
 
 
 def writeFofctFile(filename, data):

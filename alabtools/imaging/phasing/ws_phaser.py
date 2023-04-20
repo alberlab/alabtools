@@ -8,6 +8,7 @@ from scipy.spatial import distance
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import AgglomerativeClustering
 from alabtools.imaging import CtFile
+from alabtools.imaging.utils_imaging import flatten_coordinates
 from .phaser import Phaser, reorder_spots, phase_cell_coordinates
 
 
@@ -93,9 +94,14 @@ class WSPhaser(Phaser):
             phs = np.zeros((crd.shape[0], crd.shape[1]),
                            dtype=np.int32)  # np.array(ndomain_chrom, nspot_max)
             
-            # flatten coordinates and remove NaNs
+            # flatten coordinates
+            # crd_flat: np.array(ndomain_chrom*nspot_max, 3)
+            crd_flat, idx = flatten_coordinates(crd)
+            
+            # remove nan coordinates
             # crd_flat_nonan: np.array(nspot, 3)
-            crd_flat_nonan, idx_nonan = flatten_coordinates(crd)
+            crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
+            idx_nonan = idx[~np.isnan(crd_flat).any(axis=1)]
             
             # if there are not enough spots to phase, skip
             nspot = crd_flat_nonan.shape[0]
@@ -246,33 +252,4 @@ def clustering(method, pts, ncluster):
         raise ValueError("method not supported.")
     lbl = clt.labels_ + 1  # labels are 1 or 2
     return lbl
-
-def flatten_coordinates(crd):
-    """Flattens the coordinates keeping track of the indices.
-    Used to go from a 2D array to a 1D array and back.
-    Also removes NaNs
-    
-    Parameters
-    ----------
-    crd: np.array(ndomain_chrom, nspot_max, 3)
-    
-    Returns
-    ----------
-    crd_flat: np.array(ndomain_chrom_nonan * nspot_max, 3)
-    
-    idx: np.array(ndomain_chrom_nonan * nspot_max, 2)
-        Indices of the original array.
-    """
-    # Create a meshgrid of indices
-    ii, jj, = np.meshgrid(np.arange(crd.shape[0]), np.arange(crd.shape[1]))
-    # stack indices together vertically, e.g.
-    #   [[0 0]
-    #    [1 0]
-    #    [2 0]]
-    idx = np.vstack((ii.flatten(), jj.flatten())).T
-    crd_flat = crd[idx[:,0], idx[:,1], :]
-    # Removes NaNs from crd_flat and idx
-    crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
-    idx_nonan = idx[~np.isnan(crd_flat).any(axis=1)]
-    return crd_flat_nonan, idx_nonan
     

@@ -14,5 +14,6 @@ from . import plots, analysis
 
 from .imaging import CtFile
 from .imaging.phasing import *
+from .imaging.envelope import CtEnvelope
 
 from .parallel import Controller
