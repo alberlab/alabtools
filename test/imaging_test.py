@@ -5,6 +5,7 @@ from alabtools import Genome, Index
 from alabtools import CtFile
 from alabtools.imaging.utils_imaging import flatten_coordinates
 from alabtools import WSPhaser
+from alabtools.imaging.ctenvelope import fit_alphashape
 
 
 class TestCtFile(unittest.TestCase):
@@ -193,6 +194,37 @@ class TestCtFile(unittest.TestCase):
             # check that the flattened coordinates are the same as the original coordinates
             for w, ijk in enumerate(idx):
                 np.testing.assert_allclose(crd[tuple(ijk)], crd_flat[w])
+    
+    def test_fit_alphashape(self):
+        
+        # create random coordinates within a unit sphere
+        n_points = 5000  # enough points to fit a sphere
+        theta = np.random.rand(n_points) * 2 * np.pi
+        phi = np.arccos(2 * np.random.rand(n_points) - 1)
+        x = np.sin(phi) * np.cos(theta)
+        y = np.sin(phi) * np.sin(theta)
+        z = np.cos(phi)
+        pts = np.array([x, y, z]).T
+        
+        # fit an alpha shape
+        alpha, mesh = fit_alphashape(pts, alpha=0.0005, delta_alpha=0.0001)
+        
+        # check that the alpha shape is a sphere
+        # generate random points within a sphere of radius 2
+        n_check = 1000
+        for _ in range(n_check):
+            r = 2 * np.random.rand()
+            theta = np.random.rand() * 2 * np.pi
+            phi = np.arccos(2 * np.random.rand() - 1)
+            x = r * np.sin(phi) * np.cos(theta)
+            y = r * np.sin(phi) * np.sin(theta)
+            z = r * np.cos(phi)
+            pt = np.array([[x, y, z]])
+            if r < 1:  # points within the sphere should be contained in the alpha shape
+                self.assertTrue(mesh.contains(pt))
+            if r > 1:  # points outside the sphere should not be contained in the alpha shape
+                self.assertFalse(mesh.contains(pt))
+        return None
     
     
     def _assertCtFile(self, ct, merged=False):

@@ -235,6 +235,16 @@ class CtEnvelope(object):
             assert isinstance(delta_alpha, float), "delta alpha must be a float."
             assert delta_alpha > 0, "delta alpha must be > 0."
         
+        try:
+            thresh = cfg['fit parameters']['thresh']  # threshold for outlier detection
+        except KeyError:
+            raise KeyError("thresh not found in cfg['fit parameters'].")
+        
+        try:
+            min_neigh = cfg['fit parameters']['min_neigh']  # min neigh for outlier detection
+        except KeyError:
+            raise KeyError("min_neigh not found in cfg['fit parameters'].")
+        
         # load the CtFile
         ct = CtFile(ct_name, 'r')
         
@@ -246,7 +256,7 @@ class CtEnvelope(object):
         # remove the nan coordinates
         crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
         # remove the outliers
-        crd_flat_nonan_noout = remove_outliers(crd_flat_nonan)
+        crd_flat_nonan_noout = remove_outliers(crd_flat_nonan, thresh, min_neigh)
         
         # fit the alpha-shape
         alpha, mesh = fit_alphashape(crd_flat_nonan_noout, alpha, delta_alpha, force)
@@ -300,30 +310,30 @@ def fit_alphashape(points, alpha, delta_alpha, force=False):
             raise ValueError('alpha <= 0 reached but the alpha-shape is not closed.')
     return alpha, mesh
 
-def remove_outliers(points):
-    """
-    TO BE REFINED!!
-    
+def remove_outliers(points, thresh, min_neigh):
+    """    
     Removes the outliers from the input points.
     For each point, counts the number of points in a neighborhood of fixed radius.
     Then, removes the points with a number of neighbors below a threshold.
     
     Args:
         points (numpy.ndarray([n_points, dim])): coordinates of the points to fit the alpha-shape.
+        thresh (float): radius of the sphere where we look for other points.
+        min_neigh (int): minimum number of points required to be in the sphere.
     
     Returns:
         points_noout (numpy.ndarray([n_points_noout, dim])): coordinates of the points without outliers.
     """
     
-    thresh = 1100  # nm, radius of the sphere where we look for other points
-    min_neighbors = 2 * np.ceil(len(points) / 1000)  # minimum number of points required to be in the sphere
     # Compute the distance matrix
     dmat = distance.cdist(points, points, 'euclidean')
+    # set the diagonal to nan
+    np.fill_diagonal(dmat, np.nan)
     # Compute the proximity matrix
     pmat = np.zeros(dmat.shape)
     pmat[dmat <= thresh] = 1
     # Compute the number of neighbors for each locus
-    neighs = np.nansum(pmat, axis=0)  # / 2
+    neighs = np.nansum(pmat, axis=0)  # np.array(n_points)
     # Take only the points with enough neighbors
-    points_noout = points[neighs >= min_neighbors]
+    points_noout = points[neighs >= min_neigh]
     return points_noout
