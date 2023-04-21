@@ -258,7 +258,46 @@ class CtFile(h5py.File):
     
     def get_cellID(self, cellnum):
         assert isinstance(cellnum, (int, np.int32, np.int64))
-        return self.cell_labels[cellnum]      
+        return self.cell_labels[cellnum]
+    
+    def sort(self):
+        """Sorts the data by putting the NaNs at the end of the array.
+        
+        In particular, it sorts the copies and the spots.
+        
+        For the copies, the sorting is done for each chromosome: if in a cell
+        a chromosome has all NaNs for a copy, then the copy is put at the end.
+        
+        For the spots, the sorting is done in the whole dataset: for a given
+        cell, domain and copy, the spots are sorted with NaNs at the end.
+
+        The function updates the attributes of the object.
+        """
+        
+        for cellnum in range(self.ncell):
+            for chrom in self.genome.chroms:
+                # coordinates for the current cell/chrom
+                crd = self.coordinates[cellnum,
+                                       self.index.chromstr==chrom,
+                                       :, :, :]  # (ndomain_chr, ncopy_max, nspot_max, 3)
+                # initialize sorted coordinates for the current cell/chrom
+                crd_srt = np.copy(crd)
+                # loop copy in reverse order
+                for cp in range(self.ncopy_max - 1, -1, -1):
+                    # it the copy is all NaN, continue (it is already at the end)
+                    if np.all(crd[:, cp, :, :]):
+                        continue
+                    # otherwise, loop the other copies before it
+                    for cp2 in range(cp):
+                        # if the other copy is not all NaN, continue (it's before the NaNs)
+                        if not np.all(crd[:, cp2, :, :]):
+                            continue
+                        # otherwise, swap the two copies
+                        crd_srt[:, cp, :, :] = crd[:, cp2, :, :]
+                        crd_srt[:, cp2, :, :] = crd[:, cp, :, :]
+                        # NOT FINISHED!!
+        
+        return None
     
     def trim(self):
         """
