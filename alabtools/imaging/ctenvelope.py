@@ -19,7 +19,7 @@ class CtEnvelope(object):
     Saved and loaded as a pickle file with the extension .ctenv.
     
     Attributes:
-        filename (str): Name of the file.
+        filename (str): Name of the file (should end with .ctenv)
         mode (str): Mode of the file. Can be 'r' or 'w'.
         fitted (bool): True if the envelope has been fitted.
         ct_fit (str): Name of the CtFile used to fit the envelope.
