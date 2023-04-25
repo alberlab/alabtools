@@ -96,12 +96,12 @@ class WSPhaser(Phaser):
             
             # flatten coordinates
             # crd_flat: np.array(ndomain_chrom*nspot_max, 3)
-            crd_flat, idx = flatten_coordinates(crd)
+            crd_flat, idx_flat = flatten_coordinates(crd)
             
             # remove nan coordinates
             # crd_flat_nonan: np.array(nspot, 3)
             crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
-            idx_nonan = idx[~np.isnan(crd_flat).any(axis=1)]
+            idx_flat_nonan = idx_flat[~np.isnan(crd_flat).any(axis=1)]
             
             # if there are not enough spots to phase, skip
             nspot = crd_flat_nonan.shape[0]
@@ -120,6 +120,10 @@ class WSPhaser(Phaser):
             
             # remove outliers
             phs_flat_nonan_noout = remove_outliers(crd_flat_nonan, phs_flat_nonan, ot)
+            # the function remove_outliers doesn't change the shape of the input,
+            # but rather sets the outliers to 0. So the index doesn't change.
+            # I keep the same variable name for clarity.
+            idx_flat_nonan_noout = idx_flat_nonan
             
             # if the phase labels are skipping an integer (e.g. 0, 2 - missing 1),
             # map them to increasing integers (e.g. 0, 1)
@@ -132,7 +136,7 @@ class WSPhaser(Phaser):
                 del phs_flat_nonan_noout_cp
             
             # assign phasing labels to original coordinates
-            for w, ij in enumerate(idx_nonan):
+            for w, ij in enumerate(idx_flat_nonan_noout):
                 i, j = ij
                 phs[i,j] = phs_flat_nonan_noout[w]
             
