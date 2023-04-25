@@ -470,7 +470,7 @@ def createTestData():
     sizes = np.random.rand(len(chroms))  # list of # of domains for each chromosome
     sizes = ndomain * sizes / np.sum(sizes)
     sizes = np.round(sizes).astype(int)
-    sizes[0] += ndomain - np.sum(sizes)  # adjust the sizes to have ndomain
+    sizes[0] += ndomain - np.sum(sizes)  # adjust sizes[0] so that np.sum(sizes) == ndomain
     if np.any(sizes <= 0):
         raise ValueError('One of the sizes is <= 0. Try again.')
     chromstr = []
