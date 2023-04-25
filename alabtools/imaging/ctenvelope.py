@@ -255,11 +255,11 @@ class CtEnvelope(object):
         crd_flat, _ = flatten_coordinates(crd)
         # remove the nan coordinates
         crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
-        # remove the outliers
-        crd_flat_nonan_noout = remove_outliers(crd_flat_nonan, thresh, min_neigh)
+        # remove the isolated points
+        crd_flat_nonan_noiso= remove_isolated(crd_flat_nonan, thresh, min_neigh)
         
         # fit the alpha-shape
-        alpha, mesh = fit_alphashape(crd_flat_nonan_noout, alpha, delta_alpha, force)
+        alpha, mesh = fit_alphashape(crd_flat_nonan_noiso, alpha, delta_alpha, force)
         
         # save the alpha-shape as a pickle file in the temporary directory
         out_name = os.path.join(temp_dir, '{}.pkl'.format(cellID))
@@ -270,6 +270,57 @@ class CtEnvelope(object):
         ct.close()
         
         return out_name
+    
+    def remove_outliers(self, ct):
+        """Given a CtFile, remove the outliers from its data.
+        
+        The outliers are defined as points that - in each respective cell - are outside the mesh.
+
+        Args:
+            ct (CtFile): CtFile to clean.
+        
+        Returns:
+            ct_clean (CtFile): CtFile without outliers.
+        """
+        
+        # check that the alpha-shape is fitted
+        assert self.fitted, "The alpha-shape must be fitted before removing outliers."
+        # check that the cell labels match
+        assert np.array_equal(self.cell_labels, ct.cell_labels),\
+            "The cell labels of the CtFile do not match the cell labels of the CtEnvelope."
+        
+        # initialize the cleaned coordinates
+        coordinates_clean = np.full(ct.coordinates.shape, np.nan)
+        
+        # loop over the cells
+        for cellnum in range(self.cell_labels):
+            
+            # get the alpha-shape mesh
+            mesh = self.mesh[cellnum]
+            
+            # get the cell coordinates
+            crd = ct.coordinates[cellnum, :, :, :, :]
+            # flatten the coordinates of the CtFile
+            crd_flat, idx_flat = flatten_coordinates(crd)
+            # remove the nan coordinates
+            crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
+            idx_flat_nonan = idx_flat[~np.isnan(crd_flat).any(axis=1)]
+            # remove the points outside the alpha-shape
+            inside = mesh.contains(crd_flat_nonan)
+            crd_flat_nonan_noout = crd_flat_nonan[inside]
+            idx_flat_nonan_noout = idx_flat_nonan[inside]
+                              
+            # loop over the points and fill the cleaned coordinates
+            # with the points inside the alpha-shape
+            for w, ijk in enumerate(idx_flat_nonan_noout):
+                coordinates_clean[tuple((cellnum, *ijk))] = crd_flat_nonan_noout[w]
+        
+        # create the cleaned CtFile
+        ct_clean = CtFile(ct.name.replace('.ct', '_clean.ct'), 'w')
+        ct_clean.set_manually(coordinates_clean, ct.genome, ct.index, ct.cell_labels)
+        
+        return ct_clean
+            
 
 def fit_alphashape(points, alpha, delta_alpha, force=False):
     """
@@ -310,9 +361,10 @@ def fit_alphashape(points, alpha, delta_alpha, force=False):
             raise ValueError('alpha <= 0 reached but the alpha-shape is not closed.')
     return alpha, mesh
 
-def remove_outliers(points, thresh, min_neigh):
+def remove_isolated(points, thresh, min_neigh):
     """    
-    Removes the outliers from the input points.
+    Removes the isolated points from the input points (likely outliers).
+    
     For each point, counts the number of points in a neighborhood of fixed radius.
     Then, removes the points with a number of neighbors below a threshold.
     
