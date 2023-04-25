@@ -261,6 +261,18 @@ class CtFile(h5py.File):
         assert isinstance(cellnum, (int, np.int32, np.int64))
         return self.cell_labels[cellnum]
     
+    def sort_cells(self, idx):
+        """Sorts cells by the given index.
+
+        Args:
+            idx (np.array(ncells), dtype=int): integer array (from 0 to ncells-1)
+                                               that specifies the order of cells.
+        """
+        self.cell_labels = self.cell_labels[idx]
+        self.ncopy = self.ncopy[idx]
+        self.nspot = self.nspot[idx]
+        self.coordinates = self.coordinates[idx]
+    
     def sort_copies(self):
         """Sorts copies of each chromosome in each cell.
         

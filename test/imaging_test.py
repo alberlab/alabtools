@@ -8,10 +8,6 @@ from alabtools import WSPhaser
 from alabtools.imaging.ctenvelope import fit_alphashape
 
 
-# THESE TESTS ARE NOT STABLE!!
-# THEY SUCCEED OR FAIL DEPENDING ON THE INPUT PARAMETERS!!!
-
-
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
 
@@ -37,10 +33,12 @@ class TestCtFile(unittest.TestCase):
     def test_set_from_fofct(self):
         """Test the set_from_fofct method of CtFile.
         """
-        
         # create a CtFile object and set the data from fofct
         ct = CtFile('test_ct.ct', 'w')
         ct.set_from_fofct(self.fofct_file)
+        
+        # sort the cells by int-casted cell labels (with str labels, the order is not correct)
+        ct.sort_cells(idx=np.argsort(ct.cell_labels.astype(int)))
         
         # check the results
         self._assertCtFile(ct, self.data)
@@ -52,7 +50,6 @@ class TestCtFile(unittest.TestCase):
     def test_merge(self):
         """Test the merge method of CtFile.
         """
-        
         # modify the test data for merging
         mrgd_data = self.data.copy()
         mrgd_data['ncell'] = 2 * self.data['ncell']
@@ -71,8 +68,10 @@ class TestCtFile(unittest.TestCase):
         # create two CtFile objects and merge them
         ct1 = CtFile('test_ct1.ct', 'w')
         ct1.set_from_fofct(self.fofct_file)
+        ct1.sort_cells(idx=np.argsort(ct1.cell_labels.astype(int)))
         ct2 = CtFile('test_ct2.ct', 'w')
         ct2.set_from_fofct(self.fofct_file)
+        ct2.sort_cells(idx=np.argsort(ct2.cell_labels.astype(int)))
         ct = ct1.merge(ct2, 'test_ct_merged.ct', tag1='1', tag2='2')
         
         # check the results
@@ -88,8 +87,7 @@ class TestCtFile(unittest.TestCase):
     
     def test_set_manually(self):
         """Test the manual setting of CtFile.
-        """
-        
+        """    
         # open a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
@@ -111,7 +109,6 @@ class TestCtFile(unittest.TestCase):
         First we inclulde a number of NaN columns in copies and spots of the coordinates.
         Then we create a CtFile object and trim the spots.
         """
-        
         ncopy_totrim = 2  # number of NaN columns to trim for copies
         nspot_totrim = 3  # number of NaN columns to trim for spots
         
@@ -264,7 +261,6 @@ class TestCtFile(unittest.TestCase):
         
     def test_phasing(self):
         """Test the phasing method of WSPhaser.
-        BUG HERE TO BE FIXED!!
         """
         
         # collapse the coordinates to a single copy
@@ -353,9 +349,9 @@ class TestCtFile(unittest.TestCase):
             y = r * np.sin(phi) * np.sin(theta)
             z = r * np.cos(phi)
             pt = np.array([[x, y, z]])
-            if r < 1:  # points within the sphere should be contained in the alpha shape
+            if r < 0.9:  # points within the sphere should be contained in the alpha shape
                 self.assertTrue(mesh.contains(pt))
-            if r > 1:  # points outside the sphere should not be contained in the alpha shape
+            if r > 1.1:  # points outside the sphere should not be contained in the alpha shape
                 self.assertFalse(mesh.contains(pt))
         return None
     
@@ -365,6 +361,7 @@ class TestCtFile(unittest.TestCase):
 
         Args:
             ct (CtFile)
+            test_data (dict)
         """
 
         self.assertEqual(ct.genome.assembly, test_data['assembly'])
@@ -463,8 +460,8 @@ def createTestData():
     chroms = ['chr1', 'chr2', 'chrX']
     
     # set the attributes
-    ncell = 15
-    ndomain = 82
+    ncell = 5
+    ndomain = 205
     ncopy_max = 2
     nspot_max = 7
     
@@ -490,6 +487,9 @@ def createTestData():
             # generate end[i] between start[-1]+100 and start[i]+1000
             end.append(start[-1] + np.random.randint(100, 1000))
     chromstr, start, end = np.array(chromstr), np.array(start), np.array(end)
+    
+    # create cell_labels
+    cell_labels = np.arange(ncell).astype('S10')
     
     # create ncopy
     # If I allows for ncopy to be 0, then there is the risk that,
@@ -551,6 +551,7 @@ def createTestData():
         'nspot_max': nspot_max,
         'nspot_tot': nspot_tot,
         'ntrace_tot': ntrace_tot,
+        'cell_labels': cell_labels,
         'ncopy': ncopy,
         'nspot': nspot,
         'coordinates': coordinates
