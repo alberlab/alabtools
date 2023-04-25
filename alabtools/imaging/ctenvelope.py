@@ -88,6 +88,26 @@ class CtEnvelope(object):
         with open(self.filename, 'wb') as f:
             pickle.dump(self, f)
     
+    def sort_cells(self, order):
+        """Orders the CtEnvelope according to the input order.
+
+        Args:
+            order (np.array(ncell, dtype=int)): New order of the cells.
+                Must be a permutation of the numbers from 0 to ncell-1.
+        """
+        
+        # assert the input order
+        assert self.fitted == True, "CtEnvelope has not been fitted."
+        assert len(order) == self.ncell,\
+            "The length of the input order must be equal to the number of cells."
+        assert np.array_equal(np.sort(order), np.arange(self.ncell)),\
+            "The input order must be a permutation of the numbers from 0 to ncell-1."
+        # sort the datasets
+        self.cell_labels = self.cell_labels[order]
+        self.alpha = self.alpha[order]
+        self.mesh = [self.mesh[i] for i in order]
+        self.volume = self.volume[order]
+    
     def run(self, cfg):
         """Runs the alpha-shape algorithm.
         
