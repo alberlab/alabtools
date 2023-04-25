@@ -507,10 +507,12 @@ class CtFile(h5py.File):
             ntrace_tot += np.sum(ncopy_max_chrom)
         self.ntrace_tot = ntrace_tot
         
+        # sort copies and spots
+        self.sort_copies()
+        self.sort_spots()
+         
         # trim the data
         self.trim()
-
-        return None
     
     
     def set_from_fofct(self, fofct_file, in_assembly=None):
