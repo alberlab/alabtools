@@ -39,9 +39,9 @@ class CtFile(h5py.File):
     genome : Genome
     index : Index
     cell_labels = np.array(ncell, dtype='S10')
-    coordinates: np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float32)
-    nspot = np.array(ncell, ndomain, ncopy_max, dtype=int32)
-    ncopy = np.array(ncell, ndomain, dtype=int32)
+    coordinates: np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)
+    nspot = np.array(ncell, ndomain, ncopy_max, dtype=int64)
+    ncopy = np.array(ncell, ndomain, dtype=int64)
     """
     
     def __init__(self, *args, **kwargs):
@@ -258,7 +258,7 @@ class CtFile(h5py.File):
             return findidx[0]
     
     def get_cellID(self, cellnum):
-        assert isinstance(cellnum, (int, np.int32, np.int64))
+        assert isinstance(cellnum, (int, np.int64, np.int64))
         return self.cell_labels[cellnum]
     
     def _compute_ntrace_tot(self):
@@ -482,7 +482,7 @@ class CtFile(h5py.File):
            ncopy and nspot are inferred from the coordinates array.
 
         Args:
-            coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3), np.float32)
+            coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3), np.float64)
             genome (Genome)
             index (Index)
             cell_labels (np.array(ncell, dtype='U10'), optional):
@@ -507,7 +507,7 @@ class CtFile(h5py.File):
             'coordinates must have the same number of domains as the index'
         assert coordinates.shape[4] == 3, 'spatial coordinates must be 3D'
         try:
-            self.coordinates = coordinates.astype(np.float32)
+            self.coordinates = coordinates.astype(np.float64)
         except ValueError:
             "Coordinates must be numeric."
         
@@ -640,12 +640,12 @@ class CtFile(h5py.File):
         """
         
         # READ ALL ARRAYS FROM DATA
-        x = data[:, col_names == 'X'].transpose()[0].astype(np.float32)
-        y = data[:, col_names == 'Y'].transpose()[0].astype(np.float32)
-        z = data[:, col_names == 'Z'].transpose()[0].astype(np.float32)
+        x = data[:, col_names == 'X'].transpose()[0].astype(np.float64)
+        y = data[:, col_names == 'Y'].transpose()[0].astype(np.float64)
+        z = data[:, col_names == 'Z'].transpose()[0].astype(np.float64)
         chrstr = data[:, col_names == 'Chrom'].transpose()[0]
-        start = data[:, col_names == 'Chrom_Start'].transpose()[0].astype(np.int32)
-        end = data[:, col_names == 'Chrom_End'].transpose()[0].astype(np.int32)
+        start = data[:, col_names == 'Chrom_Start'].transpose()[0].astype(np.int64)
+        end = data[:, col_names == 'Chrom_End'].transpose()[0].astype(np.int64)
         traceID = data[:, col_names == 'Trace_ID'].transpose()[0]
         if 'Cell_ID' in col_names:
             cellID = data[:, col_names == 'Cell_ID'].transpose()[0]
@@ -718,9 +718,9 @@ class CtFile(h5py.File):
             ncopy.append(ncopy_cell)
         
         # CREATE HOMOGENEOUS ARRAYS (coord and nspot)
-        coord_homo = np.nan * np.zeros((ncell, self.ndomain, ncopy_max, nspot_max, 3), dtype=np.float32)
-        nspot_homo = np.zeros((ncell, self.ndomain, ncopy_max), dtype=np.int32)
-        ncopy = np.array(ncopy).astype(np.int32)  # already homogeneous
+        coord_homo = np.nan * np.zeros((ncell, self.ndomain, ncopy_max, nspot_max, 3), dtype=np.float64)
+        nspot_homo = np.zeros((ncell, self.ndomain, ncopy_max), dtype=np.int64)
+        ncopy = np.array(ncopy).astype(np.int64)  # already homogeneous
         for cell in range(ncell):  # Loop to go heterogeneous -> homogeneous
             for dom in range(self.ndomain):
                 for trc in range(ncopy[cell, dom]):
@@ -729,7 +729,7 @@ class CtFile(h5py.File):
                         for i in range(3):
                             coord_homo[cell, dom, trc, spot, i] = coord[cell][dom][trc][spot][i]
         coord = coord_homo
-        nspot = nspot_homo.astype(np.int32)
+        nspot = nspot_homo.astype(np.int64)
         
         return ncell, nspot_tot, ntrace_tot, nspot_max, ncopy_max, cell_labels, coord, nspot, ncopy
     
