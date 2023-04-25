@@ -108,6 +108,28 @@ class CtEnvelope(object):
         self.mesh = [self.mesh[i] for i in order]
         self.volume = self.volume[order]
     
+    def pop_cells(self, indices):
+        """Removes the cells with the input indices.
+        
+        Args:
+            indices (np.array(n, dtype=int)): Indices of the cells to remove.
+                Must be a subset of the numbers from 0 to ncell-1.
+        """
+        
+        # assert the input indices
+        assert self.fitted == True, "CtEnvelope has not been fitted."
+        assert len(indices) <= self.ncell,\
+            "The length of the input indices must be less than or equal to the number of cells."
+        for i in indices:
+            assert i in np.arange(self.ncell),\
+                "The input indices must be a subset of the numbers from 0 to ncell-1."
+        # remove the cells
+        self.ncell -= len(indices)
+        self.cell_labels = np.delete(self.cell_labels, indices)
+        self.alpha = np.delete(self.alpha, indices)
+        self.mesh = [self.mesh[i] for i in range(self.ncell) if i not in indices]
+        self.volume = np.delete(self.volume, indices)
+    
     def run(self, cfg):
         """Runs the alpha-shape algorithm.
         
