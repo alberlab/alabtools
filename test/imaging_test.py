@@ -8,6 +8,10 @@ from alabtools import WSPhaser
 from alabtools.imaging.ctenvelope import fit_alphashape
 
 
+# THESE TESTS ARE NOT STABLE!!
+# THEY SUCCEED OR FAIL DEPENDING ON THE INPUT PARAMETERS!!!
+
+
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
 
@@ -39,7 +43,7 @@ class TestCtFile(unittest.TestCase):
         ct.set_from_fofct(self.fofct_file)
         
         # check the results
-        self._assertCtFile(ct)
+        self._assertCtFile(ct, self.data)
         
         # close and delete the file
         ct.close()
@@ -49,6 +53,21 @@ class TestCtFile(unittest.TestCase):
         """Test the merge method of CtFile.
         """
         
+        # modify the test data for merging
+        mrgd_data = self.data.copy()
+        mrgd_data['ncell'] = 2 * self.data['ncell']
+        mrgd_data['nspot_tot'] = 2 * self.data['nspot_tot']
+        mrgd_data['ntrace_tot'] = 2 * self.data['ntrace_tot']
+        mrgd_data['ncopy'] = np.concatenate((self.data['ncopy'],
+                                             self.data['ncopy']),
+                                            axis=0)
+        mrgd_data['nspot'] = np.concatenate((self.data['nspot'],
+                                             self.data['nspot']),
+                                            axis=0)
+        mrgd_data['coordinates'] = np.concatenate((self.data['coordinates'],
+                                                   self.data['coordinates']),
+                                                  axis=0)
+        
         # create two CtFile objects and merge them
         ct1 = CtFile('test_ct1.ct', 'w')
         ct1.set_from_fofct(self.fofct_file)
@@ -57,7 +76,7 @@ class TestCtFile(unittest.TestCase):
         ct = ct1.merge(ct2, 'test_ct_merged.ct', tag1='1', tag2='2')
         
         # check the results
-        self._assertCtFile(ct, merged=True)
+        self._assertCtFile(ct, mrgd_data)
         
         # close and delete the files
         ct1.close()
@@ -81,7 +100,7 @@ class TestCtFile(unittest.TestCase):
         ct.set_manually(self.data['coordinates'], genome, index)
         
         # check the results
-        self._assertCtFile(ct)
+        self._assertCtFile(ct, self.data)
         
         # close and delete the file
         ct.close()
@@ -124,14 +143,128 @@ class TestCtFile(unittest.TestCase):
         ct.trim()
         
         # check the results
-        self._assertCtFile(ct)
+        self._assertCtFile(ct, self.data)
         
         # close and remove the CtFile
         ct.close()
         os.remove('test_ct.ct')
     
+    def test_sort_copies(self):
+        """Test the sort_copies method of CtFile.
+        """
+        n_nan_copy = 2  # number of NaN columns to add for copies
+        
+        # include NaN columns in copies
+        # initialize the coordinates array as NaN
+        coordinates_tosort = np.full((self.data['ncell'],
+                                      self.data['ndomain'],
+                                      self.data['ncopy_max']+n_nan_copy,
+                                      self.data['nspot_max'],
+                                      3),
+                                     np.nan)
+        # fill in the coordinates data
+        for cellnum in range(self.data['ncell']):
+            for chrom in np.unique(self.data['chromstr']):
+                # map the copy index without NaNs to the copy index with NaNs
+                cp_map = np.sort(np.random.choice(np.arange(self.data['ncopy_max'] + n_nan_copy),
+                                                  self.data['ncopy_max'],
+                                                  replace=False))
+                # fill in the coordinates and copies data for each copy
+                for cp in range(self.data['ncopy_max']):
+                    coordinates_tosort[cellnum, self.data['chromstr']==chrom, cp_map[cp], :, :] = \
+                        self.data['coordinates'][cellnum, self.data['chromstr']==chrom, cp, :, :]
+
+        # create the coordinates/nspot arrays to test
+        coordinates_test = np.full((self.data['ncell'],
+                                    self.data['ndomain'],
+                                    self.data['ncopy_max']+n_nan_copy,
+                                    self.data['nspot_max'],
+                                    3),
+                                   np.nan)
+        coordinates_test[:, :, :self.data['ncopy_max'], :, :] = self.data['coordinates']
+        nspot_test = np.zeros((self.data['ncell'],
+                                 self.data['ndomain'],
+                                 self.data['ncopy_max']+n_nan_copy))
+        nspot_test[:, :, :self.data['ncopy_max']] = self.data['nspot']
+        
+        
+        # create a CtFile object and set the data manually
+        ct = CtFile('test_ct.ct', 'w')
+        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        index = Index(chrom=self.data['chromstr'],
+                      start=self.data['start'],
+                      end=self.data['end'],
+                      genome=genome)
+        ct.set_manually(coordinates_tosort, genome, index)  # use coordinates with NaN columns
+        
+        # sort the copies
+        ct.sort_copies()
+
+        # check the results
+        np.testing.assert_array_almost_equal(ct.coordinates, coordinates_test, decimal=3)
+        np.testing.assert_array_equal(ct.nspot, nspot_test)
+        
+        # close and remove the CtFile
+        ct.close()
+        os.remove('test_ct.ct')
+    
+    def test_sort_spots(self):
+        """Test the sort_spots method of CtFile.
+        """
+        n_nan_spot = 3  # number of NaNs to add for spots
+        
+        # write input coordinates for CtFile
+        # initialize the coordinates array as NaN
+        coordinates_tosort = np.full((self.data['ncell'],
+                                      self.data['ndomain'],
+                                      self.data['ncopy_max'],
+                                      self.data['nspot_max']+n_nan_spot,
+                                      3),
+                                     np.nan)    
+        # fill in the coordinates data
+        for cellnum in range(self.data['ncell']):
+            for domainnum in range(self.data['ndomain']):
+                for cp in range(self.data['ncopy_max']):
+                    # map the spot index without NaNs to the spot index with NaNs
+                    spt_map = np.sort(np.random.choice(np.arange(self.data['nspot_max'] + n_nan_spot),
+                                                       self.data['nspot_max'],
+                                                       replace=False))
+                    # fill in the coordinates data for each spot
+                    for spt in range(self.data['nspot_max']):
+                        coordinates_tosort[cellnum, domainnum, cp, spt_map[spt], :] = \
+                            self.data['coordinates'][cellnum, domainnum, cp, spt, :]
+        
+        # write the test coordinates (with NaNs at the end of spots)
+        coordinates_test = np.full((self.data['ncell'],
+                                    self.data['ndomain'],
+                                    self.data['ncopy_max'],
+                                    self.data['nspot_max']+n_nan_spot,
+                                    3),
+                                    np.nan)
+        coordinates_test[:, :, :, :self.data['nspot_max'], :] = self.data['coordinates']
+        
+        # create a CtFile object and set the data manually
+        ct = CtFile('test_ct.ct', 'w')
+        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        index = Index(chrom=self.data['chromstr'],
+                      start=self.data['start'],
+                      end=self.data['end'],
+                      genome=genome)
+        ct.set_manually(coordinates_tosort, genome, index)  # use coordinates with NaN columns
+        
+        # sort the spots
+        ct.sort_spots()
+
+        # check the results
+        np.testing.assert_array_almost_equal(ct.coordinates, coordinates_test, decimal=3)
+        
+        # close and remove the CtFile
+        ct.close()
+        os.remove('test_ct.ct')
+        
     def test_phasing(self):
         """Test the phasing method of WSPhaser.
+        BUG HERE TO BE FIXED!!
         """
         
         # collapse the coordinates to a single copy
@@ -167,9 +300,9 @@ class TestCtFile(unittest.TestCase):
         
         # run the phasing
         ct_phsd = phaser.run()
-        
+
         # check the results
-        self._assertCtFile(ct_phsd)
+        self._assertCtFile(ct_phsd, self.data)
         
         # clean up
         ct.close()
@@ -227,43 +360,26 @@ class TestCtFile(unittest.TestCase):
         return None
     
     
-    def _assertCtFile(self, ct, merged=False):
-        """Assert the CtFile object.
+    def _assertCtFile(self, ct, test_data):
+        """Assert the CtFile object with the test data.
 
         Args:
             ct (CtFile)
         """
-            
-        self.assertEqual(ct.genome.assembly, self.data['assembly'])
-        np.testing.assert_array_equal(ct.index.chromstr, self.data['chromstr'])
-        np.testing.assert_array_equal(ct.index.start, self.data['start'])
-        np.testing.assert_array_equal(ct.index.end, self.data['end'])
-        self.assertEqual(ct.ndomain, self.data['ndomain'])
-        self.assertEqual(ct.ncopy_max, self.data['ncopy_max'])
-        self.assertEqual(ct.nspot_max, self.data['nspot_max'])
-                
-        if not merged:
-            self.assertEqual(ct.ncell, self.data['ncell'])
-            self.assertEqual(ct.nspot_tot, self.data['nspot_tot'])
-            self.assertEqual(ct.ntrace_tot, self.data['ntrace_tot'])
-            np.testing.assert_array_equal(ct.ncopy, self.data['ncopy'])
-            np.testing.assert_array_equal(ct.nspot, self.data['nspot'])
-            np.testing.assert_allclose(ct.coordinates, self.data['coordinates'], equal_nan=True)
-        
-        else:
-            self.assertEqual(ct.ncell, 2 * self.data['ncell'])
-            self.assertEqual(ct.nspot_tot, 2 * self.data['nspot_tot'])
-            self.assertEqual(ct.ntrace_tot, 2 * self.data['ntrace_tot'])
-            np.testing.assert_array_equal(ct.ncopy, np.concatenate((self.data['ncopy'],
-                                                                    self.data['ncopy']),
-                                                                   axis=0))
-            np.testing.assert_array_equal(ct.nspot, np.concatenate((self.data['nspot'],
-                                                                    self.data['nspot']),
-                                                                   axis=0))
-            np.testing.assert_allclose(ct.coordinates, np.concatenate((self.data['coordinates'],
-                                                                       self.data['coordinates']),
-                                                                      axis=0),
-                                       equal_nan=True)
+
+        self.assertEqual(ct.genome.assembly, test_data['assembly'])
+        np.testing.assert_array_equal(ct.index.chromstr, test_data['chromstr'])
+        np.testing.assert_array_equal(ct.index.start, test_data['start'])
+        np.testing.assert_array_equal(ct.index.end, test_data['end'])
+        self.assertEqual(ct.ndomain, test_data['ndomain'])
+        self.assertEqual(ct.ncopy_max, test_data['ncopy_max'])
+        self.assertEqual(ct.nspot_max, test_data['nspot_max'])
+        self.assertEqual(ct.ncell, test_data['ncell'])
+        self.assertEqual(ct.nspot_tot, test_data['nspot_tot'])
+        self.assertEqual(ct.ntrace_tot, test_data['ntrace_tot'])
+        np.testing.assert_array_equal(ct.ncopy, test_data['ncopy'])
+        np.testing.assert_array_equal(ct.nspot, test_data['nspot'])
+        np.testing.assert_allclose(ct.coordinates, test_data['coordinates'], equal_nan=True)
 
 
 def writeFofctFile(filename, data):
@@ -347,10 +463,10 @@ def createTestData():
     chroms = ['chr1', 'chr2', 'chrX']
     
     # set the attributes
-    ncell = 4
-    ndomain = 50
+    ncell = 15
+    ndomain = 82
     ncopy_max = 2
-    nspot_max = 4
+    nspot_max = 7
     
     # create the index
     # first partition the domains among the chromosomes
@@ -383,7 +499,7 @@ def createTestData():
     # can be added in the future.
     ncopy = np.random.randint(1, ncopy_max + 1, size=(ncell, ndomain))
     ncopy[:, chromstr == 'chrX'] = 1  # force ncopy=1 for chrX
-    ncopy[:, chromstr == 'chrY'] = 1  # force ncopy=1 for chr2
+    ncopy[:, chromstr == 'chrY'] = 1  # force ncopy=1 for chrY
     
     # create nspot
     nspot = np.zeros((ncell, ndomain, ncopy_max), dtype=int)

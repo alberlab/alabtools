@@ -8,6 +8,7 @@ import numpy as np
 import os
 import sys
 from alabtools import Genome, Index
+from .utils_imaging import sort_coord_by_boolmask
 
 __author__ = "Francesco Musella"
 __ct_version__ = 0.1
@@ -260,44 +261,58 @@ class CtFile(h5py.File):
         assert isinstance(cellnum, (int, np.int32, np.int64))
         return self.cell_labels[cellnum]
     
-    def sort(self):
-        """Sorts the data by putting the NaNs at the end of the array.
+    def sort_copies(self):
+        """Sorts copies of each chromosome in each cell.
         
-        In particular, it sorts the copies and the spots.
-        
-        For the copies, the sorting is done for each chromosome: if in a cell
-        a chromosome has all NaNs for a copy, then the copy is put at the end.
-        
-        For the spots, the sorting is done in the whole dataset: for a given
-        cell, domain and copy, the spots are sorted with NaNs at the end.
-
-        The function updates the attributes of the object.
+        It reorders the copies so that all-NaN traces are at the end.
         """
         
-        for cellnum in range(self.ncell):
-            for chrom in self.genome.chroms:
-                # coordinates for the current cell/chrom
-                crd = self.coordinates[cellnum,
-                                       self.index.chromstr==chrom,
-                                       :, :, :]  # (ndomain_chr, ncopy_max, nspot_max, 3)
-                # initialize sorted coordinates for the current cell/chrom
-                crd_srt = np.copy(crd)
-                # loop copy in reverse order
-                for cp in range(self.ncopy_max - 1, -1, -1):
-                    # it the copy is all NaN, continue (it is already at the end)
-                    if np.all(crd[:, cp, :, :]):
-                        continue
-                    # otherwise, loop the other copies before it
-                    for cp2 in range(cp):
-                        # if the other copy is not all NaN, continue (it's before the NaNs)
-                        if not np.all(crd[:, cp2, :, :]):
-                            continue
-                        # otherwise, swap the two copies
-                        crd_srt[:, cp, :, :] = crd[:, cp2, :, :]
-                        crd_srt[:, cp2, :, :] = crd[:, cp, :, :]
-                        # NOT FINISHED!!
+        # Initialize mask of NaN values (ndomain wide)
+        nan_map_0 = np.isnan(self.coordinates[:, :, :, :, 0])  # ncell, ndomain, ncopy_max, nspot_max
+        # LogicAND along the spot axis (True if all spots are NaN)
+        nan_map_0 = np.all(nan_map_0, axis=-1)  # ncell, ndomain, ncopy_max
         
-        return None
+        # The previous map gives different True/False for each domain
+        # We want to have the same True/False for all domains of the same chromosome in each cell
+        nan_map = np.zeros((self.ncell, self.ndomain, self.ncopy_max), dtype=bool)  # ncell, ndomain, ncopy_max
+        
+        # Loop over chromosomes and fill the mask
+        for chrom in self.genome.chroms:
+            nan_chrom = np.all(nan_map_0[:, self.index.chromstr==chrom, :], axis=1)  # ncell, ncopy_max
+            nan_map[:, self.index.chromstr==chrom, :] = np.repeat(nan_chrom[:, np.newaxis, :],
+                                                                  np.sum(self.index.chromstr==chrom),
+                                                                  axis=1)  # ncell, ndomain_chrom, ncopy_max
+        
+        # Sort nspot
+        idx_srt = sort_coord_by_boolmask(nan_map, axis=2)
+        self.nspot = self.nspot[idx_srt]
+        
+        # Expand the mask to include the spot axis
+        nan_map = np.expand_dims(nan_map, axis=3)  # ncell, ndomain, ncopy_max, 1
+        nan_map = np.repeat(nan_map, repeats=self.nspot_max, axis=3)  # ncell, ndomain, ncopy_max, nspot_max
+        
+        # Sort coordinates
+        idx_srt = sort_coord_by_boolmask(nan_map, axis=2)
+        coord_srt = np.copy(self.coordinates)
+        for i in range(3):
+            coord_srt[..., i] = self.coordinates[..., i][idx_srt]
+        self.coordinates = coord_srt
+    
+    def sort_spots(self):
+        """Sorts the spots in each domain/cell.
+        
+        NaN spots are put at the end.
+        """
+        
+        # Initialize NaN map
+        nan_map = np.isnan(self.coordinates[..., 0])  # ncell, ndomain, ncopy_max, nspot_max
+        
+        # Sort coordinates
+        idx = sort_coord_by_boolmask(nan_map, axis=3)
+        coord_srt = np.copy(self.coordinates)
+        for i in range(3):
+            coord_srt[..., i] = self.coordinates[..., i][idx]
+        self.coordinates = coord_srt
     
     def trim(self):
         """
