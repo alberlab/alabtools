@@ -415,7 +415,7 @@ class CtFile(h5py.File):
         self.nspot_tot = np.sum(self.nspot)
         self.ntrace_tot = self._compute_ntrace_tot()
         # trim the datasets
-        self._trim()
+        self.trim()
 
     def merge(self, other, new_name, tag1=None, tag2=None):
         """
