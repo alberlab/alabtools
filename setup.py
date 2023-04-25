@@ -25,7 +25,9 @@ install_requires = [
     'matplotlib>=1.5',
     'Cython>=0.25',
     'tqdm',
-    'six'
+    'six',
+    'alphashape>=1.3.1',
+    'trimesh>=3.21.5'
 ]
 tests_require = [
     'mock'
