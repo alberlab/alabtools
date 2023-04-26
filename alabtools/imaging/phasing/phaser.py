@@ -79,6 +79,10 @@ class Phaser(object):
                                self.ct.genome,
                                self.ct.index,
                                self.ct.cell_labels)
+        # sort and trim
+        ct_phased.sort_copies()
+        ct_phased.sort_spots()
+        ct_phased.trim()
         
         return ct_phased
     

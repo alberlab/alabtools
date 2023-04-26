@@ -359,7 +359,12 @@ class CtEnvelope(object):
         
         # create the cleaned CtFile
         ct_clean = CtFile(ct.name.replace('.ct', '_clean.ct'), 'w')
+        # set the cleaned coordinates
         ct_clean.set_manually(coordinates_clean, ct.genome, ct.index, ct.cell_labels)
+        # sort and trim
+        ct_clean.sort_copies()
+        ct_clean.sort_spots()
+        ct_clean.trim()
         
         return ct_clean
             
