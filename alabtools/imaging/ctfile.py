@@ -8,6 +8,7 @@ import numpy as np
 import os
 import sys
 from alabtools import Genome, Index
+from .fofct import read_fofct, get_domains_fofct, get_processed_data_fofct
 from .utils_imaging import sort_coord_by_boolmask
 
 __author__ = "Francesco Musella"
@@ -414,8 +415,6 @@ class CtFile(h5py.File):
         self.ncell -= len(indices)
         self.nspot_tot = np.sum(self.nspot)
         self.ntrace_tot = self._compute_ntrace_tot()
-        # trim the datasets
-        self.trim()
 
     def merge(self, other, new_name, tag1=None, tag2=None):
         """
@@ -545,13 +544,6 @@ class CtFile(h5py.File):
         
         # compute ntrace_tot
         self.ntrace_tot = self._compute_ntrace_tot()
-        
-        # sort copies and spots
-        self.sort_copies()
-        self.sort_spots()
-         
-        # trim the data
-        self.trim()
     
     
     def set_from_fofct(self, fofct_file, in_assembly=None):
@@ -566,7 +558,7 @@ class CtFile(h5py.File):
             raise IOError('Cannot set data from FOF-CT file. File is read-only.')
         
         # READ THE FOF-CT FILE
-        assembly, col_names, data = self._read_fofct(fofct_file)
+        assembly, col_names, data = read_fofct(fofct_file)
         
         # CHECK THE ASSEMBLY
         if assembly is not None:  # include lower case version of assembly
@@ -589,7 +581,7 @@ class CtFile(h5py.File):
             raise ValueError('Assembly not found in FOF-CT file. Please provide it.')
         
         # FIND THE DOMAINS
-        chrstr, start, end = self._domains_from_fofct(data, col_names)
+        chrstr, start, end = get_domains_fofct(data, col_names)
         ndomain = len(chrstr)
         self.set_ndomain(ndomain)
         
@@ -615,7 +607,8 @@ class CtFile(h5py.File):
         
         # SET OTHER ATTRIBUTES AND DATA (COORD, NSPOT, NCOPY)
         ncell, nspot_tot, ntrace_tot, nspot_max, ncopy_max,\
-            cell_labels, coord, nspot, ncopy = self._process_data_from_fofct(data, col_names)
+            cell_labels, coord, nspot, ncopy = get_processed_data_fofct(data, col_names,
+                                                                        self.genome, self.index)
         self.set_ncell(ncell)
         self.set_nspot_tot(nspot_tot)
         self.set_ntrace_tot(ntrace_tot)
@@ -625,255 +618,3 @@ class CtFile(h5py.File):
         self.set_coordinates(coord)
         self.set_nspot(nspot)
         self.set_ncopy(ncopy)
-    
-    def _process_data_from_fofct(self, data, col_names):
-        """
-        Converts the data from the FOF-CT file (a table of strings, numpy object array)
-        to the numpy array of interest.
-        
-        HDF5 only supports homogeneous arrays (i.e. hyperrectangulars), but coord and nspot
-        are heterogeneous (e.g. multiple spots per domain). We solve this issue by max-padding.
-        
-        @param data: np.array of str (data)
-               col_names: np.array of str (column names)
-        @return: 
-        """
-        
-        # READ ALL ARRAYS FROM DATA
-        x = data[:, col_names == 'X'].transpose()[0].astype(np.float64)
-        y = data[:, col_names == 'Y'].transpose()[0].astype(np.float64)
-        z = data[:, col_names == 'Z'].transpose()[0].astype(np.float64)
-        chrstr = data[:, col_names == 'Chrom'].transpose()[0]
-        start = data[:, col_names == 'Chrom_Start'].transpose()[0].astype(np.int64)
-        end = data[:, col_names == 'Chrom_End'].transpose()[0].astype(np.int64)
-        traceID = data[:, col_names == 'Trace_ID'].transpose()[0]
-        if 'Cell_ID' in col_names:
-            cellID = data[:, col_names == 'Cell_ID'].transpose()[0]
-        else:
-            # if Cell_ID is not present, assume Cell_ID = Trace_ID
-            # these should be the cases where imaging is performed only on one chromosome,
-            # and thus there is no need to distinguish between chromosomes in the same cell.
-            cellID = np.copy(traceID)
-            warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
-        
-        # TAKE SOME STATS AND LABELS
-        ncell = len(np.unique(cellID))
-        nspot_tot = np.sum(~np.isnan(x))
-        ntrace_tot = len(np.unique(traceID))
-        cell_labels = np.unique(cellID)
-        
-        # CREATE COORD, NSPOT, NCOPY ARRAYS
-        coord = []  # coordinates of spots (cell -> domain -> copy -> spot -> coord)
-        nspot = []  # number of spots (cell -> domain -> copy -> nspot)
-        ncopy = []  # number of copies (cell -> domain -> ncopy)
-        nspot_max = 0  # maximum number of spots in a copy (for padding)
-        ncopy_max = 0  # maximum number of copies in a domain (for padding)
-        # Loop over: cell -> domain -> copy -> spot -> coord (x, y, z)
-        for cell in cell_labels:
-            x_cell = x[cellID == cell]
-            y_cell = y[cellID == cell]
-            z_cell = z[cellID == cell]
-            chrstr_cell = chrstr[cellID == cell]
-            start_cell = start[cellID == cell]
-            end_cell = end[cellID == cell]
-            traceID_cell = traceID[cellID == cell]
-            coord_cell = []  # coordinates for a cell
-            nspot_cell = []  # number of spots for a cell
-            ncopy_cell = []  # number of copies for a cell
-            for dom in zip(self.index.chromstr, self.index.start, self.index.end):
-                if dom[0] not in self.genome.chroms:
-                    warnings.warn("{} not present in Genome. Removed.".format(dom[0]), UserWarning)
-                    continue
-                x_dom = x_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-                y_dom = y_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-                z_dom = z_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-                traceID_dom = traceID_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-                coord_dom = []  # coordinates for a domain in a cell
-                nspot_dom = []  # number of spots for a domain in a cell
-                ncopy_dom = len(np.unique(traceID_dom))  # number of copies of a domain in a cell
-                if ncopy_dom > ncopy_max:
-                    ncopy_max = ncopy_dom  # update ncopy_max
-                for trc in np.unique(traceID_dom):
-                    # Here trace and copy are used as synonyms
-                    x_trc = x_dom[traceID_dom == trc]
-                    y_trc = y_dom[traceID_dom == trc]
-                    z_trc = z_dom[traceID_dom == trc]
-                    # I checked that some data have NaNs in x, y, z. To be safe here I remove them
-                    x_trc_nonan = x_trc[~np.isnan(x_trc) & ~np.isnan(y_trc) & ~np.isnan(z_trc)]
-                    y_trc_nonan = y_trc[~np.isnan(x_trc) & ~np.isnan(y_trc) & ~np.isnan(z_trc)]
-                    z_trc_nonan = z_trc[~np.isnan(x_trc) & ~np.isnan(y_trc) & ~np.isnan(z_trc)]
-                    coord_trc = []  # coordinates for a copy in a domain in a cell
-                    nspot_trc = len(x_trc_nonan)
-                    if nspot_trc > nspot_max:
-                        nspot_max = nspot_trc  # update nspot_max
-                    for xx, yy, zz in zip(x_trc_nonan, y_trc_nonan, z_trc_nonan):
-                        coord_trc.append([xx, yy, zz])  # append coordinates of a spot in a copy in a domain in a cell
-                    coord_dom.append(coord_trc)
-                    nspot_dom.append(nspot_trc)
-                coord_cell.append(coord_dom)
-                nspot_cell.append(nspot_dom)
-                ncopy_cell.append(ncopy_dom)
-            coord.append(coord_cell)
-            nspot.append(nspot_cell)
-            ncopy.append(ncopy_cell)
-        
-        # CREATE HOMOGENEOUS ARRAYS (coord and nspot)
-        coord_homo = np.nan * np.zeros((ncell, self.ndomain, ncopy_max, nspot_max, 3), dtype=np.float64)
-        nspot_homo = np.zeros((ncell, self.ndomain, ncopy_max), dtype=np.int64)
-        ncopy = np.array(ncopy).astype(np.int64)  # already homogeneous
-        for cell in range(ncell):  # Loop to go heterogeneous -> homogeneous
-            for dom in range(self.ndomain):
-                for trc in range(ncopy[cell, dom]):
-                    nspot_homo[cell, dom, trc] = nspot[cell][dom][trc]
-                    for spot in range(nspot[cell][dom][trc]):
-                        for i in range(3):
-                            coord_homo[cell, dom, trc, spot, i] = coord[cell][dom][trc][spot][i]
-        coord = coord_homo
-        nspot = nspot_homo.astype(np.int64)
-        
-        return ncell, nspot_tot, ntrace_tot, nspot_max, ncopy_max, cell_labels, coord, nspot, ncopy
-    
-    @staticmethod
-    def _domains_from_fofct(data, col_names):
-        """
-        Identify the domains from the FOF-CT data.
-        The domains are found as unique ordered tuples (chr, start, end).
-        The domains are then ordered by chromosome first, then by start position.
-        
-        @param data: np.array of str (data)
-               col_names: np.array of str (column names)
-        @return: domains
-        """
-        
-        spots_chrstr = data[:, col_names == 'Chrom']
-        spots_start = data[:, col_names == 'Chrom_Start']
-        spots_end = data[:, col_names == 'Chrom_End']
-        
-        # FIND THE DOMAINS
-        domains = np.unique(np.hstack((spots_chrstr, spots_start, spots_end)), axis=0)
-
-        # SORT DOMAINS BY CHROMOSOME
-        chrstr, start, end = domains.T
-        chrint = []  # convert the chromosome string to an integer (e.g. 'chr1' -> 1)
-        for c in chrstr:
-            c = c.split('chr')[1]  # remove the 'chr' part
-            if c.isdigit():  # if it's a number
-                c = int(c)
-            elif c == 'X':
-                c = 23  # if it's mouse this should be 20, but it doesn't matter
-            elif c == 'Y':
-                c = 24
-            elif c == 'M':
-                c = 25
-            else:
-                c = 26  # This is to deal with other chr labels (e.g. 'chr1_random')
-            c = int(c)
-            chrint.append(c)
-        chrint = np.array(chrint)
-        domains = domains[np.argsort(chrint)]  # Sort the domains by chrint
-        
-        # SORT DOMAINS BY START POSITION WITHIN EACH CHROMOSOME
-        chrstr, start, end = domains.T
-        start = start.astype(int)  # cast to int to avoid problems with sorting
-        for c in np.unique(chrstr):
-            idx = chrstr == c
-            domains[idx] = domains[idx][np.argsort(start[idx])]
-
-        chrstr, start, end = domains.T
-        start = start.astype(int)
-        end = end.astype(int)
-        
-        return chrstr, start, end
-    
-    @staticmethod
-    def _read_fofct(fofct_file):
-        """
-        Read the FOF-CT (4DN Fish Omics Format - Chromatin Tracing) csv file.
-        @param fofct_file: path to the csv file
-        @return: assembly: list of str (assembly names)
-                 col_names: np.array of str (column names)
-                 data: np.array of str (data)
-        """
-    
-        csv = open(fofct_file, 'r')
-        lines = csv.readlines()
-        csv.close()
-
-        # SEPARATE HEADER AND DATA
-        i_header_stop = 0  # index of the last line of the header
-        for line in lines:
-            if line[0] == '#' or line[1] == '#':  # header lines can start with #, ## or "#
-                i_header_stop += 1
-            elif 'Trace_ID' in line:
-                # Some files don't have # at the beginning of the header lines,
-                # and only contain the colum_names line.
-                # This line should contain at least Trace_ID, so this condition should be enough
-                i_header_stop += 1
-            else:
-                break
-        header_lines = lines[:i_header_stop]
-        data_lines = lines[i_header_stop:]
-                
-        if len(header_lines) == 0:
-            raise ValueError('The header is empty.')
-        if len(data_lines) == 0:
-            raise ValueError('The data is empty.')
-
-        # CLEAN THE HEADER
-        header = []
-        for line in header_lines:
-            while line[0] == '#' or line[0] == '"':
-                line = line[1:]  # remove specail characters at the beginning of the line (e.g. #, ##, ")
-            if line[-1] == '\n':
-                line = line[:-1]  # if the line ends with a line break, remove it
-            while line[-1] == ',':
-                line = line[:-1]  # if the line ends with commas, remove all of them
-            while line[-1] == '"':
-                line = line[:-1]  # if the line ends with quotes, remove all of them
-            header.append(line)
-
-        # READ ASSEMBLY AND COLUMN NAMES FROM HEADER
-        assembly = None
-        col_names = None
-        for line in header:
-            line = line.replace(' ', '')  # remove all spaces
-            if 'genome_assembly' in line:  # read the genome assembly
-                line = line.split('=')[1]  # split the line at the equal sign and take the second part
-                assembly = line.split('/')  # take both assemblies if / is present
-            if 'columns' in line:
-                line = line.split('=')[1]
-                if line[0] == '(':
-                    line = line[1:]  # if there is a '(' at the beginning, remove it
-                if line[-1] == ')':
-                    line = line[:-1]  # if there is a ')' at the end, remove it
-                col_names = line.split(',')  # split the line at the commas
-                col_names = np.array(col_names)
-            if 'Trace_ID' in line and '=' not in line:
-                # This is to deal with files that just have a column_names line like
-                #   Spot_ID,Trace_ID,X,Y,Z,Chrom,Chrom_Start,Chrom_End
-                # so they are missing the 'columns=' part
-                if line[0] == '(':
-                    line = line[1:]  # if there is a '(' at the beginning, remove it
-                if line[-1] == ')':
-                    line = line[:-1]  # if there is a ')' at the end, remove it
-                col_names = line.split(',')  # split the line at the commas
-                col_names = np.array(col_names)
-        
-        # CHECK IF COLUMN NAMES ARE CORRECT
-        if 'X' not in col_names or 'Y' not in col_names or 'Z' not in col_names \
-            or 'Chrom' not in col_names or 'Chrom_Start' not in col_names or 'Chrom_End' not in col_names \
-                or 'Trace_ID' not in col_names:
-                    raise ValueError('FOF-CT file is not in the correct format.')
-
-        # CONVERT DATA TO NUMPY ARRAY
-        data = []
-        for line in data_lines:
-            if line[-1] == '\n':
-                line = line[:-1]  # if the line ends with a line break, remove it
-            line = line.replace(' ', '')  # remove all spaces
-            values = line.split(',')  # split the line at the commas
-            data.append(values)
-        data = np.array(data)
-        data[data == ''] = np.nan  # replace empty values with NaN
-
-        return assembly, col_names, data

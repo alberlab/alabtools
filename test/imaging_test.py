@@ -38,7 +38,7 @@ class TestCtFile(unittest.TestCase):
         ct.set_from_fofct(self.fofct_file)
         
         # sort the cells by int-casted cell labels (with str labels, the order is not correct)
-        ct.sort_cells(idx=np.argsort(ct.cell_labels.astype(int)))
+        ct.sort_cells(order=np.argsort(ct.cell_labels.astype(int)))
         
         # check the results
         self._assertCtFile(ct, self.data)
@@ -68,10 +68,10 @@ class TestCtFile(unittest.TestCase):
         # create two CtFile objects and merge them
         ct1 = CtFile('test_ct1.ct', 'w')
         ct1.set_from_fofct(self.fofct_file)
-        ct1.sort_cells(idx=np.argsort(ct1.cell_labels.astype(int)))
+        ct1.sort_cells(np.argsort(ct1.cell_labels.astype(int)))
         ct2 = CtFile('test_ct2.ct', 'w')
         ct2.set_from_fofct(self.fofct_file)
-        ct2.sort_cells(idx=np.argsort(ct2.cell_labels.astype(int)))
+        ct2.sort_cells(np.argsort(ct2.cell_labels.astype(int)))
         ct = ct1.merge(ct2, 'test_ct_merged.ct', tag1='1', tag2='2')
         
         # check the results
@@ -196,6 +196,10 @@ class TestCtFile(unittest.TestCase):
         
         # sort the copies
         ct.sort_copies()
+        
+        print('Printing coordinates in test_sort_copies')
+        print(coordinates_tosort.shape)
+        print(ct.coordinates.shape)
 
         # check the results
         np.testing.assert_array_almost_equal(ct.coordinates, coordinates_test, decimal=3)
