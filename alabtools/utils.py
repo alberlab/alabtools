@@ -45,10 +45,13 @@ if sys.version_info > (3, 0):
         if isinstance(s, bytes):
             return s.decode()
         return s
+
+
     from io import StringIO
 else:
     # python 2.x
     from cStringIO import StringIO
+
     unicode = unicode
 
 CHROMS_DTYPE = np.dtype('U10')
@@ -99,7 +102,7 @@ class Genome(object):
     Attributes
     ----------
 
-    assembly : str
+    assembly : str or Genome or h5py.File or HssFile
         Name of genome
     chroms : np.array[string10]
         chromosome name
@@ -116,9 +119,7 @@ class Genome(object):
         # check if we can read from info or hdf5.
         # Genome assembly name has precedence over hdf5 file names.
         # Will raise a IOError if cannot read any.
-        if isinstance(assembly, string_types) and (
-            (chroms is None) or (lengths is None)
-            ):
+        if isinstance(assembly, string_types) and ((chroms is None) or (lengths is None)):
             datafile = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "genomes/" + assembly + ".info"
@@ -168,7 +169,7 @@ class Genome(object):
 
         for chrnum in usechr:
             if chrnum == '#':
-                choices = np.logical_or([re.search(r"chr[\d]+$",c) != None for c in chroms], choices)
+                choices = np.logical_or([re.search(r"chr[\d]+$", c) != None for c in chroms], choices)
             else:
                 # if specified with full name, remove chr
                 chrnum = chrnum.replace('chr', '')
@@ -307,7 +308,6 @@ class Genome(object):
 
 
 class Index(object):
-
     """
     Matrix/System indexes. Maps matrix bins or model beads to
     genomic regions.
@@ -558,11 +558,11 @@ class Index(object):
         equality check
         '''
         return (
-            np.all(self.chrom == other.chrom) and
-            np.all(self.start == other.start) and
-            np.all(self.end == other.end) and
-            np.all(self.label == other.label) and
-            np.all(self.copy == other.copy)
+                np.all(self.chrom == other.chrom) and
+                np.all(self.start == other.start) and
+                np.all(self.end == other.end) and
+                np.all(self.label == other.label) and
+                np.all(self.copy == other.copy)
         )
 
     def __add__(self, other):
@@ -1089,8 +1089,7 @@ def get_index_from_bed(
         file,
         genome=None,
         usecols=None,
-    ):
-
+):
     return Index(file, genome, usecols)
 
 
@@ -1254,6 +1253,7 @@ class Node:
     """
     Class Node
     """
+
     def __init__(self, value=None):
         self.left = None
         self.data = value
@@ -1474,10 +1474,10 @@ def spline_4p(t, p):
     # 0 -> p0,  1 -> p1,  1/2 -> (- p_1 + 9 p0 + 9 p1 - p2) / 16
     # assert 0 <= t <= 1
     return (
-           t * ((2 - t) * t - 1) * p[0]
-           + (t * t * (3 * t - 5) + 2) * p[1]
-           + t * ((4 - 3 * t) * t + 1) * p[2]
-           + (t - 1) * t * t * p[3]
+            t * ((2 - t) * t - 1) * p[0]
+            + (t * t * (3 * t - 5) + 2) * p[1]
+            + t * ((4 - 3 * t) * t + 1) * p[2]
+            + (t - 1) * t * t * p[3]
     ) / 2
 
 
@@ -1510,6 +1510,7 @@ class CatmullRomSpline:
     cs = CatmullRomSpline(points)
     resampled_points = np.array([ cs(x) for x in np.linspace(0, 1, 100)])
     """
+
     def __init__(self, points, chain_positions=None):
         points = np.array(points)
         # create extension points at beginning and end

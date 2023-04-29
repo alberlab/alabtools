@@ -68,36 +68,36 @@ class HssFile(h5py.File):
     '''
 
     def __init__(self, *args, **kwargs):
-
-        '''
-        See h5py.File constructor.
-        '''
-
+        """
+        Inherit from h5py.File and add version, nbead and nstruct attributes
+        :param args: arguments for h5py.File
+        :param kwargs: keyword arguments for h5py.File
+        """
         self._index = None
         self._genome = None
 
-        h5py.File.__init__(self, *args, **kwargs)
-        try:
+        h5py.File.__init__(self, *args, **kwargs)  # inherits attributes from h5py.File
+        try:  # read version attribute
             self._version = self.attrs['version']
-        except(KeyError):
+        except KeyError:
             self._version = __hss_version__
             if self.mode != 'r':
                 self.attrs.create('version', __hss_version__, dtype='int32')
         try:
             self._violation = self.attrs['violation']
-        except(KeyError):
+        except KeyError:
             self._violation = np.nan
             if self.mode != 'r':
                 self.attrs.create('violation', np.nan, dtype='float')
         try:
             self._nbead = self.attrs['nbead']
-        except(KeyError):
+        except KeyError:
             self._nbead = 0
             if self.mode != 'r':
                 self.attrs.create('nbead', 0, dtype='int32')
         try:
             self._nstruct = self.attrs['nstruct']
-        except(KeyError):
+        except KeyError:
             self._nstruct = 0
             if self.mode != 'r':
                 self.attrs.create('nstruct', 0, dtype='int32')
@@ -114,12 +114,21 @@ class HssFile(h5py.File):
 
         self._check_consistency()
 
-    def _assert_warn(self, expr, msg):
+    @staticmethod
+    def _assert_warn(expr, msg):
+        """
+        Static method to print a warning if expr is False.
+        :param expr: expression to evaluate (boolean)
+        :param msg: warning message (string)
+        """
         if not expr:
             warnings.warn('Hss consistency warning: ' + msg, RuntimeWarning)
 
     def _check_consistency(self):
-        n_bead  = self.attrs['nbead']
+        """
+        Check consistency of the file and raise warnings if inconsistencies are found.
+        """
+        n_bead = self.attrs['nbead']
 
         if 'coordinates' in self:
             self._assert_warn(self.attrs['nstruct'] == self['coordinates'].shape[1],
@@ -152,66 +161,58 @@ class HssFile(h5py.File):
         return self._nstruct
 
     def get_genome(self):
-        '''
-        Returns
-        -------
-            alabtools.Genome
-        '''
         if self._genome is None:
-            self._genome = Genome(self)
+            self._genome = Genome(self)  # creates Genome object with a HssFile (i.e. h5py.File) object
         return self._genome
 
     def get_index(self):
-        '''
-        Returns
-        -------
-            alabtools.Index
-        '''
         if self._index is None:
-            self._index = Index(self)
+            self._index = Index(self)  # creates Index object with a HssFile (i.e. h5py.File) object
         return self._index
 
     def get_coordinates(self, read_to_memory=True):
-
-        '''
-        Parameters
-        ----------
-        read_to_memory (bool) :
-            If True (default), the coordinates will be read and returned
-            as a numpy.ndarray. If False, a h5py dataset object will be
-            returned. In the latter case, note that the datased is valid
-            only while the file is open.
-        '''
-
+        """
+        Read coordinates from file.
+        HDF5 files are not read into memory by default: the data is read from disk only when needed.
+        However, if the file is small enough, it can be read into memory for faster access.
+        :param read_to_memory: if True, read the whole file into memory (as a numpy array)
+        :return: coordinates (numpy array) or h5py.Dataset object
+        """
         if read_to_memory:
-            return self['coordinates'][:]
-        return self['coordinates']
+            return self['coordinates'][:]  # read the whole file into memory (as a numpy array)
+        return self['coordinates']  # read the file from disk only when needed (as a h5py.Dataset object)
 
-    def get_bead_crd(self, key):
-        return self['coordinates'][key][()]
+    def get_bead_crd(self, bead):
+        """
+        Reads the coordinates of a list of beads (key) from the file.
+        The [()] should perform a cast to numpy array.
+        """
+        return self['coordinates'][bead][()]
 
     def get_violation(self):
         return self._violation
 
-    def get_struct_crd(self, key):
-        if 'structmajorcrd' in self:
-            return self['structmajorcrd'][key][()]
+    def get_struct_crd(self, struct):
+        if 'structmajorcrd' in self:  # what is this structmajorcrd?
+            return self['structmajorcrd'][struct][()]
         else:
-            return self['coordinates'][:, key, :][()]
-
-    def set_bead_crd(self, key, crd):
-        self['coordinates'][key, :, :] = crd
-
-    def set_struct_crd(self, key, crd):
-        self['coordinates'][:, key, :] = crd
+            return self['coordinates'][:, struct, :][()]
 
     def get_radii(self):
         return self['radii'][:]
 
+    def set_bead_crd(self, bead, crd):
+        self['coordinates'][bead, :, :] = crd
+
+    def set_struct_crd(self, struct, crd):
+        self['coordinates'][:, struct, :] = crd
+
     def set_nbead(self, n):
+        # Warning: there should be a consistency check with the coordinates (nbead = coordinates.shape[0])
         self.attrs['nbead'] = self._nbead = n
 
     def set_nstruct(self, n):
+        # Warning: there should be a consistency check with the coordinates (nstruct = coordinates.shape[1])
         self.attrs['nstruct'] = self._nstruct = n
 
     def set_violation(self, v):
@@ -232,44 +233,34 @@ class HssFile(h5py.File):
         if shape is None:
             assert(self.nbead != 0 and self.nstruct != 0)
             shape = (self.nbead, self.nstruct, 3)
+        # create_dataset is a h5py function (see http://docs.h5py.org/en/latest/high/dataset.html)
+        # chunks is the size of the chunks in which the data is stored on disk, and can be used to tune performance
         return self.create_dataset('coordinates', shape=shape, dtype=COORD_DTYPE, chunks=chunks, **kwargs)
 
     def set_coordinates(self, coord):
         assert isinstance(coord, np.ndarray)
-        if (len(coord.shape) != 3) or (coord.shape[2] != 3):
-            raise ValueError('Coordinates should have dimensions '
-                             '(nbeads x struct x 3), '
-                             'got %s' % repr(coord.shape))
-        if self._nstruct != 0 and self._nstruct != coord.shape[1]:
-            raise ValueError('Coord first axis does not match number of '
-                             'structures')
-        if self._nbead != 0 and self._nbead != coord.shape[0]:
-            raise ValueError('Coord second axis does not match number of '
-                             'beads')
-
+        assert len(coord.shape) == 3 and coord.shape[2] == 3, 'Coordinates should have dimensions' \
+                                                              ' (nbeads x struct x 3), got %s' % repr(coord.shape)
+        assert self._nstruct == 0 and self._nstruct == coord.shape[1], 'Coord first axis does not match' \
+                                                                       ' number of structures'
+        assert self._nbead == 0 and self._nbead == coord.shape[0], 'Coord second axis does not match number of beads'
         if 'coordinates' in self:
-            self['coordinates'][...] = coord
+            self['coordinates'][...] = coord  # update the coordinates
         else:
-            #chunksz = list(COORD_CHUNKSIZE)
-            #for i in range(2):
-            #    if coord.shape[i] < COORD_CHUNKSIZE[i]:
-            #        chunksz[i] = coord.shape[i]
-            self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE)
+            self.create_dataset('coordinates', data=coord, dtype=COORD_DTYPE)  # create the coordinates
         self.attrs['nstruct'] = self._nstruct = coord.shape[1]
         self.attrs['nbead'] = self._nbead = coord.shape[0]
 
     def set_radii(self, radii):
         assert isinstance(radii, np.ndarray)
-        if len(radii.shape) != 1:
-            raise ValueError('radii should be a one dimensional array')
-        if self._nbead != 0 and self._nbead != len(radii):
-            raise ValueError('Length of radii does not match number of beads')
-
+        assert len(radii.shape) == 1, 'Radii should be a one dimensional array'
+        assert self._nbead != 0 and self._nbead == radii.shape[0], 'Radii length does not match number of beads'
         if 'radii' in self:
             self['radii'][...] = radii
         else:
+            # chunks=True uses default chunk size, compression="gzip" uses gzip compression
             self.create_dataset('radii', data=radii, dtype=RADII_DTYPE,
-                                chunks=True, compression="gzip")
+                                chunks=True, compression="gzip")  # Why chunks and compression?
         self.attrs['nbead'] = self._nbead = radii.shape[0]
 
     @staticmethod

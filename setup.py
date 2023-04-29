@@ -25,7 +25,9 @@ install_requires = [
     'matplotlib>=1.5',
     'Cython>=0.25',
     'tqdm',
-    'six'
+    'six',
+    'alphashape>=1.3.1',
+    'trimesh>=3.21.5'
 ]
 tests_require = [
     'mock'
@@ -70,8 +72,8 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.0.0',
-    author='Nan Hua',
+    version='1.1.0',
+    author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',
     description='Alber lab toolbox',
