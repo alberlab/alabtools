@@ -160,6 +160,9 @@ class Genome(object):
             chroms = np.array(chroms, dtype=CHROMS_DTYPE)
             lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
             origins = np.array(origins, dtype=ORIGINS_DTYPE)
+        
+        # Change chroms to the appropriate format
+        chroms = self._convert_chroms(chroms)
 
         choices = np.zeros(len(chroms), dtype=bool)
 
@@ -174,6 +177,7 @@ class Genome(object):
                 # if specified with full name, remove chr
                 chrnum = chrnum.replace('chr', '')
                 choices = np.logical_or(chroms == ("chr%s" % chrnum), choices)
+        
         self.chroms = chroms[choices]  # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
@@ -181,6 +185,20 @@ class Genome(object):
 
     # -
 
+    # Write a private static method to convert the list of chromosomes to the appropriate format
+    @staticmethod
+    def _convert_chroms(chroms):
+        # Case 1: chroms is a list of binary strings
+        if isinstance(chroms[0], bytes):
+            chroms = [x.decode('utf-8') for x in chroms]
+        # If the chromosomes don't start with chr, add it
+        for i in range(len(chroms)):
+            if chroms[i][0:3] != 'chr':
+                chroms[i] = 'chr' + chroms[i]
+        # Convert chroms to numpy array of CHROMS_DTYPE
+        chroms = np.array(chroms, dtype=CHROMS_DTYPE)
+        return chroms
+    
     def __eq__(self, other):
         try:
             return (
