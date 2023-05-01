@@ -161,8 +161,9 @@ class Genome(object):
             lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
             origins = np.array(origins, dtype=ORIGINS_DTYPE)
         
-        # Change chroms to the appropriate format
-        chroms = self._convert_chroms(chroms)
+        # Convert chroms to appropriate format and sort them
+        chroms = self._standardize_chromosomes(chroms)
+        chroms = self._sort_chromosomes(chroms)
 
         choices = np.zeros(len(chroms), dtype=bool)
 
@@ -186,16 +187,67 @@ class Genome(object):
     # -
 
     @staticmethod
-    def _convert_chroms(chroms):
+    def _standardize_chromosomes(chroms):
+        """Convert input chromosomes to a standardized format, add 'chr' prefix if missing,
+
+        Args:
+            chroms (list): A list of chromosome identifiers, either as binary strings or strings.
+
+        Returns:
+            list: A list of standardized chromosome identifiers (strings).
+        """
+            
         # Case 1: chroms is a list of binary strings
         if isinstance(chroms[0], bytes):
             chroms = [x.decode('utf-8') for x in chroms]
-        # If the chromosomes don't start with chr, add it
+        
+        # Case 2: chroms is a list of integers
+        if isinstance(chroms[0], int):
+            chroms = [str(x) for x in chroms]
+
+        # Add 'chr' prefix to chromosome identifiers if missing
         for i in range(len(chroms)):
             if chroms[i][0:3] != 'chr':
                 chroms[i] = 'chr' + chroms[i]
+
+        return chroms
+    
+    @staticmethod
+    def _sort_chromosomes(chroms):
+        """Sort chromosomes by chromosome number.
+
+        Args:
+            chroms (list): A list of chromosome identifiers (strings).
+
+        Returns:
+            np.array: A sorted numpy array of chromosomes with dtype CHROMS_DTYPE.
+        """
+        
+        # Initialize list of chromosome numbers
+        chromnums = []
+        
+        # Loop through chromosomes and convert to numbers for sorting
+        for chrom in chroms:
+            chrombase = chrom.split('chr')[1]
+            if chrombase.isdigit():  # if it's a number
+                chromnums.append(int(chrombase))
+            elif chrombase == 'X':
+                # if it's mouse this should be 20, but it doesn't matter
+                chromnums.append(23)
+            elif chrombase == 'Y':
+                chromnums.append(24)
+            elif chrombase == 'M':
+                chromnums.append(25)
+            else:
+                # This is to deal with other chr labels (e.g. 'chr1_random')
+                chromnums.append(26)
+                
+        # Sort chroms by chromnums
+        chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
+        
         # Convert chroms to numpy array of CHROMS_DTYPE
         chroms = np.array(chroms, dtype=CHROMS_DTYPE)
+        
         return chroms
     
     def __eq__(self, other):

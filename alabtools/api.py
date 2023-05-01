@@ -206,6 +206,8 @@ class Contactmatrix(object):
         self._build_index(self.resolution)
 
         origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
+        # ATTENTION: chromosomes in origenome must be sorted for this code to work
+        # (i.e. 'chr1', 'chr2', ... NOT 'chr1', 'chr10', 'chr11', ...)
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0], allChrId[0] + 1]]
         for i in allChrId[1:]:
