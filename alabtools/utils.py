@@ -185,7 +185,6 @@ class Genome(object):
 
     # -
 
-    # Write a private static method to convert the list of chromosomes to the appropriate format
     @staticmethod
     def _convert_chroms(chroms):
         # Case 1: chroms is a list of binary strings
