@@ -12,7 +12,7 @@ from .utils import Genome, Index
 from .analysis import HssFile
 from . import plots, analysis
 
-from .imaging import CtFile
+from .imaging.ctfile import CtFile
 from .imaging.phasing import *
 from .imaging.ctenvelope import CtEnvelope
 
