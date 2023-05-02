@@ -107,4 +107,14 @@ alabtools/geotools/geotools.py
 
 # Visual Studio Code settings
 .vscode/
+
+# Parallelization outputs
+*script1.sh
+*script_engines.sh
+*err_controller
+*out_controller
+*err_engines
+*out_engines
+*err_submit
+*out_submit
 ```
