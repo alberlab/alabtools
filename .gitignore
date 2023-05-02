@@ -102,3 +102,7 @@ alabtools/cmtools/cmtools.py
 alabtools/geotools/geotools.py
 
 .idea/
+
+# Visual Studio Code settings
+.vscode/
+```
