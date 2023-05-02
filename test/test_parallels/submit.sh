@@ -12,8 +12,8 @@
 #$ -l h_rt=96:00:00
 #$ -l highp
 #$ -cwd
-#$ -o out
-#$ -e err
+#$ -o out_submit
+#$ -e err_submit
 #$ -V 
 #$ -pe shared 2
 
