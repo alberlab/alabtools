@@ -96,6 +96,8 @@ ENV/
 *.png
 *.hcs
 *_wrap.c*
+*.ct
+*.ctenv
 
 alabtools/numutils.c
 alabtools/cmtools/cmtools.py
