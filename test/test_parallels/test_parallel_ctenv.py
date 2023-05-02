@@ -32,7 +32,7 @@ ctenv = CtEnvelope(ctenv_name, 'w')
 
 # define the ctenv configuration for the run
 config = {'ct_name': ct_name,
-          'parallel': {'controller': 'serial'},
+          'parallel': {'controller': 'ipyparallel'},
           'fit parameters': {'alpha': 0.0005,
                              'force': False,
                              'delta_alpha': 0.0001,
