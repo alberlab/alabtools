@@ -164,6 +164,7 @@ class Genome(object):
         # Convert chroms to appropriate format and sort them
         chroms = self._standardize_chromosomes(chroms)
         chroms = self._sort_chromosomes(chroms)
+        chroms = np.array(chroms, dtype=CHROMS_DTYPE)
 
         choices = np.zeros(len(chroms), dtype=bool)
 
@@ -228,25 +229,24 @@ class Genome(object):
         
         # Loop through chromosomes and convert to numbers for sorting
         for chrom in chroms:
-            chrombase = chrom.split('chr')[1]
+            chrombase = chrom.split('chr')[1]  # remove 'chr' prefix
             if chrombase.isdigit():  # if it's a number
                 chromnums.append(int(chrombase))
+            # The chromosome number of X, Y, M, ..., changes depending
+            # on the genome assembly. Here we assign them to 100, 101, 102, ...
+            # so that we are sure that they come after the autosomes
             elif chrombase == 'X':
-                # if it's mouse this should be 20, but it doesn't matter
-                chromnums.append(23)
+                chromnums.append(100)
             elif chrombase == 'Y':
-                chromnums.append(24)
+                chromnums.append(101)
             elif chrombase == 'M':
-                chromnums.append(25)
+                chromnums.append(102)
+            # This is to deal with other chr labels (e.g. 'chr1_random')
             else:
-                # This is to deal with other chr labels (e.g. 'chr1_random')
-                chromnums.append(26)
+                chromnums.append(103)
                 
         # Sort chroms by chromnums
         chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
-        
-        # Convert chroms to numpy array of CHROMS_DTYPE
-        chroms = np.array(chroms, dtype=CHROMS_DTYPE)
         
         return chroms
     
