@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-from distutils.core import setup, Extension
+from setuptools import setup, Extension, find_packages
+# from distutils.core import setup, Extension  # old way, replaced by setuptools
 from Cython.Distutils import build_ext
 
 import numpy
@@ -72,13 +73,14 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.1.0',
+    version='1.1.0+bugfix_import',
     author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',
     description='Alber lab toolbox',
     cmdclass=cmdclass,
-    packages=['alabtools'],
+    # packages=['alabtools'],  # old way, replaced by find_packages()
+    packages=find_packages(),
     package_data={'alabtools': ['genomes/*', 'config/*']},
     install_requires=install_requires,
     # tests_require=tests_require,
