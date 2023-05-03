@@ -208,11 +208,9 @@ class HssFile(h5py.File):
         self['coordinates'][:, struct, :] = crd
 
     def set_nbead(self, n):
-        # Warning: there should be a consistency check with the coordinates (nbead = coordinates.shape[0])
         self.attrs['nbead'] = self._nbead = n
 
     def set_nstruct(self, n):
-        # Warning: there should be a consistency check with the coordinates (nstruct = coordinates.shape[1])
         self.attrs['nstruct'] = self._nstruct = n
 
     def set_violation(self, v):
@@ -239,11 +237,12 @@ class HssFile(h5py.File):
 
     def set_coordinates(self, coord):
         assert isinstance(coord, np.ndarray)
-        assert len(coord.shape) == 3 and coord.shape[2] == 3, 'Coordinates should have dimensions' \
-                                                              ' (nbeads x struct x 3), got %s' % repr(coord.shape)
-        assert self._nstruct == 0 and self._nstruct == coord.shape[1], 'Coord first axis does not match' \
-                                                                       ' number of structures'
-        assert self._nbead == 0 and self._nbead == coord.shape[0], 'Coord second axis does not match number of beads'
+        if (len(coord.shape) != 3) or (coord.shape[2] != 3):
+            raise ValueError('Coordinates should have dimensions (nbeads x struct x 3), got %s' % repr(coord.shape))
+        if self._nstruct != 0 and self._nstruct != coord.shape[1]:
+            raise ValueError('Coord first axis does not match number of structures')
+        if self._nbead != 0 and self._nbead != coord.shape[0]:
+            raise ValueError('Coord second axis does not match number of beads')
         if 'coordinates' in self:
             self['coordinates'][...] = coord  # update the coordinates
         else:
@@ -253,14 +252,16 @@ class HssFile(h5py.File):
 
     def set_radii(self, radii):
         assert isinstance(radii, np.ndarray)
-        assert len(radii.shape) == 1, 'Radii should be a one dimensional array'
-        assert self._nbead != 0 and self._nbead == radii.shape[0], 'Radii length does not match number of beads'
+        if len(radii.shape) != 1:
+            raise ValueError('radii should be a one dimensional array')
+        if self._nbead != 0 and self._nbead != len(radii):
+            raise ValueError('Length of radii does not match number of beads')
         if 'radii' in self:
             self['radii'][...] = radii
         else:
             # chunks=True uses default chunk size, compression="gzip" uses gzip compression
             self.create_dataset('radii', data=radii, dtype=RADII_DTYPE,
-                                chunks=True, compression="gzip")  # Why chunks and compression?
+                                chunks=True, compression="gzip")
         self.attrs['nbead'] = self._nbead = radii.shape[0]
 
     @staticmethod
