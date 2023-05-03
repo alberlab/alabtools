@@ -2,9 +2,9 @@ import unittest
 import os
 import numpy as np
 from alabtools import Genome, Index
-from alabtools import CtFile
+from alabtools.imaging import CtFile
 from alabtools.imaging.utils_imaging import flatten_coordinates
-from alabtools import WSPhaser
+from alabtools.imaging.phasing import WSPhaser
 from alabtools.imaging.ctenvelope import fit_alphashape
 
 
@@ -197,10 +197,6 @@ class TestCtFile(unittest.TestCase):
         # sort the copies
         ct.sort_copies()
         
-        print('Printing coordinates in test_sort_copies')
-        print(coordinates_tosort.shape)
-        print(ct.coordinates.shape)
-
         # check the results
         np.testing.assert_array_almost_equal(ct.coordinates, coordinates_test, decimal=3)
         np.testing.assert_array_equal(ct.nspot, nspot_test)
