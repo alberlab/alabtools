@@ -241,6 +241,7 @@ class HssFile(h5py.File):
         assert isinstance(coord, np.ndarray)
         assert len(coord.shape) == 3 and coord.shape[2] == 3, 'Coordinates should have dimensions' \
                                                               ' (nbeads x struct x 3), got %s' % repr(coord.shape)
+        print(self._nstruct, coord.shape[1])
         assert self._nstruct == 0 and self._nstruct == coord.shape[1], 'Coord first axis does not match' \
                                                                        ' number of structures'
         assert self._nbead == 0 and self._nbead == coord.shape[0], 'Coord second axis does not match number of beads'
