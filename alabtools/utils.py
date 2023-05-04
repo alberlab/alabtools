@@ -161,10 +161,19 @@ class Genome(object):
             lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
             origins = np.array(origins, dtype=ORIGINS_DTYPE)
         
-        # Convert chroms to appropriate format and sort them
+        # Convert chroms to appropriate format
         chroms = self._standardize_chromosomes(chroms)
-        chroms = self._sort_chromosomes(chroms)
+        
+        # Sort chroms, origins, lengths by chromosome name
+        chromnums = self._sort_by_chromosomes(chroms)
+        chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
+        lengths = [length for (chromnum, length) in sorted(zip(chromnums, lengths))]
+        origins = [origin for (chromnum, origin) in sorted(zip(chromnums, origins))]
+        
+        # Convert to numpy arrays
         chroms = np.array(chroms, dtype=CHROMS_DTYPE)
+        lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
+        origins = np.array(origins, dtype=ORIGINS_DTYPE)
 
         choices = np.zeros(len(chroms), dtype=bool)
 
@@ -214,14 +223,14 @@ class Genome(object):
         return chroms
     
     @staticmethod
-    def _sort_chromosomes(chroms):
-        """Sort chromosomes by chromosome number.
+    def _sort_by_chromosomes(chroms):
+        """Get the order of chromosomes as a list of indices.
 
         Args:
             chroms (list): A list of chromosome identifiers (strings).
 
         Returns:
-            np.array: A sorted numpy array of chromosomes with dtype CHROMS_DTYPE.
+            list: A list of indices that sorts the chromosomes.
         """
         
         # Initialize list of chromosome numbers
@@ -244,11 +253,8 @@ class Genome(object):
             # This is to deal with other chr labels (e.g. 'chr1_random')
             else:
                 chromnums.append(103)
-                
-        # Sort chroms by chromnums
-        chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
         
-        return chroms
+        return chromnums
     
     def __eq__(self, other):
         try:
