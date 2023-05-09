@@ -113,7 +113,7 @@ class Genome(object):
     """
 
     def __init__(self, assembly, chroms=None, origins=None, lengths=None,
-                 usechr=None, silence=False):
+                 usechr=None, silence=False, sort_chroms=True):
 
         # If the first argument is a string, and no other info is specified,
         # check if we can read from info or hdf5.
@@ -165,10 +165,11 @@ class Genome(object):
         chroms = self._standardize_chromosomes(chroms)
         
         # Sort chroms, origins, lengths by chromosome name
-        # chromnums = self._sort_by_chromosomes(chroms)
-        # chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
-        # lengths = [length for (chromnum, length) in sorted(zip(chromnums, lengths))]
-        # origins = [origin for (chromnum, origin) in sorted(zip(chromnums, origins))]
+        if sort_chroms:
+            chromnums = self._sort_by_chromosomes(chroms)
+            chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
+            lengths = [length for (chromnum, length) in sorted(zip(chromnums, lengths))]
+            origins = [origin for (chromnum, origin) in sorted(zip(chromnums, origins))]
         
         # Convert to numpy arrays
         chroms = np.array(chroms, dtype=CHROMS_DTYPE)
