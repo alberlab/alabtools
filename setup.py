@@ -51,7 +51,6 @@ if False:
                 extra_link_args=["-fopenmp"]
                 )
     ]
-extensions = []  # empty list, remove for proper compile
 
 # if '--no-geotools' not in sys.argv:  # gives compile issues in local machines
 if False:
