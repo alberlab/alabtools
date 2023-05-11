@@ -40,17 +40,16 @@ extras_require = {
     ]
 }
 
-if False:
-    extensions = [
-        Extension("alabtools.numutils", ["alabtools/numutils.pyx"]),
-        Extension("alabtools._cmtools", ["alabtools/cmtools/cmtools.i", "alabtools/cmtools/cmtools.cpp"],
-                swig_opts=['-c++'],
-                language="c++",
-                include_dirs=[numpy_include]+std_include,
-                extra_compile_args=["-fopenmp"],
-                extra_link_args=["-fopenmp"]
-                )
-    ]
+extensions = [
+    Extension("alabtools.numutils", ["alabtools/numutils.pyx"]),
+    # Extension("alabtools._cmtools", ["alabtools/cmtools/cmtools.i", "alabtools/cmtools/cmtools.cpp"],
+    #           swig_opts=['-c++'],
+    #           language="c++",
+    #           include_dirs=[numpy_include]+std_include,
+    #           extra_compile_args=["-fopenmp"],
+    #           extra_link_args=["-fopenmp"]
+    #          )
+]
 
 if '--no-geotools' not in sys.argv:
     extensions.append(
