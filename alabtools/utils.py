@@ -222,40 +222,6 @@ class Genome(object):
 
         return chroms
     
-    @staticmethod
-    def _sort_by_chromosomes(chroms):
-        """Get the order of chromosomes as a list of indices.
-
-        Args:
-            chroms (list): A list of chromosome identifiers (strings).
-
-        Returns:
-            list: A list of indices that sorts the chromosomes.
-        """
-        
-        # Initialize list of chromosome numbers
-        chromnums = []
-        
-        # Loop through chromosomes and convert to numbers for sorting
-        for chrom in chroms:
-            chrombase = chrom.split('chr')[1]  # remove 'chr' prefix
-            if chrombase.isdigit():  # if it's a number
-                chromnums.append(int(chrombase))
-            # The chromosome number of X, Y, M, ..., changes depending
-            # on the genome assembly. Here we assign them to 100, 101, 102, ...
-            # so that we are sure that they come after the autosomes
-            elif chrombase == 'X':
-                chromnums.append(100)
-            elif chrombase == 'Y':
-                chromnums.append(101)
-            elif chrombase == 'M':
-                chromnums.append(102)
-            # This is to deal with other chr labels (e.g. 'chr1_random')
-            else:
-                chromnums.append(103)
-        
-        return chromnums
-    
     def __eq__(self, other):
         try:
             return (
@@ -266,6 +232,54 @@ class Genome(object):
             )
         except:
             return False
+    
+    def get_chromosome_sorting(self):
+        """Get the order of chromosomes as a list of indices.
+
+        Args:
+            chroms (list): A list of chromosome identifiers (strings).
+
+        Returns:
+            dict: A dict that maps chromosome identifiers to their order.
+        """
+        
+        # Initialize list of chromosome numbers
+        chromorders = {}
+        
+        # Loop through chromosomes and convert to numbers for sorting
+        for chrom in self.chroms:
+            chrombase = chrom.split('chr')[1]  # remove 'chr' prefix
+            if chrombase.isdigit():  # if it's a number
+                chromorders[chrom] = int(chrombase)
+            # The chromosome number of X, Y, M, ..., changes depending
+            # on the genome assembly. Here we assign them to 100, 101, 102, ...
+            # so that we are sure that they come after the autosomes
+            elif chrombase == 'X':
+                chromorders[chrom] = 100
+            elif chrombase == 'Y':
+                chromorders[chrom] = 101
+            elif chrombase == 'M':
+                chromorders[chrom] = 102
+            # This is to deal with other chr labels (e.g. 'chr1_random')
+            else:
+                chromorders[chrom] = 103 + len(chromorders)
+        
+        return chromorders
+    
+    def sort(self, order):
+        """Sort the genome by the input order.
+        Modify the genome (chroms, lenghts, origins) in place.
+
+        Args:
+            order (list): List with the new order.
+
+        Returns:
+            None
+        """
+        
+        self.chroms = [chrom for (_, chrom) in sorted(zip(order, self.chroms))]
+        self.lengths = [length for (_, length) in sorted(zip(order, self.lengths))]
+        self.origins = [origin for (_, origin) in sorted(zip(order, self.origins))]
 
     def bininfo(self, resolution):
 

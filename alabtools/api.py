@@ -206,8 +206,6 @@ class Contactmatrix(object):
         self._build_index(self.resolution)
 
         origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
-        # ATTENTION: chromosomes in origenome must be sorted for this code to work
-        # (i.e. 'chr1', 'chr2', ... NOT 'chr1', 'chr10', 'chr11', ..., 'chr2', ...)
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0], allChrId[0] + 1]]
         for i in allChrId[1:]:
@@ -303,6 +301,18 @@ class Contactmatrix(object):
         self.matrix = matrix.sss_matrix((data, indices, indptr), shape=(len(self.index), len(self.index)))
 
     # -------------------
+     
+    def sort(self):
+        """Sorts the HCS file by chromosome.
+        Modifies Genome, Index, and Matrix in place.
+        """
+        
+        # Get the chromosome order from the genome
+        chrom_order = self.genome._get_chromosome_sorting()
+        
+        # Sort the genome
+        self.genome.sort(chrom_order.values())
+    
     def rowsum(self):
         return self.matrix.sum(axis=1)
 
