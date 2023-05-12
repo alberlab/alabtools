@@ -116,7 +116,7 @@ class Contactmatrix(object):
                 # self._load_cool(h5, assembly=genome, usechr=usechr)
                 # h5.close()
                 cool = cooler.Cooler(mat)
-                self._load_cool_new(cool, assembly=genome, usechr=usechr)
+                self.load_cool_new(cool, assembly=genome, usechr=usechr)
                 cool.close()
             elif os.path.splitext(mat)[1] == '.mcool':
                 h5 = h5py.File(mat)
@@ -307,7 +307,7 @@ class Contactmatrix(object):
 
         return attr
 
-    def _load_cool_new(self, cool, assembly=None, usechr=('#', 'X', 'Y')):
+    def load_cool_new(self, cool, assembly=None, usechr=('#', 'X', 'Y')):
         
         # Read the assembly
         if assembly is None:
