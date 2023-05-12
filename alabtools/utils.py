@@ -589,7 +589,10 @@ class Index(object):
                 #       e.g. [0, 0, 0, 1, 1, 2]
                 # self.genome.chroms[self.chrom] is a np.array of strings,
                 #       e.g. ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3']
-                self.chromstr = self.genome.chroms[self.chrom]
+                # self.chromstr = self.genome.chroms[self.chrom]
+                self.chromstr = np.ones(len(self.chrom), dtype='U10')
+                for c in np.unique(self.chrom):
+                    self.chromstr[self.chrom == c] = self.genome.chroms[c]
             else:
                 self.chromstr = np.array(['chr%d' % (i + 1) for i in self.chrom])
 
