@@ -244,25 +244,32 @@ class Genome(object):
         """
         
         # Initialize list of chromosome numbers
-        chromorders = {}
+        chromorders = []
         
         # Loop through chromosomes and convert to numbers for sorting
         for chrom in self.chroms:
             chrombase = chrom.split('chr')[1]  # remove 'chr' prefix
             if chrombase.isdigit():  # if it's a number
-                chromorders[chrom] = int(chrombase)
+                chromorders.append(int(chrombase))
             # The chromosome number of X, Y, M, ..., changes depending
             # on the genome assembly. Here we assign them to 100, 101, 102, ...
             # so that we are sure that they come after the autosomes
             elif chrombase == 'X':
-                chromorders[chrom] = 100
+                chromorders.append(100)
             elif chrombase == 'Y':
-                chromorders[chrom] = 101
+                chromorders.append(101)
             elif chrombase == 'M':
-                chromorders[chrom] = 102
+                chromorders.append(102)
             # This is to deal with other chr labels (e.g. 'chr1_random')
             else:
-                chromorders[chrom] = 103 + len(chromorders)
+                chromorders.append(103 + len(chromorders))
+        
+        # converts chromorders to a rank array,
+        # e.g. [4, 2, 7, 1, 100] -> [2, 1, 3, 0, 4]
+        chromorders = np.argsort(np.argsort(chromorders))
+        
+        # Convert to a dict
+        chromorders = dict(zip(self.chroms, chromorders))
         
         return chromorders
     
