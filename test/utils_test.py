@@ -1,7 +1,27 @@
 import unittest
 import random
 import numpy as np
-from alabtools.utils import Genome, Index
+from alabtools.utils import Genome, Index, standardize_chromosomes
+
+class TestUtils(unittest.TestCase):
+    """Test functions in utils.py
+    """
+    
+    def setUp(self) -> None:
+        return super().setUp()
+    
+    def tearDown(self) -> None:
+        return super().tearDown()
+    
+    def test_standardize_chromosomes(self):
+        """Test standardize_chromosomes function in utils.
+
+        Returns:
+            _type_: _description_
+        """
+        chroms = [b'1', b'1', b'1', b'2', b'2', b'7', b'X', b'X']
+        chroms_std = ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX']
+        np.testing.assert_array_equal(standardize_chromosomes(chroms), chroms_std)
 
 class TestGenome(unittest.TestCase):
     """Test Genome class"""
@@ -31,7 +51,7 @@ class TestGenome(unittest.TestCase):
         np.testing.assert_array_equal(genome.origins, origins)
     
     def test_sort(self):
-        """Test sorting of the Genome.
+        """Test sort method in Genome.
         """
         # Define the input
         chroms = ['chr1', 'chr2', 'chr3', 'chr5', 'chr6', 'chr10', 'chr12', 'chr18', 'chrX']

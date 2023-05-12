@@ -323,6 +323,16 @@ class Contactmatrix(object):
         
         # Build the index
         self._build_index(self.resolution)
+        
+        # Get the complete domain BED of the cooler file
+        chroms, start, end  = cool.bins()[:]
+        
+        # Get the complete contact matrix of the cooler file
+        mat = cool.matrix(balance=False)[:]
+
+        # remove 'chrM' from chroms and mat
+        chroms = chroms[chroms != 'chrM']
+        mat = mat[chroms != 'chrM', :][:, chroms != 'chrM']
 
         return None
 
