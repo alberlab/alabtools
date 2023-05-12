@@ -240,7 +240,7 @@ class Genome(object):
             chroms (list): A list of chromosome identifiers (strings).
 
         Returns:
-            dict: A dict that maps chromosome identifiers to their order.
+            np.array: A list of indices that sorts the chromosomes.
         """
         
         # Initialize list of chromosome numbers
@@ -268,22 +268,14 @@ class Genome(object):
         # e.g. [4, 2, 7, 1, 100] -> [2, 1, 3, 0, 4]
         chromorders = np.argsort(np.argsort(chromorders))
         
-        # Convert to a dict
-        chromorders = dict(zip(self.chroms, chromorders))
-        
         return chromorders
     
-    def sort(self, order):
+    def sort(self):
         """Sort the genome by the input order.
         Modify the genome (chroms, lenghts, origins) in place.
-
-        Args:
-            order (list): List with the new order.
-
-        Returns:
-            None
         """
         
+        order = self.get_chromosome_sorting()
         self.chroms = [chrom for (_, chrom) in sorted(zip(order, self.chroms))]
         self.lengths = [length for (_, length) in sorted(zip(order, self.lengths))]
         self.origins = [origin for (_, origin) in sorted(zip(order, self.origins))]
@@ -672,23 +664,6 @@ class Index(object):
             np.concatenate([self.label, other.label]),
             genome=self.genome
         )
-    
-    def sort_by_chroms(order_chroms):
-        """Sorts the index by a given order of chromosomes.
-        Modify the index in place.
-
-        Args:
-            order_chroms (dict): Dictionary with the order of the chromosomes.
-        """
-        
-        # Use the order_chroms dict to sort
-        
-        # for instance, we can do something like
-        # chroms_sort = []
-        # for chrom in order_chroms:
-        #    chroms_sort.append(self.chromstr[self.chrom == chrom])
-        
-        return None
 
     def resolution(self):
         '''

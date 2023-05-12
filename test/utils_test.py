@@ -30,28 +30,6 @@ class TestGenome(unittest.TestCase):
         np.array_equal(genome.lengths, lengths)
         np.array_equal(genome.origins, origins)
     
-    def test_get_chromosome_sorting(self):
-        """Test get_chromosome_sorting method.
-        """
-        # Define the input
-        chroms = ['chr1', 'chr2', 'chr3', 'chr5', 'chr6', 'chr10', 'chr12', 'chr18', 'chrX']
-        lengths = [2000 - 100 * i for i in range(len(chroms))]
-        origins = [0 for _ in range(len(chroms))]
-        # Shuffle the input
-        idx = list(range(len(chroms)))
-        random.shuffle(idx)
-        chroms_shuffled = [chroms[i] for i in idx]
-        lengths_shuffled = [lengths[i] for i in idx]
-        origins_shuffled = [origins[i] for i in idx]
-        # Initialize the Genome object
-        genome = Genome(assembly='mm10', chroms=chroms_shuffled,
-                        lengths=lengths_shuffled, origins=origins_shuffled)
-        # Use get_chromosome_sorting method
-        chromorders = genome.get_chromosome_sorting()
-        # Check the results
-        np.testing.assert_equal(list(chromorders.values()), idx)
-        return None    
-    
     def test_sort(self):
         """Test sorting of the Genome.
         """
@@ -68,7 +46,7 @@ class TestGenome(unittest.TestCase):
         # Initialize the Genome object
         genome = Genome(assembly='mm10', chroms=chroms_shuffled,
                         lengths=lengths_shuffled, origins=origins_shuffled)
-        genome.sort(idx)
+        genome.sort()
         # Check the results
         np.testing.assert_equal(genome.chroms, chroms)
         np.testing.assert_equal(genome.lengths, lengths)

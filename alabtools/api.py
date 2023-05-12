@@ -307,11 +307,12 @@ class Contactmatrix(object):
         Modifies Genome, Index, and Matrix in place.
         """
         
-        # Get the chromosome order from the genome
-        chrom_order = self.genome._get_chromosome_sorting()
-        
+        # Get the original chromstr from the index
+        chromstr = self.index.chromstr
         # Sort the genome
-        self.genome.sort(chrom_order.values())
+        self.genome.sort()
+        # Get the sorted index
+        self.index = self.genome.bininfo(self.resolution)
     
     def rowsum(self):
         return self.matrix.sum(axis=1)
