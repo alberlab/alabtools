@@ -377,6 +377,11 @@ def standardize_chromosomes(chroms):
     # Case 2: chroms is a list of integers
     if isinstance(chroms[0], int):
         chroms = [str(x) for x in chroms]
+    
+    # Case 3: chroms is a numpy array of strings
+    if isinstance(chroms[0], np.str_):
+        chroms = np.array(chroms, dtype='U10')  # convert to U10
+        chroms = chroms.tolist()  # convert to list
 
     # Add 'chr' prefix to chromosome identifiers if missing
     for i in range(len(chroms)):
