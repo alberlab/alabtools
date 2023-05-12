@@ -162,7 +162,7 @@ class Genome(object):
             origins = np.array(origins, dtype=ORIGINS_DTYPE)
         
         # Convert chroms to appropriate format
-        chroms = self._standardize_chromosomes(chroms)
+        chroms = standardize_chromosomes(chroms)
         
         # Convert to numpy arrays
         chroms = np.array(chroms, dtype=CHROMS_DTYPE)
@@ -189,32 +189,6 @@ class Genome(object):
         self.assembly = unicode(assembly)
 
     # -
-
-    @staticmethod
-    def _standardize_chromosomes(chroms):
-        """Convert input chromosomes to a standardized format, add 'chr' prefix if missing,
-
-        Args:
-            chroms (list): A list of chromosome identifiers, either as binary strings or strings.
-
-        Returns:
-            list: A list of standardized chromosome identifiers (strings).
-        """
-            
-        # Case 1: chroms is a list of binary strings
-        if isinstance(chroms[0], bytes):
-            chroms = [x.decode('utf-8') for x in chroms]
-        
-        # Case 2: chroms is a list of integers
-        if isinstance(chroms[0], int):
-            chroms = [str(x) for x in chroms]
-
-        # Add 'chr' prefix to chromosome identifiers if missing
-        for i in range(len(chroms)):
-            if chroms[i][0:3] != 'chr':
-                chroms[i] = 'chr' + chroms[i]
-
-        return chroms
     
     def __eq__(self, other):
         try:
@@ -384,6 +358,32 @@ class Genome(object):
             ggrp.create_dataset("lengths", data=self.lengths,
                                 compression=compression,
                                 compression_opts=compression_opts)
+
+       
+def standardize_chromosomes(chroms):
+    """Convert input chromosomes to a standardized format, add 'chr' prefix if missing,
+
+    Args:
+    chroms (list): A list of chromosome identifiers, either as binary strings or strings.
+
+    Returns:
+    list: A list of standardized chromosome identifiers (strings).
+    """
+
+    # Case 1: chroms is a list of binary strings
+    if isinstance(chroms[0], bytes):
+        chroms = [x.decode('utf-8') for x in chroms]
+
+    # Case 2: chroms is a list of integers
+    if isinstance(chroms[0], int):
+        chroms = [str(x) for x in chroms]
+
+    # Add 'chr' prefix to chromosome identifiers if missing
+    for i in range(len(chroms)):
+        if chroms[i][0:3] != 'chr':
+            chroms[i] = 'chr' + chroms[i]
+
+    return chroms
 
 
 # --------------------
