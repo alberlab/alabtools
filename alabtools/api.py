@@ -924,6 +924,7 @@ class Contactmatrix(object):
                                 lengths=self.genome.lengths)
 
         if isinstance(step, string_types):
+            # Reads a BED file with domains
             tadDef = np.genfromtxt(step, dtype=None, encoding=None)
 
             chrom = tadDef['f0']
@@ -956,6 +957,8 @@ class Contactmatrix(object):
                                   )
             newMatrix._set_index(chrom, start, end, label)
         else:
+            # Case we enter if step is not a string
+            # We enter here if step is a number (int)
             newMatrix._build_index(self.resolution * step)
 
         DimB = len(newMatrix.index)
@@ -987,7 +990,10 @@ class Contactmatrix(object):
                                   mapping,
                                   Bi, Bj, Bx)
         newMatrix.matrix = matrix.sss_matrix((Bx, (Bi, Bj)))
-        newMatrix.resolution = -1
+        if isinstance(step, int):
+            newMatrix.resolution = self.resolution * step
+        else:  # resolution can't be defined
+            newMatrix.resolution = -1
         return newMatrix
 
     def fmaxScaling(self, fmax, force=False):
