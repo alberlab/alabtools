@@ -205,7 +205,14 @@ class Contactmatrix(object):
         self._build_genome(assembly, usechr=usechr, chroms=h5['chroms']['name'][:], lengths=h5['chroms']['length'][:])
         self._build_index(self.resolution)
 
-        origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
+        # this doesn't work right now because origenome and self.genome have different order
+        # maybe we can use
+        # origenome = utils.Genome(assembly, h5['chroms']['name'][:],
+        #                          lengths=h5['chroms']['length'][:], usechr=["#", "X", "Y"])?
+        
+        # origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
+        origenome = utils.Genome(assembly, h5['chroms']['name'][:],
+                                 lengths=h5['chroms']['length'][:], usechr=["#", "X", "Y"])
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0], allChrId[0] + 1]]
         for i in allChrId[1:]:
