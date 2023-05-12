@@ -26,9 +26,9 @@ class TestGenome(unittest.TestCase):
         genome = Genome(assembly='mm10', chroms=chroms_bnr,
                         lengths=lengths, origins=origins)
         # Check the results
-        np.array_equal(genome.chroms, chroms)
-        np.array_equal(genome.lengths, lengths)
-        np.array_equal(genome.origins, origins)
+        np.testing.assert_array_equal(genome.chroms, chroms)
+        np.testing.assert_array_equal(genome.lengths, lengths)
+        np.testing.assert_array_equal(genome.origins, origins)
     
     def test_sort(self):
         """Test sorting of the Genome.
@@ -48,9 +48,32 @@ class TestGenome(unittest.TestCase):
                         lengths=lengths_shuffled, origins=origins_shuffled)
         genome.sort()
         # Check the results
-        np.testing.assert_equal(genome.chroms, chroms)
+        np.testing.assert_array_equal(genome.chroms, chroms)
         np.testing.assert_equal(genome.lengths, lengths)
         np.testing.assert_equal(genome.origins, origins)
+
+class TestIndex(unittest.TestCase):
+    """Test Index class"""
+    
+    def setUp(self) -> None:
+        return super().setUp()
+    
+    def tearDown(self) -> None:
+        return super().tearDown()
+    
+    def test_get_chromint(self):
+        """Test initialization of Genome from binary chromosomes.
+        """
+        # Define the input
+        chromstr = ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX']
+        start = [0, 100, 200, 0, 100, 0, 0, 100]
+        end = [100, 200, 300, 100, 200, 100, 100, 200]
+        # Initialize the Index object
+        index = Index(chrom=chromstr, start=start, end=end)
+        # Check the results
+        chromint = [1, 1, 1, 2, 2, 7, 100, 100]
+        np.testing.assert_array_equal(index.get_chromint(), chromint)
+        
     
 
 if __name__ == '__main__':

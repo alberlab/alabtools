@@ -739,6 +739,29 @@ class Index(object):
         Returns the unique names of chromosomes in this index
         '''
         return pd.unique(self.chromstr)
+    
+    def get_chromint(self):
+        """Returns the chromosomes in integer format.
+        """
+        # Sort the matrix
+        # convert the chromosome string to an integer (e.g. 'chr1' -> 1)
+        chromint = []
+        for c in self.chromstr:
+            c = c.split('chr')[1]  # remove the 'chr' part
+            if c.isdigit():  # if it's a number
+                c = int(c)
+            elif c == 'X':
+                c = 100  # make X after the autosomes
+            elif c == 'Y':
+                c = 101
+            elif c == 'M':
+                c = 102
+            else:
+                c = 103  # This is to deal with other chr labels (e.g. 'chr1_random')
+            c = int(c)
+            chromint.append(c)
+        chromint = np.array(chromint)
+        return chromint
 
     def __getitem__(self, key):
         return np.rec.fromarrays((self.chrom[key],
