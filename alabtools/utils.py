@@ -672,6 +672,23 @@ class Index(object):
             np.concatenate([self.label, other.label]),
             genome=self.genome
         )
+    
+    def sort_by_chroms(order_chroms):
+        """Sorts the index by a given order of chromosomes.
+        Modify the index in place.
+
+        Args:
+            order_chroms (dict): Dictionary with the order of the chromosomes.
+        """
+        
+        # Use the order_chroms dict to sort
+        
+        # for instance, we can do something like
+        # chroms_sort = []
+        # for chrom in order_chroms:
+        #    chroms_sort.append(self.chromstr[self.chrom == chrom])
+        
+        return None
 
     def resolution(self):
         '''
