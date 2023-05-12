@@ -164,12 +164,6 @@ class Genome(object):
         # Convert chroms to appropriate format
         chroms = self._standardize_chromosomes(chroms)
         
-        # Sort chroms, origins, lengths by chromosome name
-        # chromnums = self._sort_by_chromosomes(chroms)
-        # chroms = [chrom for (chromnum, chrom) in sorted(zip(chromnums, chroms))]
-        # lengths = [length for (chromnum, length) in sorted(zip(chromnums, lengths))]
-        # origins = [origin for (chromnum, origin) in sorted(zip(chromnums, origins))]
-        
         # Convert to numpy arrays
         chroms = np.array(chroms, dtype=CHROMS_DTYPE)
         lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
