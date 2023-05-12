@@ -32,6 +32,7 @@ warnings.simplefilter('ignore', FutureWarning)
 import os.path
 import h5py
 import scipy.sparse
+import cooler
 
 try:
     import cPickle as pickle
@@ -111,9 +112,12 @@ class Contactmatrix(object):
             elif os.path.splitext(mat)[1] == '.hcs':
                 self._load_hcs(mat, lazy=lazy)
             elif os.path.splitext(mat)[1] == '.cool':
-                h5 = h5py.File(mat)
-                self._load_cool(h5, assembly=genome, usechr=usechr)
-                h5.close()
+                # h5 = h5py.File(mat)
+                # self._load_cool(h5, assembly=genome, usechr=usechr)
+                # h5.close()
+                cool = cooler.Cooler(mat)
+                self._load_cool_new(cool, assembly=genome, usechr=usechr)
+                cool.close()
             elif os.path.splitext(mat)[1] == '.mcool':
                 h5 = h5py.File(mat)
                 print("Loading matrix from mcool, resolution={}".format(resolution))
@@ -173,7 +177,7 @@ class Contactmatrix(object):
             # assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index))
             # -
 
-    def _build_genome(self, assembly, usechr=('#', 'X'), chroms=None,
+    def _build_genome(self, assembly, usechr=('#', 'X', 'Y'), chroms=None,
                       origins=None, lengths=None):
         self.genome = utils.Genome(assembly, chroms=chroms, origins=origins, lengths=lengths, usechr=usechr)
 
@@ -259,6 +263,68 @@ class Contactmatrix(object):
         data = np.concatenate(data)
 
         self.matrix = matrix.sss_matrix((data, indices, indptr), shape=(len(self.index), len(self.index)))
+    
+    @staticmethod
+    def _read_cool_attribute(cool, attr_keys):
+        """Try to read an attribute from a cool file.
+        Since the attribute can be in either cool._info or cool.info, we try both.
+
+        Args:
+            cool (cooler.Cooler): Cooler file.
+            attr_name (list of str): List of possible attribute names.
+
+        Raises:
+            ValueError: If attribute is not found (i.e. is None).
+            
+        Returns:
+            str: Attribute value.
+        """
+        
+        # Initialize the attribute to None
+        attr = None
+        
+        # Try to find the attribute in cool._info or cool.info or cool.__dict__
+        for key in attr_keys:
+            try:
+                attr = cool.info[key]
+                break
+            except AttributeError:
+                pass
+            try:
+                attr = cool._info[key]
+                break
+            except AttributeError:
+                pass
+            try:
+                attr = cool.__dict__[key]
+                break
+            except AttributeError:
+                pass
+        
+        # If attribute is still None, raise error
+        if attr is None:
+            raise ValueError('Attribute not found.')
+
+        return attr
+
+    def _load_cool_new(self, cool, assembly=None, usechr=('#', 'X', 'Y')):
+        
+        # Read the assembly
+        if assembly is None:
+            assembly = self._read_cool_attribute(cool, ['assembly', 'genome-assembly'])
+        
+        # Read the resolution
+        self.resolution = self._read_cool_attribute(cool, ['bin-size', 'resolution'])
+
+        # Build the genome
+        self._build_genome(assembly, usechr=usechr,
+                           chroms=list(cool.chromnames),
+                           lengths=list(cool.chromsizes))
+        
+        # Build the index
+        self._build_index(self.resolution)
+
+        return None
 
     def _load_pairs_bgzip(self, filename, resolution, usechr=('#', 'X')):
         import pypairix
