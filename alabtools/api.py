@@ -117,7 +117,6 @@ class Contactmatrix(object):
                 # h5.close()
                 cool = cooler.Cooler(mat)
                 self.load_cool_new(cool, assembly=genome, usechr=usechr)
-                cool.close()
             elif os.path.splitext(mat)[1] == '.mcool':
                 h5 = h5py.File(mat)
                 print("Loading matrix from mcool, resolution={}".format(resolution))
