@@ -324,15 +324,21 @@ class Contactmatrix(object):
         # Build the index
         self._build_index(self.resolution)
         
-        # Get the complete domain BED of the cooler file
-        chroms, start, end  = cool.bins()[:]
-        
+        # Build the matrix
         # Get the complete contact matrix of the cooler file
         mat = cool.matrix(balance=False)[:]
-
-        # remove 'chrM' from chroms and mat
-        chroms = chroms[chroms != 'chrM']
-        mat = mat[chroms != 'chrM', :][:, chroms != 'chrM']
+        # Get the complete domain BED of the cooler file
+        chromstr, start, end  = cool.bins()[:]
+        # Standardize chromstr (e.g.'1' -> 'chr1')
+        chromstr = utils.standardize_chromosomes(chromstr)
+        chromstr = np.array(chromstr)
+        # Create a mask to remove chromosomes not present in self.genome
+        mask = np.ones(len(chromstr), dtype=bool)
+        for chrom in np.unique(chromstr):
+            if chrom not in self.genome:
+                mask[chromstr == chrom] = False
+        # Apply the mask
+        mat = mat[mask, :][:, mask]
 
         return None
 
