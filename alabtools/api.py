@@ -205,25 +205,9 @@ class Contactmatrix(object):
         self._build_genome(assembly, usechr=usechr, chroms=h5['chroms']['name'][:], lengths=h5['chroms']['length'][:])
         self._build_index(self.resolution)
 
-        # I think that origenome is needed if - in the usechr passed to _load_cool,
-        # we don't include all chromosomes present in the cool file.
-        # In that case, we would be looping over a smaller sample of chromosomes than
-        # the actual cool file, and this would mess up the association between chr and chrID.
-        # (note: chrID is not actually the ID, but rather the position of chr in the list).
-        
-        # However, I don't think that reading the genome from the assembly file makes sense:
-        #   1) the chromosomes in the cool file might not match the ones in the assembly file
-        #   2) the order of the chromosomes in the cool file might not match the one in the assembly file
-        
-        # So I think we have to substitute the line (commented below):
-        # origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
-        # with
-        origenome = utils.Genome(assembly, chroms=h5['chroms']['name'][:], origins=None,
-                                 lengths=h5['chroms']['length'][:], usechr=['#', 'X', 'Y'])
-        # in this way we are sure we're including the chromosomes of the cool file in the right order.
-        # The only issue is that the list ['#', 'X', 'Y'] might not include every chromosome,
-        # if special ones (e.g. chrM) are present in the cool file.
-        
+        origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
+        # ATTENTION: chromosomes in origenome must be sorted for this code to work
+        # (i.e. 'chr1', 'chr2', ... NOT 'chr1', 'chr10', 'chr11', ..., 'chr2', ...)
         allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
         chrIdRange = [[allChrId[0], allChrId[0] + 1]]
         for i in allChrId[1:]:
