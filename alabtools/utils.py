@@ -578,6 +578,12 @@ class Index(object):
 
         if self.chromstr is None:
             if self.genome is not None:
+                # self.genome.chroms is a np.array strings,
+                #       e.g. ['chr1', 'chr2', 'chr3']
+                # self.chrom is a np.array of integers,
+                #       e.g. [0, 0, 0, 1, 1, 2]
+                # self.genome.chroms[self.chrom] is a np.array of strings,
+                #       e.g. ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3']
                 self.chromstr = self.genome.chroms[self.chrom]
             else:
                 self.chromstr = np.array(['chr%d' % (i + 1) for i in self.chrom])
