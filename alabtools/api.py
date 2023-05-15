@@ -398,7 +398,7 @@ class Contactmatrix(object):
         
         # Get the original chromint from the index
         chromint_old = self.index.get_chromint()
-        
+
         # Sort the genome
         self.genome.sort()
         
@@ -406,7 +406,7 @@ class Contactmatrix(object):
         self.index = self.genome.bininfo(self.resolution)
         
         # Sort the matrix
-        order = np.argsort(chromint_old)  # get the order of the chromosomes before sorting
+        order = np.argsort(chromint_old, kind='mergesort')  # get the order of the chromosomes before sorting
         mat = self.matrix.toarray()  # convert to dense matrix
         mat = mat[order, :]
         mat = mat[:, order]
