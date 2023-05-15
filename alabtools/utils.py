@@ -238,6 +238,24 @@ class Genome(object):
         
         return chromorders
     
+    def check_sorted(self):
+        """Check if the genome is sorted by chromosome.
+        A genome is sorted if the chromosomes are in the order
+        chr1, chr2, ..., chrX, chrY, chrM, ...
+        
+        Returns:
+            bool: True if sorted, False otherwise.
+        """
+            
+        # Get the order of chromosomes
+        order = self.get_chromosome_sorting()
+        
+        # Check if the order is the same as the original order
+        if np.all(order == np.arange(len(order))):
+            return True
+        else:
+            return False
+    
     def sort(self):
         """Sort the genome by the input order.
         Modify the genome (chroms, lenghts, origins) in place.
@@ -304,7 +322,7 @@ class Genome(object):
             represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(
                 self.origins[i] + self.lengths[i]) + '\n')
         return represent
-
+    
     def save(self, h5f, compression="gzip", compression_opts=6):
 
         """
