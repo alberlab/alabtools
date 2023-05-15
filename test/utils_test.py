@@ -71,6 +71,27 @@ class TestGenome(unittest.TestCase):
         np.testing.assert_array_equal(genome.chroms, chroms)
         np.testing.assert_equal(genome.lengths, lengths)
         np.testing.assert_equal(genome.origins, origins)
+    
+    def test_check_sorted(self):
+        # Define a sorted input
+        chroms = ['chr1', 'chr2', 'chr3', 'chr5', 'chr6', 'chr10', 'chr12', 'chr18', 'chrX', 'chrM']
+        lengths = [2000 - 100 * i for i in range(len(chroms))]
+        origins = [0 for _ in range(len(chroms))]
+        # Create the genome
+        genome = Genome(assembly='mm10', chroms=chroms,
+                        lengths=lengths, origins=origins)
+        # Check the results
+        self.assertTrue(genome.check_sorted())
+        # Define a shuffled input
+        chroms = ['chr1', 'chr6', 'chr13', 'chr7', 'chr2', 'chrX', 'chr12', 'chrM', 'chr18', 'chr5']
+        lengths = [2000 - 100 * i for i in range(len(chroms))]
+        origins = [0 for _ in range(len(chroms))]
+        # Create the genome
+        genome = Genome(assembly='mm10', chroms=chroms,
+                        lengths=lengths, origins=origins)
+        # Check the results
+        self.assertFalse(genome.check_sorted())
+        
 
 class TestIndex(unittest.TestCase):
     """Test Index class"""
