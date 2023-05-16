@@ -90,6 +90,7 @@ class sss_matrix(object):
             self.diagonal = arg1['diag']
 
         else:
+            # Case used in Contactmatrix / load_cool
             self.csr = triu(csr_matrix(arg1, shape=shape, dtype=dtype, copy=copy), format='csr')
             self._pop_diag()
             # -
