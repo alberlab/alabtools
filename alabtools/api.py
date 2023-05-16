@@ -275,7 +275,8 @@ class Contactmatrix(object):
         
         # Build the matrix
         # Get the complete contact matrix of the cooler file
-        mat = cool.matrix(balance=False)[:]
+        mat = cool.matrix(balance=False, sparse=True)[:]  # COO matrix
+        mat = mat.tocsr()  # convert to CSR matrix
         # Get the complete chromstr from the domain BED of the cooler file
         chromstr  = cool.bins()[:]['chrom']
         chromstr = np.array(list(chromstr))
@@ -290,7 +291,7 @@ class Contactmatrix(object):
         # Apply the mask
         mat = mat[mask, :][:, mask]
         # Store the sparse matrix
-        self.matrix = matrix.sss_matrix(mat)
+        self.matrix = matrix.sss_matrix(mat, shape=mat.shape)
 
     def _load_pairs_bgzip(self, filename, resolution, usechr=('#', 'X')):
         import pypairix
