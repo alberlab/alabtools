@@ -28,7 +28,8 @@ install_requires = [
     'tqdm',
     'six',
     'alphashape>=1.3.1',
-    'trimesh>=3.21.5'
+    'trimesh>=3.21.5',
+    'cooler>=0.8.11'
 ]
 tests_require = [
     'mock'
