@@ -112,18 +112,12 @@ class Contactmatrix(object):
             elif os.path.splitext(mat)[1] == '.hcs':
                 self._load_hcs(mat, lazy=lazy)
             elif os.path.splitext(mat)[1] == '.cool':
-                # h5 = h5py.File(mat)
-                # self._load_cool(h5, assembly=genome, usechr=usechr)
-                # h5.close()
                 cool = cooler.Cooler(mat)
                 self.load_cool(cool, assembly=genome, usechr=usechr)
             elif os.path.splitext(mat)[1] == '.mcool':
-                # h5 = h5py.File(mat)
                 print("Loading matrix from mcool, resolution={}".format(resolution))
                 cool = cooler.Cooler('{}::resolutions/{}'.format(mat, resolution))
                 self.load_cool(cool, assembly=genome, usechr=usechr)
-                # self._load_cool(h5['resolutions']['{}'.format(resolution)], assembly=genome, usechr=usechr)
-                # h5.close()
             elif os.path.splitext(mat)[1] == '.hic':
                 self._load_hic(mat, resolution=resolution, usechr=usechr)
             elif os.path.splitext(mat)[1] == '.gz' and os.path.splitext(os.path.splitext(mat)[0])[1] == '.pairs':
