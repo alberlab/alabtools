@@ -28,7 +28,8 @@ install_requires = [
     'tqdm',
     'six',
     'alphashape>=1.3.1',
-    'trimesh>=3.21.5'
+    'trimesh>=3.21.5',
+    'cooler>=0.8.11'
 ]
 tests_require = [
     'mock'
@@ -73,7 +74,7 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.1.0',
+    version='1.1.2',
     author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',

@@ -160,6 +160,14 @@ class Genome(object):
             chroms = np.array(chroms, dtype=CHROMS_DTYPE)
             lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
             origins = np.array(origins, dtype=ORIGINS_DTYPE)
+        
+        # Convert chroms to appropriate format
+        chroms = standardize_chromosomes(chroms)
+        
+        # Convert to numpy arrays
+        chroms = np.array(chroms, dtype=CHROMS_DTYPE)
+        lengths = np.array(lengths, dtype=LENGTHS_DTYPE)
+        origins = np.array(origins, dtype=ORIGINS_DTYPE)
 
         choices = np.zeros(len(chroms), dtype=bool)
 
@@ -174,13 +182,14 @@ class Genome(object):
                 # if specified with full name, remove chr
                 chrnum = chrnum.replace('chr', '')
                 choices = np.logical_or(chroms == ("chr%s" % chrnum), choices)
+        
         self.chroms = chroms[choices]  # convert to unicode for python2/3 compatibility
         self.origins = origins[choices]
         self.lengths = lengths[choices]
         self.assembly = unicode(assembly)
 
     # -
-
+    
     def __eq__(self, other):
         try:
             return (
@@ -191,6 +200,71 @@ class Genome(object):
             )
         except:
             return False
+    
+    def get_chromosome_sorting(self):
+        """Get the order of chromosomes as a list of indices.
+
+        Args:
+            chroms (list): A list of chromosome identifiers (strings).
+
+        Returns:
+            np.array: A list of indices that sorts the chromosomes.
+        """
+        
+        # Initialize list of chromosome numbers
+        chromorders = []
+        
+        # Loop through chromosomes and convert to numbers for sorting
+        for chrom in self.chroms:
+            chrombase = chrom.split('chr')[1]  # remove 'chr' prefix
+            if chrombase.isdigit():  # if it's a number
+                chromorders.append(int(chrombase))
+            # The chromosome number of X, Y, M, ..., changes depending
+            # on the genome assembly. Here we assign them to 100, 101, 102, ...
+            # so that we are sure that they come after the autosomes
+            elif chrombase == 'X':
+                chromorders.append(100)
+            elif chrombase == 'Y':
+                chromorders.append(101)
+            elif chrombase == 'M':
+                chromorders.append(102)
+            # This is to deal with other chr labels (e.g. 'chr1_random')
+            else:
+                chromorders.append(103 + len(chromorders))
+        
+        # converts chromorders to a rank array,
+        # e.g. [4, 2, 7, 1, 100] -> [2, 1, 3, 0, 4]
+        chromorders = np.argsort(np.argsort(chromorders))
+        
+        return chromorders
+    
+    def check_sorted(self):
+        """Check if the genome is sorted by chromosome.
+        A genome is sorted if the chromosomes are in the order
+        chr1, chr2, ..., chrX, chrY, chrM, ...
+        
+        Returns:
+            bool: True if sorted, False otherwise.
+        """
+            
+        # Get the order of chromosomes
+        order = self.get_chromosome_sorting()
+        
+        # Check if the order is the same as the original order
+        if np.all(order == np.arange(len(order))):
+            return True
+        else:
+            return False
+    
+    def sort(self):
+        """Sort the genome by the input order.
+        Modify the genome (chroms, lenghts, origins) in place.
+        """
+        
+        order = self.get_chromosome_sorting()
+        self.chroms = [chrom for (_, chrom) in sorted(zip(order, self.chroms))]
+        self.lengths = [length for (_, length) in sorted(zip(order, self.lengths))]
+        self.origins = [origin for (_, origin) in sorted(zip(order, self.origins))]
 
     def bininfo(self, resolution):
 
@@ -248,7 +322,7 @@ class Genome(object):
             represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(
                 self.origins[i] + self.lengths[i]) + '\n')
         return represent
-
+    
     def save(self, h5f, compression="gzip", compression_opts=6):
 
         """
@@ -302,6 +376,37 @@ class Genome(object):
             ggrp.create_dataset("lengths", data=self.lengths,
                                 compression=compression,
                                 compression_opts=compression_opts)
+
+       
+def standardize_chromosomes(chroms):
+    """Convert input chromosomes to a standardized format, add 'chr' prefix if missing,
+
+    Args:
+    chroms (list): A list of chromosome identifiers, either as binary strings or strings.
+
+    Returns:
+    list: A list of standardized chromosome identifiers (strings).
+    """
+
+    # Case 1: chroms is a list of binary strings
+    if isinstance(chroms[0], bytes):
+        chroms = [x.decode('utf-8') for x in chroms]
+
+    # Case 2: chroms is a list of integers
+    if isinstance(chroms[0], int):
+        chroms = [str(x) for x in chroms]
+    
+    # Case 3: chroms is a numpy array of strings
+    if isinstance(chroms[0], np.str_):
+        chroms = np.array(chroms, dtype='U10')  # convert to U10
+        chroms = chroms.tolist()  # convert to list
+
+    # Add 'chr' prefix to chromosome identifiers if missing
+    for i in range(len(chroms)):
+        if chroms[i][0:3] != 'chr':
+            chroms[i] = 'chr' + chroms[i]
+
+    return chroms
 
 
 # --------------------
@@ -496,7 +601,16 @@ class Index(object):
 
         if self.chromstr is None:
             if self.genome is not None:
-                self.chromstr = self.genome.chroms[self.chrom]
+                # self.genome.chroms is a np.array strings,
+                #       e.g. ['chr1', 'chr2', 'chr3']
+                # self.chrom is a np.array of integers,
+                #       e.g. [0, 0, 0, 1, 1, 2]
+                # self.genome.chroms[self.chrom] is a np.array of strings,
+                #       e.g. ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3']
+                # self.chromstr = self.genome.chroms[self.chrom]
+                self.chromstr = np.ones(len(self.chrom), dtype='U10')
+                for c in np.unique(self.chrom):
+                    self.chromstr[self.chrom == c] = self.genome.chroms[c]
             else:
                 self.chromstr = np.array(['chr%d' % (i + 1) for i in self.chrom])
 
@@ -651,6 +765,29 @@ class Index(object):
         Returns the unique names of chromosomes in this index
         '''
         return pd.unique(self.chromstr)
+    
+    def get_chromint(self):
+        """Returns the chromosomes in integer format.
+        """
+        # Sort the matrix
+        # convert the chromosome string to an integer (e.g. 'chr1' -> 1)
+        chromint = []
+        for c in self.chromstr:
+            c = c.split('chr')[1]  # remove the 'chr' part
+            if c.isdigit():  # if it's a number
+                c = int(c)
+            elif c == 'X':
+                c = 100  # make X after the autosomes
+            elif c == 'Y':
+                c = 101
+            elif c == 'M':
+                c = 102
+            else:
+                c = 103  # This is to deal with other chr labels (e.g. 'chr1_random')
+            c = int(c)
+            chromint.append(c)
+        chromint = np.array(chromint)
+        return chromint
 
     def __getitem__(self, key):
         return np.rec.fromarrays((self.chrom[key],

@@ -63,7 +63,7 @@ class sss_matrix(object):
             self.csr = csr_matrix(np.triu(arg1), shape, dtype, copy)
             self._pop_diag()
 
-        if isinstance(arg1, str):
+        elif isinstance(arg1, str):
             h5 = h5py.File(arg1, 'r')
             self._load_from_h5(h5[h5group], lazy)
 
@@ -90,6 +90,7 @@ class sss_matrix(object):
             self.diagonal = arg1['diag']
 
         else:
+            # Case used in Contactmatrix / load_cool
             self.csr = triu(csr_matrix(arg1, shape=shape, dtype=dtype, copy=copy), format='csr')
             self._pop_diag()
             # -

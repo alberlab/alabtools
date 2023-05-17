@@ -32,6 +32,7 @@ warnings.simplefilter('ignore', FutureWarning)
 import os.path
 import h5py
 import scipy.sparse
+import cooler
 
 try:
     import cPickle as pickle
@@ -111,14 +112,12 @@ class Contactmatrix(object):
             elif os.path.splitext(mat)[1] == '.hcs':
                 self._load_hcs(mat, lazy=lazy)
             elif os.path.splitext(mat)[1] == '.cool':
-                h5 = h5py.File(mat)
-                self._load_cool(h5, assembly=genome, usechr=usechr)
-                h5.close()
+                cool = cooler.Cooler(mat)
+                self.load_cool(cool, assembly=genome, usechr=usechr)
             elif os.path.splitext(mat)[1] == '.mcool':
-                h5 = h5py.File(mat)
                 print("Loading matrix from mcool, resolution={}".format(resolution))
-                self._load_cool(h5['resolutions']['{}'.format(resolution)], assembly=genome, usechr=usechr)
-                h5.close()
+                cool = cooler.Cooler('{}::resolutions/{}'.format(mat, resolution))
+                self.load_cool(cool, assembly=genome, usechr=usechr)
             elif os.path.splitext(mat)[1] == '.hic':
                 self._load_hic(mat, resolution=resolution, usechr=usechr)
             elif os.path.splitext(mat)[1] == '.gz' and os.path.splitext(os.path.splitext(mat)[0])[1] == '.pairs':
@@ -173,7 +172,7 @@ class Contactmatrix(object):
             # assert(self.matrix.shape[0] == self.matrix.shape[1] == len(self.index))
             # -
 
-    def _build_genome(self, assembly, usechr=('#', 'X'), chroms=None,
+    def _build_genome(self, assembly, usechr=('#', 'X', 'Y'), chroms=None,
                       origins=None, lengths=None):
         self.genome = utils.Genome(assembly, chroms=chroms, origins=origins, lengths=lengths, usechr=usechr)
 
@@ -197,61 +196,96 @@ class Contactmatrix(object):
         if not lazy:
             self.h5.close()
             del self.h5
+    
+    @staticmethod
+    def _read_cool_attribute(cool, attr_keys):
+        """Try to read an attribute from a cool file.
+        Since the attribute can be in either cool._info or cool.info, we try both.
 
-    def _load_cool(self, h5, assembly=None, usechr=('#', 'X')):
+        Args:
+            cool (cooler.Cooler): Cooler file.
+            attr_name (list of str): List of possible attribute names.
+
+        Raises:
+            ValueError: If attribute is not found (i.e. is None).
+            
+        Returns:
+            str: Attribute value.
+        """
+        
+        # Initialize the attribute to None
+        attr = None
+        
+        # Try to find the attribute in cool._info or cool.info or cool.__dict__
+        for key in attr_keys:
+            try:
+                attr = cool.info[key]
+                break
+            except AttributeError:
+                pass
+            try:
+                attr = cool._info[key]
+                break
+            except AttributeError:
+                pass
+            try:
+                attr = cool.__dict__[key]
+                break
+            except AttributeError:
+                pass
+        
+        # If attribute is still None, raise error
+        if attr is None:
+            raise ValueError('Attribute not found.')
+
+        return attr
+
+    def load_cool(self, cool, assembly=None, usechr=('#', 'X', 'Y')):
+        """Loads the data from a cool file.
+        Generates the genome, index, and matrix data structures.
+
+        Args:
+            cool (cooler.Cooler): Input cool file.
+            assembly (str, optional): Assembly string. Defaults to None.
+                                      If None give, tries to read from cool.
+            usechr (tuple, optional): Chromosomes to use. Defaults to ('#', 'X', 'Y').
+                                      '#' means 'all autosomes'.
+        """
+        
+        # Read the assembly
         if assembly is None:
-            assembly = h5.attrs['genome-assembly']
-        self.resolution = h5.attrs['bin-size']
-        self._build_genome(assembly, usechr=usechr, chroms=h5['chroms']['name'][:], lengths=h5['chroms']['length'][:])
+            assembly = self._read_cool_attribute(cool, ['assembly', 'genome-assembly'])
+        
+        # Read the resolution
+        self.resolution = self._read_cool_attribute(cool, ['bin-size', 'resolution'])
+
+        # Build the genome
+        self._build_genome(assembly, usechr=usechr,
+                           chroms=list(cool.chromnames),
+                           lengths=list(cool.chromsizes))
+        
+        # Build the index
         self._build_index(self.resolution)
-
-        origenome = utils.Genome(assembly, usechr=['#', 'X', 'Y'], silence=True)
-        allChrId = [origenome.getchrnum(self.genome[x]) for x in range(len(self.genome))]
-        chrIdRange = [[allChrId[0], allChrId[0] + 1]]
-        for i in allChrId[1:]:
-            if i == chrIdRange[-1][1]:
-                chrIdRange[-1][1] = i + 1
-            else:
-                chrIdRange.append([i, i + 1])
-
-        indptr = np.empty(len(self.index) + 1, np.int32)
-        indptr[0] = 0
-        indices = []
-        data = []
-
-        # loop through all used chromosomes
-        for cil, cih in chrIdRange:
-            i0, i1 = (h5['indexes']['chrom_offset'][cil], h5['indexes']['chrom_offset'][cih])
-            for r in range(i0, i1):
-                edge = h5['indexes']['bin1_offset'][r:r + 2]
-                # print(edge)
-                rowind = h5['pixels']['bin2_id'][edge[0]:edge[1]]
-                rowdata = h5['pixels']['count'][edge[0]:edge[1]]
-                newind = []
-                newdata = []
-                # get data within range
-                for cjl, cjh in chrIdRange:
-                    if cjl < cil:
-                        continue
-                    j0, j1 = (h5['indexes']['chrom_offset'][cjl], h5['indexes']['chrom_offset'][cjh])
-                    chroffset = self.index.offset[self.genome.getchrnum(origenome[cjl])]
-                    mask = (rowind >= j0) & (rowind < j1)
-                    newind.append(rowind[mask] - j0 + chroffset)
-                    newdata.append(rowdata[mask])
-                # -
-                rowind = np.concatenate(newind, axis=0)
-                rowdata = np.concatenate(newdata, axis=0)
-                indices.append(rowind)
-                data.append(rowdata)
-            # --
-        # --
-        for r in range(len(indices)):
-            indptr[r + 1] = indptr[r] + len(indices[r])
-
-        indices = np.concatenate(indices)
-        data = np.concatenate(data)
-
-        self.matrix = matrix.sss_matrix((data, indices, indptr), shape=(len(self.index), len(self.index)))
+        
+        # Build the matrix
+        # Get the complete contact matrix of the cooler file
+        mat = cool.matrix(balance=False, sparse=True)[:]  # COO matrix
+        mat = mat.tocsr()  # convert to CSR matrix
+        # Get the complete chromstr from the domain BED of the cooler file
+        chromstr  = cool.bins()[:]['chrom']
+        chromstr = np.array(list(chromstr))
+        # Standardize chromstr (e.g.'1' -> 'chr1')
+        chromstr = utils.standardize_chromosomes(chromstr)
+        chromstr = np.array(chromstr)
+        # Create a mask to remove chromosomes not present in self.genome
+        mask = np.ones(len(chromstr), dtype=bool)
+        for chrom in np.unique(chromstr):
+            if chrom not in self.genome:
+                mask[chromstr == chrom] = False
+        # Apply the mask
+        mat = mat[mask, :][:, mask]
+        # Store the sparse matrix
+        self.matrix = matrix.sss_matrix(mat, shape=mat.shape)
 
     def _load_pairs_bgzip(self, filename, resolution, usechr=('#', 'X')):
         import pypairix
@@ -301,6 +335,28 @@ class Contactmatrix(object):
         self.matrix = matrix.sss_matrix((data, indices, indptr), shape=(len(self.index), len(self.index)))
 
     # -------------------
+     
+    def sort(self):
+        """Sorts the HCS file by chromosome.
+        Modifies Genome, Index, and Matrix in place.
+        """
+        
+        # Get the original chromint from the index
+        chromint_old = self.index.get_chromint()
+
+        # Sort the genome
+        self.genome.sort()
+        
+        # Get the sorted index
+        self.index = self.genome.bininfo(self.resolution)
+        
+        # Sort the matrix
+        order = np.argsort(chromint_old, kind='mergesort')  # get the order of the chromosomes before sorting
+        mat = self.matrix.toarray()  # convert to dense matrix
+        mat = mat[order, :]
+        mat = mat[:, order]
+        self.matrix = matrix.sss_matrix(mat)
+    
     def rowsum(self):
         return self.matrix.sum(axis=1)
 
@@ -813,6 +869,7 @@ class Contactmatrix(object):
                                 lengths=self.genome.lengths)
 
         if isinstance(step, string_types):
+            # Reads a BED file with domains
             tadDef = np.genfromtxt(step, dtype=None, encoding=None)
 
             chrom = tadDef['f0']
@@ -845,6 +902,8 @@ class Contactmatrix(object):
                                   )
             newMatrix._set_index(chrom, start, end, label)
         else:
+            # Case we enter if step is not a string
+            # We enter here if step is a number (int)
             newMatrix._build_index(self.resolution * step)
 
         DimB = len(newMatrix.index)
@@ -876,7 +935,10 @@ class Contactmatrix(object):
                                   mapping,
                                   Bi, Bj, Bx)
         newMatrix.matrix = matrix.sss_matrix((Bx, (Bi, Bj)))
-        newMatrix.resolution = -1
+        if isinstance(step, int):
+            newMatrix.resolution = self.resolution * step
+        else:  # resolution can't be defined
+            newMatrix.resolution = -1
         return newMatrix
 
     def fmaxScaling(self, fmax, force=False):
