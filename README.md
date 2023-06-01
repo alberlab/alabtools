@@ -10,9 +10,9 @@ ATTENTION: This package works only on Linux systems. It has been tested on CentO
 
 Make sure you have conda installed (https://docs.conda.io/en/latest/miniconda.html) and that you have added the conda-forge channel (https://conda-forge.org/). The conda version used for building the package is 22.9.0.
 
-First, it's best to use the Python 3.6 version:
+Create a conda environment with a Python 3 version.
 ```bash
-conda create -n alab python=3.6
+conda create -n alab python=3
 conda activate alab
 ```
 
