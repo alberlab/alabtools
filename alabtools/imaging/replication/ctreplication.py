@@ -6,7 +6,8 @@ import numpy as np
 import pickle
 from alabtools.imaging import CtFile, CtEnvelope
 from alabtools.parallel import Controller
-from . import cellcycle
+from .cellcycle import parallel_function as cellcycle_parallel_function
+from .cellcycle import reduce_function as cellcycle_reduce_function
 
 class CtRep(object):
     """
@@ -138,10 +139,10 @@ class CtRep(object):
         np.save(os.path.join(temp_dir, 'segmentation.npy'), segmentation)
         
         # set the parallel and reduce tasks
-        parallel_task = partial(cellcycle.parallel_function,
+        parallel_task = partial(cellcycle_parallel_function,
                                 cfg=cfg,
                                 temp_dir=temp_dir)
-        reduce_task = partial(cellcycle.reduce_function,
+        reduce_task = partial(cellcycle_reduce_function,
                               cfg=cfg,
                               temp_dir=temp_dir)
 
