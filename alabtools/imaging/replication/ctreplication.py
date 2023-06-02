@@ -216,4 +216,50 @@ class CtRep(object):
         self.nu[nu > 2] = 2
                 
         return r
+    
+    def compute_efficiency(self):
+        """TODO: Docstring for compute_efficiency and improve readability.
+
+        Raises:
+            ValueError: _description_
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+        
+        # Check that the required attributes are present
+        if self.cycle is None:
+            raise ValueError("The cell-cycle state of each cell is not available.")
+        if self.nu is None:
+            raise ValueError("The normalized spot counts are not available.")
+        
+        # Compute the fraction of zeros in each cell
+        f0 = np.mean(self.nu == 0, axis=(1, 2))
+        assert f0.shape == (self.ncell,)
+        
+        # Initialize the efficiency array
+        efficiency = np.zeros(self.ncell)
+        
+        # Compute the efficiency for G1 cells
+        efficiency[self.cycle == 0] = 1 - f0[self.cycle == 0]
+        
+        # Compute the efficiency for G2 cells
+        efficiency[self.cycle == 2] = 1 - f0[self.cycle == 2] ** 0.5
+        
+        # Compute the efficiency for S cells
+        # We first need to estimate the probability that a domain is replicated in S
+        # We assume this probability is linear with the volume of the cell
+        v_min = np.min(self.volume[self.cycle == 1])  # minimum volume of S cells
+        v_max = np.max(self.volume[self.cycle == 1])  # maximum volume of S cells
+        pr = (self.volume - v_min) / (v_max - v_min)  # probability of replication
+        # Now we use the following equation for the efficiency:
+        #  e = (1 + pr - √((1 - pr)^2 + 4 pr f0)) / 2pr
+        numerator1 = 1 + pr
+        numerator2 = ((1 - pr)**2 + 4 * pr * f0) ** 0.5
+        denominator = 2 * pr
+        equation = (numerator1 - numerator2) / denominator
+        efficiency[self.cycle == 1] = equation[self.cycle == 1]
+        
+        return efficiency
         
