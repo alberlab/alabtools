@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import warnings
 from functools import partial
 import numpy as np
 import pickle
@@ -57,13 +58,31 @@ class CtRep(object):
         with open(self.filename, 'rb') as f:
             loaded_ctrep = pickle.load(f)
         
-        assert hasattr(loaded_ctrep, 'nraw'), "Loaded CtRep has no attribute 'nraw'."
-        ### TODO: add more attributes
+        # Throw warnings if the loaded CtRep has missing attributes
+        if not hasattr(loaded_ctrep, 'ncell'):
+            warnings.warn("Loaded CtRep has no attribute 'ncell'.")
+        if not hasattr(loaded_ctrep, 'ndomain'):
+            warnings.warn("Loaded CtRep has no attribute 'ndomain'.")
+        if not hasattr(loaded_ctrep, 'ncopy_max'):
+            warnings.warn("Loaded CtRep has no attribute 'ncopy_max'.")
+        if not hasattr(loaded_ctrep, 'nraw'):
+            warnings.warn("Loaded CtRep has no attribute 'nraw'.")
+        if not hasattr(loaded_ctrep, 'cell_labels'):
+            warnings.warn("Loaded CtRep has no attribute 'cell_labels'.")
+        if not hasattr(loaded_ctrep, 'genome'):
+            warnings.warn("Loaded CtRep has no attribute 'genome'.")
+        if not hasattr(loaded_ctrep, 'index'):
+            warnings.warn("Loaded CtRep has no attribute 'index'.")
+        if not hasattr(loaded_ctrep, 'cycle'):
+            warnings.warn("Loaded CtRep has no attribute 'cycle'.")
+        if not hasattr(loaded_ctrep, 'rho'):
+            warnings.warn("Loaded CtRep has no attribute 'rho'.")
+        if not hasattr(loaded_ctrep, 'nu'):
+            warnings.warn("Loaded CtRep has no attribute 'nu'.")
+        if not hasattr(loaded_ctrep, 'n'):
+            warnings.warn("Loaded CtRep has no attribute 'n'.")
         
         # update the attributes of the current object
-        # (every object has a __dict__ attribute, which is a dictionary of its attributes.
-        # In this way, we can update the attributes of the current object with the attributes
-        # of the loaded object)
         self.__dict__.update(loaded_ctrep.__dict__)
     
     def save(self):
