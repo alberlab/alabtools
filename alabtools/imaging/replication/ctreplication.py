@@ -7,7 +7,6 @@ import pickle
 from alabtools.imaging import CtFile, CtEnvelope
 from alabtools.parallel import Controller
 from . import cellcycle
-from . import cellcycle
 
 class CtRep(object):
     """
@@ -109,13 +108,25 @@ class CtRep(object):
             self.volume = ctenv.volume
     
     def run_cellcycle(self, cfg):
-        """Runs the cell-cycle inference algorithm.
+        """Runs the cell-cycle imputation algorithm.
         
-        Stores the cell cycle array in the cycle attribute,
-        and returns the Pearson correlation between the experimental RT
-        and the simulated one for the best segmentation.
+        Finds the best G1/S/G2 segmentation of the cells:
+            1) cells are sorted by increasing volume,
+            2) Iteratively segments the lowest X% of cells in G1,
+               the highest Y% in G2, and the remaining in S,
+            3) For each segmentation, the spot counts are normalized by
+                a bias (estimated from the G1 and G2 cells),
+            4) The Pearson correlation between the experimental RT and the
+                simulated one is computed with the normalized count,
+            5) The segmentation with the highest correlation is selected.
         
-        The configuration specifies the parameters of the algorithm.
+        The function computes the following data, stored in the object:
+            - the cell-cycle state of each cell (self.cycle)
+            - the continuous normalized spot counts (self.rho)
+            - the discretized normalized spot counts (self.nu)
+        
+        The function also returns the Pearson correlation between the
+        experimental RT and the simulated one for the best segmentation.
 
         Args:
             cfg (dict or json): Configuration file.
@@ -142,10 +153,10 @@ class CtRep(object):
         
         # compute all the possible G1/G2 segmentations
         segmentation = []
-        # assuming that G1 (and G2, separately) can have at most half of the cells
-        for n1 in range(1, int(self.ncell / 2) + 1):
-            for n2 in range(1, int(self.ncell / 2) + 1):
-                segmentation.append([n1, n2])
+        # (assuming that G1 (and G2, separately) can have at most half of the cells)
+        for ncell_g1 in range(1, int(self.ncell / 2) + 1):
+            for ncell_g2 in range(1, int(self.ncell / 2) + 1):
+                segmentation.append([ncell_g1, ncell_g2])
         segmentation = np.array(segmentation)
         nsegment = segmentation.shape[0]
         # save the segmentation to a temporary file
@@ -171,6 +182,9 @@ class CtRep(object):
         
         # Update the attributes of the current object
         self.cycle = cycle
+        self.rho = cellcycle.normalize_bias(self.nraw, self.cycle)
+        self.nu = nu = np.round(self.rho).astype(int)
+        self.nu[nu > 2] = 2
                 
         return r
         

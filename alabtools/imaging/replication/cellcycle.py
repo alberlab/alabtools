@@ -17,9 +17,9 @@ def parallel_function(segmentID, cfg, temp_dir):
     directory.
 
     Args:
-        segmentID (int): segmentation ID (index of the segmentation
+        segmentID (int): Segmentation ID (index of the segmentation
                                           in the segmentation array)
-        cfg (_type_): _description_
+        cfg (dict): Configuration dictionary.
         temp_dir (str): Temporary directory where the data is stored.
 
     Returns:
@@ -44,11 +44,12 @@ def parallel_function(segmentID, cfg, temp_dir):
     cycle = np.ones(ncell, dtype=int)
     cycle[:ncell_g1] = 0
     cycle[(ncell - ncell_g2):] = 2
+    # The cell cycle array is sorted by volume (low to high)
     # Sort the cell cycle array back to the original order
     cycle = cycle[np.argsort(np.argsort(volume))]
     
     # Normalize the spots matrix (rho matrix)
-    rho = normalize(nraw, cycle)
+    rho = normalize_bias(nraw, cycle)
     
     # Isolate the S phase submatrix
     rho_s = rho[cycle == 1, :, :]
@@ -63,7 +64,7 @@ def parallel_function(segmentID, cfg, temp_dir):
     try:
         rt_exp = rt_exp_idx.track0
     except:
-        raise ValueError("{} must be a bedfile\
+        raise ValueError("{} must be a BedGraph, \
             with a single track and no header".format(rt_bedfile))
     
     # Compute the Pearson correlation coefficient
@@ -89,8 +90,6 @@ def reduce_function(out_names):
 
     Args:
         out_names (list): List of the output files.
-        cfg (dict): Configuration dictionary.
-        tempdir (str): Temporary directory where the data is stored.
 
     Returns:
         r_best (float): Pearson correlation coefficient.
@@ -134,24 +133,25 @@ def clean_pearsonr(x, y):
     y[np.isinf(y)] = np.nan
     
     # Remove NaNs (from both arrays)
-    idx = np.logical_and(~np.isnan(x), ~np.isnan(y))
-    x = x[idx]
-    y = y[idx]
+    mask = np.logical_and(~np.isnan(x), ~np.isnan(y))
+    x = x[mask]
+    y = y[mask]
     
     # Compute Pearson correlation coefficient
     r = pearsonr(x, y)[0]
     
     return r
 
-def normalize(nspot, cycle):
-    """Computes the normalized spots matrix.
+def normalize_bias(nraw, cycle):
+    """Normalize the bias in the raw spots counts.
 
     Args:
-        nspot (np.array(ncell, ndomain, ncopy_max), dtype=int): single-cell spots matrix.
+        nraw (np.array(ncell, ndomain, ncopy_max), dtype=int): raw single-cell spot counts.
         cycle (np.array(ndomain), dtype=int): cell cycle (G1=0, S=1 or G2=2) array.
 
     Returns:
-        nspot_norm (np.array(ncell, ndomain, ncopy_max), dtype=float): normalized single-cell spots matrix.
+        rho (np.array(ncell, ndomain, ncopy_max), dtype=float): normalized single-cell spot counts.
+                                                                It is a float signal.
     """
     
     # If cycle doesn't have G1 or G2 cells, throw an error
@@ -159,43 +159,45 @@ def normalize(nspot, cycle):
         raise ValueError("cycle must have G1 and G2 cells")
     
     # Assert that the input arrays have the correct shape
-    ncell, ndomain, _ = nspot.shape
+    ncell, ndomain, _ = nraw.shape
     assert cycle.shape[0] == ncell,\
-        "nspot and cycle must have the same number of cells"
+        "nraw and cycle must have the same number of cells"
     
-    # Isolate G1 and G2 submatrices    
-    nspot_g1 = nspot[cycle == 0, :, :]
-    nspot_g2 = nspot[cycle == 2, :, :]
+    # Isolate G1 and G2 raw spots    
+    nraw_g1 = nraw[cycle == 0, :, :]
+    nraw_g2 = nraw[cycle == 2, :, :]
     
     # Compute the bias arrays
     # Since the cells in G1 and G2 are not replicating,
     # variation in the total number of spots is due noise or bias.
-    # If we see that a domain has systematically more/less spots than other in G1 or G2,
+    # If we see that a domain has systematically more/less spots than others in G1 or G2,
     # we can assume that this is due to bias and not noise
     # (for example GC rich domains are detected more likely than AT rich domains).
     # Therefore, we can estimate the bias by computing the total number of spots
     # in each domain in G1 and G2.
-    bias_g1 = np.nansum(nspot_g1, axis=(0, 2))  # np.array(ndomain)
-    bias_g2 = np.nansum(nspot_g2, axis=(0, 2))
+    bias_g1 = np.nansum(nraw_g1, axis=(0, 2))  # np.array(ndomain)
+    bias_g2 = np.nansum(nraw_g2, axis=(0, 2))
     
-    # Compute the normalized spots matrix
-    nspot_norm = np.copy(nspot)
-    
-    # nspot_norm is a 3D array (ncell, ndomain, ncopy_max)
-    # bias_g1 and bias_g2 are 1D arrays (ndomain)
-    # I want to divide each element of nspot_norm by the corresponding element of bias_g1 or bias_g2
-    bias_g1 = np.reshape(bias_g1, (1, ndomain, 1))  # np.array(1, ndomain, 1)
-    bias_g2 = np.reshape(bias_g2, (1, ndomain, 1))
-    
-    # Normalize the biases
+    # Rescale the bias arrays to have mean 1
     bias_g1 = bias_g1 / np.nanmean(bias_g1)
     bias_g2 = bias_g2 / np.nanmean(bias_g2)
     
-    # Set the bias as the sum and normalize again
-    bias = bias_g1 + bias_g2
-    bias = bias / 2
+    # Set the total bias as mean of the G1 and G2 biases
+    bias = (bias_g1 + bias_g2) / 2
     
-    # Normalize the spots matrix
-    nspot_norm = nspot_norm / bias
+    # If bias_g1 has NaNs, set the bias as bias_g2 and vice versa
+    bias[np.isnan(bias_g1)] = bias_g2[np.isnan(bias_g1)]
+    bias[np.isnan(bias_g2)] = bias_g1[np.isnan(bias_g2)]
     
-    return nspot_norm
+    # Rescale the bias to have mean 1
+    # (again, since NaNs could have screwed up the mean)
+    bias = bias / np.nanmean(bias)
+    
+    # Reshape the bias array to be able to broadcast it
+    bias = np.reshape(bias, (1, ndomain, 1))  # np.array(1, ndomain, 1)
+    
+    # Compute the normalized spots matrix
+    rho = np.copy(nraw)
+    rho = rho / bias
+    
+    return rho
