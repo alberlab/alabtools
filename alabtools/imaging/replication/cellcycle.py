@@ -2,13 +2,16 @@ import os
 import numpy as np
 import pickle
 from scipy.stats import pearsonr
+from alabtools.utils import Genome, Index
 
 def parallel_function(segmentID, cfg, temp_dir):
-    """Parallel function for computing the simulated RT signal
-    for a G1/S/G2 cell cycle segmentation.
+    """Parallel function for cell cycle imputation.
     
-    Saves the cell-cycle state array and the Pearson correlation
-    between the simulated RT signal and the experimental one.
+    It computes the Pearson correlation coefficient between the
+    simulated RT signal and the experimental one for a given
+    G1/S/G2 segmentation.
+    
+    Saves the cell-cycle state array and the Pearson correlation.
     
     The data is saved as a Dictionary (with pickle) in the temporary
     directory.
@@ -34,44 +37,85 @@ def parallel_function(segmentID, cfg, temp_dir):
     # Cell nuclei volumes
     volume = np.load(os.path.join(temp_dir, 'volume.npy'))
     
-    # Define the cell cycle state array:
+    # Define the cell cycle array:
     #   0: G1 (first ncells_g1 cells with the smallest volume)
     #   2: G2 (last ncells_g2 cells with the largest volume)
     #   1: S (all the other cells in between)
-    cycle_state = np.ones(ncell, dtype=int)
-    cycle_state[:ncell_g1] = 0
-    cycle_state[(ncell - ncell_g2):] = 2
-    # Sort the cell cycle state array back to the original order
-    cycle_state = cycle_state[np.argsort(np.argsort(volume))]
+    cycle = np.ones(ncell, dtype=int)
+    cycle[:ncell_g1] = 0
+    cycle[(ncell - ncell_g2):] = 2
+    # Sort the cell cycle array back to the original order
+    cycle = cycle[np.argsort(np.argsort(volume))]
     
     # Normalize the spots matrix (rho matrix)
-    rho = normalize(nraw, cycle_state)
+    rho = normalize(nraw, cycle)
     
     # Isolate the S phase submatrix
-    rho_s = rho[cycle_state == 1, :, :]
+    rho_s = rho[cycle == 1, :, :]
     
     # Compute the simulated RT signal
     rt_sim = np.nansum(rho_s, axis=(0, 2))
     
+    # Read the experimental RT signal
+    rt_bedfile = cfg['rt_bedfile']
+    assembly = cfg['assembly']
+    rt_exp_idx = Index(rt_bedfile, genome=Genome(assembly))
+    try:
+        rt_exp = rt_exp_idx.track0
+    except:
+        raise ValueError("{} must be a bedfile\
+            with a single track and no header".format(rt_bedfile))
+    
     # Compute the Pearson correlation coefficient
-    ### TODO: compute the Pearson correlation coefficient
-    ###      (read RT and genome from the cfg file,
-    ###       use Index to read file)
-    r = 0
+    r = clean_pearsonr(rt_sim, rt_exp)
     
     # Save the data in a dictionary
     out_name = os.path.join(temp_dir, '{}.pkl'.format(segmentID))
     with open(out_name, 'wb') as f:
-        pickle.dump({'cycle_state': cycle_state, 'r': r}, f)
+        pickle.dump({'cycle': cycle, 'r': r}, f)
     
-    # Close numpy arrays
-    del segmentation, nraw, volume, cycle_state, rho, rho_s, rt_sim
+    # Free memory
+    del segmentation, nraw, volume, cycle, rho, rho_s, rt_sim, rt_exp, rt_exp_idx
     
     return out_name
 
-def reduce_function(out_names, cfg, tempdir):
-    # This function is executed on the master node
-    return None
+def reduce_function(out_names):
+    """Reduce function for cell cycle imputation.
+    
+    Determines the best segmentation based on largest
+    Pearson correlation coefficient from all possible segmentations.
+    
+    Returns the best cycle and Pearson correlation.
+
+    Args:
+        out_names (list): List of the output files.
+        cfg (dict): Configuration dictionary.
+        tempdir (str): Temporary directory where the data is stored.
+
+    Returns:
+        r_best (float): Pearson correlation coefficient.
+        cycle_best (np.array(ncell), dtype=int): Cell cycle array.
+    """
+    
+    r_best = 0
+    cycle_best = None
+    
+    for out_name in out_names:
+        # Load the data from the dictionary
+        with open(out_name, 'rb') as f:
+            data = pickle.load(f)
+        
+        # If the Pearson correlation is larger than the current best,
+        # update the current best
+        if data['r'] > r_best:
+            r_best = data['r']
+            cycle_best = data['cycle']
+    
+    # If cycle_best is None, raise an error
+    if cycle_best is None:
+        raise ValueError("Something went wrong (cycle_best is None")
+    
+    return r_best, cycle_best
 
 
 def clean_pearsonr(x, y):
@@ -99,30 +143,29 @@ def clean_pearsonr(x, y):
     
     return r
 
-def normalize(nspot, cycle_state):
+def normalize(nspot, cycle):
     """Computes the normalized spots matrix.
 
     Args:
         nspot (np.array(ncell, ndomain, ncopy_max), dtype=int): single-cell spots matrix.
-        cycle_state (np.array(ndomain), dtype=int): cell cycle state (G1, S or G2) for each domain.
-                                                    G1=0, S=1, G2=2.
+        cycle (np.array(ndomain), dtype=int): cell cycle (G1=0, S=1 or G2=2) array.
 
     Returns:
         nspot_norm (np.array(ncell, ndomain, ncopy_max), dtype=float): normalized single-cell spots matrix.
     """
     
-    # If cycle_state doesn't have G1 or G2 cells, throw an error
-    if not np.any(cycle_state == 0) or not np.any(cycle_state == 2):
-        raise ValueError("cycle_state must have G1 and G2 cells")
+    # If cycle doesn't have G1 or G2 cells, throw an error
+    if not np.any(cycle == 0) or not np.any(cycle == 2):
+        raise ValueError("cycle must have G1 and G2 cells")
     
     # Assert that the input arrays have the correct shape
     ncell, ndomain, _ = nspot.shape
-    assert cycle_state.shape[0] == ncell,\
-        "nspot and cycle_state must have the same number of cells"
+    assert cycle.shape[0] == ncell,\
+        "nspot and cycle must have the same number of cells"
     
     # Isolate G1 and G2 submatrices    
-    nspot_g1 = nspot[cycle_state == 0, :, :]
-    nspot_g2 = nspot[cycle_state == 2, :, :]
+    nspot_g1 = nspot[cycle == 0, :, :]
+    nspot_g2 = nspot[cycle == 2, :, :]
     
     # Compute the bias arrays
     # Since the cells in G1 and G2 are not replicating,

@@ -45,6 +45,7 @@ class CtRep(object):
             self.cell_labels = None
             self.genome = None
             self.index = None
+            self.cycle = None
             self.nraw = None
             self.rho = None
             self.nu = None
@@ -58,6 +59,7 @@ class CtRep(object):
             loaded_ctrep = pickle.load(f)
         
         assert hasattr(loaded_ctrep, 'nraw'), "Loaded CtRep has no attribute 'nraw'."
+        ### TODO: add more attributes
         
         # update the attributes of the current object
         # (every object has a __dict__ attribute, which is a dictionary of its attributes.
@@ -109,7 +111,9 @@ class CtRep(object):
     def run_cellcycle(self, cfg):
         """Runs the cell-cycle inference algorithm.
         
-        Stores the results in the current object.
+        Stores the cell cycle array in the cycle attribute,
+        and returns the Pearson correlation between the experimental RT
+        and the simulated one for the best segmentation.
         
         The configuration specifies the parameters of the algorithm.
 
@@ -117,8 +121,17 @@ class CtRep(object):
             cfg (dict or json): Configuration file.
 
         Returns:
-            None
+            r (float): Pearson correlation between the experimental RT
+                       and the simulated one for the best segmentation.
         """
+        
+        # Check that cfg is a dictionary
+        assert isinstance(cfg, dict), "The input cfg must be a dictionary."
+        
+        # Check that the required keys are present in cfg
+        required_keys = ['parallel', 'rt_bedfile', 'assembly']
+        for key in required_keys:
+            assert key in cfg.keys(), "The input cfg must have the key '{}'.".format(key)
         
         # create a temporary directory to store nodes' results
         temp_dir = tempfile.mkdtemp(dir=os.getcwd())
@@ -146,19 +159,18 @@ class CtRep(object):
         parallel_task = partial(cellcycle.parallel_function,
                                 cfg=cfg,
                                 temp_dir=temp_dir)
-        reduce_task = partial(cellcycle.reduce_function,
-                              cfg=cfg,
-                              temp_dir=temp_dir)
+        reduce_task = cellcycle.reduce_function
 
         # run the parallel and reduce tasks
-        _ = controller.map_reduce(parallel_task,
-                                  reduce_task,
-                                  args=np.arange(nsegment))
+        r, cycle = controller.map_reduce(parallel_task,
+                                         reduce_task,
+                                         args=np.arange(nsegment))
         
         # Delete the temporary directory and its contents
         os.system('rm -r {}'.format(temp_dir))
         
         # Update the attributes of the current object
+        self.cycle = cycle
                 
-        return None
+        return r
         
