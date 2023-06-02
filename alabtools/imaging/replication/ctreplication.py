@@ -34,7 +34,7 @@ class CtRep(object):
         self.filename = filename
         self.mode = mode
         
-        if mode == 'rw':
+        if mode == 'r':
             self.load()
         
         if mode == 'w':
