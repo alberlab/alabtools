@@ -5,6 +5,7 @@ import warnings
 from functools import partial
 import numpy as np
 import pickle
+from alabtools.utils import Genome, Index
 from alabtools.imaging import CtFile, CtEnvelope
 from alabtools.parallel import Controller
 from . import cellcycle
@@ -169,6 +170,15 @@ class CtRep(object):
         
         # create a Controller
         controller = Controller(cfg)
+        
+        # Read the RT data and assert that Index matches
+        rt_bedfile = cfg['rt_bedfile']
+        assembly = cfg['assembly']
+        rt = Index(rt_bedfile, genome=Genome(assembly))
+        assert rt.genome == self.genome,\
+            "Genome provided in configuration file doesn't match the one in the CtRep."
+        assert rt.index == self.index,\
+            "Index from RT BedGraph doesn't match the one in the CtRep."
         
         # compute all the possible G1/G2 segmentations
         segmentation = []
