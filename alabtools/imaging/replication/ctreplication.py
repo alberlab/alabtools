@@ -175,9 +175,9 @@ class CtRep(object):
         rt_bedfile = cfg['rt_bedfile']
         assembly = cfg['assembly']
         rt = Index(rt_bedfile, genome=Genome(assembly))
-        assert rt.genome == self.genome,\
-            "Genome provided in configuration file doesn't match the one in the CtRep."
-        assert rt.index == self.index,\
+        assert assembly == self.genome.assembly,\
+            "Assembly provided in configuration file doesn't match the one in the CtRep."
+        assert rt == self.index,\
             "Index from RT BedGraph doesn't match the one in the CtRep."
         
         # compute all the possible G1/G2 segmentations
