@@ -1,7 +1,12 @@
+import os
+import sys
+import tempfile
+from functools import partial
 import numpy as np
 import pickle
-import warnings
 from alabtools.imaging import CtFile, CtEnvelope
+from alabtools.parallel import Controller
+from . import cellcycle
 
 class CtRep(object):
     """
@@ -99,4 +104,56 @@ class CtRep(object):
             self.ncell = ctenv.ncell
             self.cell_labels = ctenv.cell_labels
             self.volume = ctenv.volume
+    
+    def run_cellcycle(self, cfg):
+        """Runs the cell-cycle inference algorithm.
+        
+        Stores the results in the current object.
+        
+        The configuration specifies the parameters of the algorithm.
+
+        Args:
+            cfg (dict or json): Configuration file.
+
+        Returns:
+            None
+        """
+        
+        # create a temporary directory to store nodes' results
+        temp_dir = tempfile.mkdtemp(dir=os.getcwd())
+        sys.stdout.write("Temporary directory for nodes' results: {}\n".format(temp_dir))
+        
+        # create a Controller
+        controller = Controller(cfg)
+        
+        # compute all the possible G1/G2 segmentations
+        segmentation = []
+        # assuming that G1 (and G2, separately) can have at most half of the cells
+        for n1 in range(1, int(self.ncell / 2) + 1):
+            for n2 in range(1, int(self.ncell / 2) + 1):
+                segmentation.append([n1, n2])
+        segmentation = np.array(segmentation)
+        nsegment = segmentation.shape[0]
+        # save the segmentation to a temporary file
+        np.save(os.path.join(temp_dir, 'segmentation.npy'), segmentation)
+        
+        # set the parallel and reduce tasks
+        parallel_task = partial(cellcycle.parallel_function,
+                                cfg=cfg,
+                                temp_dir=temp_dir)
+        reduce_task = partial(cellcycle.reduce_function,
+                              cfg=cfg,
+                              temp_dir=temp_dir)
+
+        # run the parallel and reduce tasks
+        _ = controller.map_reduce(parallel_task,
+                                  reduce_task,
+                                  args=np.arange(nsegment))
+        
+        # Delete the temporary directory and its contents
+        os.system('rm -r {}'.format(temp_dir))
+        
+        # Update the attributes of the current object
+                
+        return None
         
