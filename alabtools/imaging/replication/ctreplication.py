@@ -303,23 +303,29 @@ class CtRep(object):
             _type_: _description_
         """
         
-        mat_cycle = np.zeros((self.ncopy_max * self.ncell, self.ndomain))
+        # Assert the input
+        assert mat.shape == (self.ncell, self.ndomain, self.ncopy_max),\
+            "The input matrix has the wrong shape."
+        # Assert that cycle has been computed
+        assert self.cycle is not None,\
+            "The cell-cycle state of each cell must be computed first."
+        # Assert that the volume has been computed
+        assert self.volume is not None,\
+            "The volume of each cell is not available."
         
-        for cell in range(self.ncell):
+        # Isolate S cells
+        volume_s = self.volume[self.cycle == 1]
+        mat_s = mat[self.cycle == 1, :, :]   # np.array(ncell_s, ndomain, ncopy_max)
+        
+        # Sort the cells by increasing volume
+        mat_s_srt = mat_s[np.argsort(volume_s), :, :]
+        
+        # Reshape the matrix to a 2D array (ncell_s * ncopy_max, ndomain)
+        ncell_s = int(np.sum(self.cycle == 1))
+        mat_s_srt_hap = np.zeros((ncell_s * self.ncopy_max, self.ndomain))
+        for cell in range(ncell_s):
             for copy in range(self.ncopy_max):
-                mat_cycle[cell * self.ncopy_max + copy, :] = mat[cell, :, copy]
+                mat_s_srt_hap[cell * self.ncopy_max + copy, :] = mat_s_srt[cell, :, copy]
         
-        # duplicate effiency and volume arrays entry-wise
-        efficiency_dup = np.repeat(self.efficiency, self.ncopy_max)
-        volume_dup = np.repeat(self.volume, self.ncopy_max)
-        
-        # normalize the rows of mat_cycle by the efficiency
-        efficiency_dup = np.reshape(efficiency_dup, (self.ncell * self.ncopy_max, 1))
-        mat_cycle = mat_cycle / efficiency_dup
-        
-        # sort the rows of mat_cycle by increasing volume
-        sorted_index = np.argsort(volume_dup)
-        mat_cycle = mat_cycle[sorted_index, :]
-        
-        return mat_cycle
+        return mat_s_srt_hap
         
