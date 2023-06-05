@@ -9,6 +9,7 @@ from alabtools.utils import Genome, Index
 from alabtools.imaging import CtFile, CtEnvelope
 from alabtools.parallel import Controller
 from . import cellcycle
+from . import bernoulli
 
 class CtRep(object):
     """
@@ -217,55 +218,109 @@ class CtRep(object):
         self.rho = cellcycle.normalize_bias(self.nraw, self.cycle)
         self.nu = nu = np.round(self.rho).astype(int)
         self.nu[nu > 2] = 2
-        self.efficiency = self.compute_efficiency()
                 
         return r
 
-    def compute_efficiency(self):
-        """Compute the detection efficiency of each cell.
+    def replication_probability(self):
+        """Imputes the probability of replication in each cell.
         
-        The efficiency is the probability that the imaging pipeline
-        detects a copy of a domain in a cell that is physically present.
-        
-        It is estimated with a frequency-based approach by computing
-        the fraction of zeros in each cell, i.e. domains that are
-        not detected in the cell. The efficiency is then computed
-        by comparing this to the expected fraction in G1, S and G2.
-            
+        The probability of replication is estimated to be proportional
+        to the volume of the cell is the S phase.
+
         Returns:
-            efficiency (np.array(ncell), dtype=float): Detection efficiency of each cell.
+            pr (np.array(ncell), dtype=float): Probability of replication of each cell.
         """
         
-        # Compute the fraction of zeros in each cell
-        f0 = np.mean(self.nu == 0, axis=(1, 2))
-        assert f0.shape == self.volume.shape
+        assert self.volume is not None,\
+            "The volume of each cell is not available."
+        assert self.cycle is not None,\
+            "The cell-cycle state of each cell must be computed first."
         
-        # Initialize the efficiency array
-        efficiency = np.zeros(len(f0))
+        # Find largest volume in G1 (lower bound for S)
+        v_min = np.max(self.volume[self.cycle == 0])
+        # Find smallest volume in G2 (upper bound for S)
+        v_max = np.min(self.volume[self.cycle == 2])
         
-        # Compute the efficiency for G1 cells
-        efficiency[self.cycle == 0] = 1 - f0[self.cycle == 0]
+        # Compute the probability of replication
+        pr = (self.volume - v_min) / (v_max - v_min)
+        pr[pr < 0] = 0
+        pr[pr > 1] = 1
         
-        # Compute the efficiency for G2 cells
-        efficiency[self.cycle == 2] = 1 - f0[self.cycle == 2] ** 0.5
+        # Set the probability to 0 and 1 for G1 and G2 cells
+        pr[self.cycle == 0] = 0
+        pr[self.cycle == 2] = 1
         
-        # Compute the efficiency for S cells
-        # We first need to estimate the probability that a domain is replicated in S
-        # We assume this probability is linear with the volume of the cell
-        v_min = np.max(self.volume[self.cycle == 0])  # maximum volume of G1 cells
-        v_max = np.min(self.volume[self.cycle == 2])  # minimum volume of G2 cells
-        pr = (self.volume - v_min) / (v_max - v_min)  # probability of replication
-        # Now we use the following equation for the efficiency:
-        #  e = (1 + pr - √((1 - pr)^2 + 4 pr f0)) / 2pr
-        numerator1 = 1 + pr
-        numerator2 = ((1 - pr)**2 + 4 * pr * f0) ** 0.5
-        denominator = 2 * pr
-        equation = (numerator1 - numerator2) / denominator
-        # If the denominator is zero (pr = 0), then we use the G1 efficiency
-        equation[denominator == 0] = 1 - f0[denominator == 0]
-        efficiency[self.cycle == 1] = equation[self.cycle == 1]
+        return pr
+    
+    def compute_fraction(self):
+        """Computes the fraction of domains with 0, 1 or 2 copies in each cell.
         
-        return efficiency
+        Sex chromosomes are excluded from the computation.
+
+        Returns:
+            f (np.array(3, ncell), dtype=float): Fraction of domains with 0, 1 or 2 copies.
+        """
+        
+        # Assert that the required data is available
+        assert self.cycle is not None,\
+            "The cell-cycle state of each cell must be computed first."
+        assert self.nu is not None,\
+            "The discretized normalized spot counts are not available."
+        
+        # Set sex chromosome domains to NaN (might screw up the computation)
+        nu_cp = self.nu.copy()
+        for sex_chrom in ['chrX', 'chrY']:
+            nu_cp[:, self.index.chromstr == sex_chrom, :] = np.nan
+        
+        # Count the fraction of domains with 0, 1 or 2 copies in each cell
+        f0 = np.nanmean(nu_cp == 0, axis=(1, 2))  # np.array(ncell)
+        f1 = np.nanmean(nu_cp == 1, axis=(1, 2))
+        f2 = np.nanmean(nu_cp == 2, axis=(1, 2))
+        
+        f = np.array([f0, f1, f2])  # np.array(3, ncell)
+        
+        return f
+    
+    def impute_efficiency(self, method):
+        """Imputes the efficiency of replication in each cell.
+        
+        Uses the method specified in the input.
+
+        Args:
+            method (str): Method to use for imputing the efficiency.
+
+        Returns:
+            None
+        """
+        
+        acceptable_methods = ['bernoulli']
+        assert method in acceptable_methods,\
+            "The input method must be one of the following: {}".format(acceptable_methods)
+        
+        if method == 'bernoulli':
+            
+            # Assert that the required data is available
+            assert self.cycle is not None,\
+                "The cell-cycle state of each cell must be computed first."
+            assert self.volume is not None,\
+                "The volume of each cell is not available."
+            assert self.nu is not None,\
+                "The discretized normalized spot counts are not available."
+            
+            # Compute the fractions of domains with 0, 1 or 2 copies
+            f = self.compute_fraction()
+            
+            # Compute the replication probability
+            pr = self.replication_probability()
+            
+            # Impute the efficiency with the Bernoulli model
+            efficiency, costs = bernoulli.efficiency_optimization(f, pr)
+            
+            # Update the attributes of the current object
+            self.pr = pr
+            self.efficiency_cost_residual = costs
+            self.efficiency = efficiency
+
     
     def compute_rt(self, mat):
         """Computes the RT from an input matrix.
