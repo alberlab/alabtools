@@ -292,15 +292,18 @@ class CtRep(object):
         return rt
     
     def s_sort(self, mat):
-        """Sorts the input matrix in S phase.
-        
-        TODO: improve the function, this is just a placeholder.
+        """Sorts the matrix by increasing volume in S phase,
+        and transforms it into a haploid matrix where copies
+        of the same cell are concatenated contiguously.
 
         Args:
-            mat (_type_): _description_
+            mat (np.array(ncell, ndomain, ncopy_max)): Input matrix.
 
         Returns:
-            _type_: _description_
+            mat_s_srt_hap (np.array(ncell_s * ncopy_max, ndomain)):
+                        Haploid matrix ranked by increasing volume in S.
+            volume_s_srt (np.array(ncell_s)):
+                        Volume of each cell in S, ranked from smallest to largest.
         """
         
         # Assert the input
@@ -318,6 +321,7 @@ class CtRep(object):
         mat_s = mat[self.cycle == 1, :, :]   # np.array(ncell_s, ndomain, ncopy_max)
         
         # Sort the cells by increasing volume
+        volume_s_srt = volume_s[np.argsort(volume_s)]
         mat_s_srt = mat_s[np.argsort(volume_s), :, :]
         
         # Reshape the matrix to a 2D array (ncell_s * ncopy_max, ndomain)
@@ -327,5 +331,5 @@ class CtRep(object):
             for copy in range(self.ncopy_max):
                 mat_s_srt_hap[cell * self.ncopy_max + copy, :] = mat_s_srt[cell, :, copy]
         
-        return mat_s_srt_hap
+        return mat_s_srt_hap, volume_s_srt
         
