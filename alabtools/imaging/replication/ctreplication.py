@@ -50,6 +50,7 @@ class CtRep(object):
             self.nraw = None
             self.rho = None
             self.nu = None
+            self.efficiency = None
             self.n = None
     
     def load(self):
@@ -80,6 +81,8 @@ class CtRep(object):
             warnings.warn("Loaded CtRep has no attribute 'rho'.")
         if not hasattr(loaded_ctrep, 'nu'):
             warnings.warn("Loaded CtRep has no attribute 'nu'.")
+        if not hasattr(loaded_ctrep, 'efficiency'):
+            warnings.warn("Loaded CtRep has no attribute 'efficiency'.")
         if not hasattr(loaded_ctrep, 'n'):
             warnings.warn("Loaded CtRep has no attribute 'n'.")
         
@@ -214,32 +217,31 @@ class CtRep(object):
         self.rho = cellcycle.normalize_bias(self.nraw, self.cycle)
         self.nu = nu = np.round(self.rho).astype(int)
         self.nu[nu > 2] = 2
+        self.efficiency = self.compute_efficiency()
                 
         return r
-    
+
     def compute_efficiency(self):
-        """TODO: Docstring for compute_efficiency and improve readability.
-
-        Raises:
-            ValueError: _description_
-            ValueError: _description_
-
-        Returns:
-            _type_: _description_
-        """
+        """Compute the detection efficiency of each cell.
         
-        # Check that the required attributes are present
-        if self.cycle is None:
-            raise ValueError("The cell-cycle state of each cell is not available.")
-        if self.nu is None:
-            raise ValueError("The normalized spot counts are not available.")
+        The efficiency is the probability that the imaging pipeline
+        detects a copy of a domain in a cell that is physically present.
+        
+        It is estimated with a frequency-based approach by computing
+        the fraction of zeros in each cell, i.e. domains that are
+        not detected in the cell. The efficiency is then computed
+        by comparing this to the expected fraction in G1, S and G2.
+            
+        Returns:
+            efficiency (np.array(ncell), dtype=float): Detection efficiency of each cell.
+        """
         
         # Compute the fraction of zeros in each cell
         f0 = np.mean(self.nu == 0, axis=(1, 2))
-        assert f0.shape == (self.ncell,)
+        assert f0.shape == self.volume.shape
         
         # Initialize the efficiency array
-        efficiency = np.zeros(self.ncell)
+        efficiency = np.zeros(len(f0))
         
         # Compute the efficiency for G1 cells
         efficiency[self.cycle == 0] = 1 - f0[self.cycle == 0]
@@ -250,8 +252,8 @@ class CtRep(object):
         # Compute the efficiency for S cells
         # We first need to estimate the probability that a domain is replicated in S
         # We assume this probability is linear with the volume of the cell
-        v_min = np.min(self.volume[self.cycle == 1])  # minimum volume of S cells
-        v_max = np.max(self.volume[self.cycle == 1])  # maximum volume of S cells
+        v_min = np.max(self.volume[self.cycle == 0])  # maximum volume of G1 cells
+        v_max = np.min(self.volume[self.cycle == 2])  # minimum volume of G2 cells
         pr = (self.volume - v_min) / (v_max - v_min)  # probability of replication
         # Now we use the following equation for the efficiency:
         #  e = (1 + pr - √((1 - pr)^2 + 4 pr f0)) / 2pr
@@ -259,7 +261,65 @@ class CtRep(object):
         numerator2 = ((1 - pr)**2 + 4 * pr * f0) ** 0.5
         denominator = 2 * pr
         equation = (numerator1 - numerator2) / denominator
+        # If the denominator is zero (pr = 0), then we use the G1 efficiency
+        equation[denominator == 0] = 1 - f0[denominator == 0]
         efficiency[self.cycle == 1] = equation[self.cycle == 1]
         
         return efficiency
+    
+    def compute_rt(self, mat):
+        """Computes the RT from an input matrix.
+        
+        Only S cells are considered for the computation.
+
+        Returns:
+            rt (np.array(ndomain), dtype=float): RT of each domain.
+        """
+        
+        # Check that cycle has been computed
+        assert self.cycle is not None,\
+            "The cell-cycle state of each cell must be computed first."
+        # Check that the input matrix has the correct shape
+        assert mat.shape == (self.ncell, self.ndomain, self.ncopy_max),\
+            "The input matrix has the wrong shape."
+        
+        # Isolate the S data
+        mat_s = mat[self.cycle == 1, :, :]
+        
+        # Compute the RT
+        rt = np.nanmean(mat_s, axis=(0, 2))  # np.array(ndomain)
+        
+        return rt
+    
+    def s_sort(self, mat):
+        """Sorts the input matrix in S phase.
+        
+        TODO: improve the function, this is just a placeholder.
+
+        Args:
+            mat (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        
+        mat_cycle = np.zeros((self.ncopy_max * self.ncell, self.ndomain))
+        
+        for cell in range(self.ncell):
+            for copy in range(self.ncopy_max):
+                mat_cycle[cell * self.ncopy_max + copy, :] = mat[cell, :, copy]
+        
+        # duplicate effiency and volume arrays entry-wise
+        efficiency_dup = np.repeat(self.efficiency, self.ncopy_max)
+        volume_dup = np.repeat(self.volume, self.ncopy_max)
+        
+        # normalize the rows of mat_cycle by the efficiency
+        efficiency_dup = np.reshape(efficiency_dup, (self.ncell * self.ncopy_max, 1))
+        mat_cycle = mat_cycle / efficiency_dup
+        
+        # sort the rows of mat_cycle by increasing volume
+        sorted_index = np.argsort(volume_dup)
+        mat_cycle = mat_cycle[sorted_index, :]
+        
+        return mat_cycle
         
