@@ -67,9 +67,9 @@ def efficiency_optimization(f, pr):
     assert f.shape[1] == len(pr), "f and pr must have the same length."
     ncell = f.shape[1]
     
-    # Initialize the list of efficiencies and of costs
+    # Initialize the list of efficiencies and of cost residuals
     efficiency = []
-    cost = []
+    cost_residual = []
     
     # Loop over cells to impute the efficiency
     for cell in range(ncell):
@@ -78,10 +78,10 @@ def efficiency_optimization(f, pr):
                        f0=f0, f1=f1, f2=f2, pr=pr[cell])
         res = minimize(cost, x0=0.5, method='Nelder-Mead')
         efficiency.append(res.x[0])
-        cost.append(res.fun)
+        cost_residual.append(res.fun)
     
     # Convert to numpy arrays
     efficiency = np.array(efficiency)
-    cost = np.array(cost)
+    cost_residual = np.array(cost_residual)
     
-    return efficiency, cost
+    return efficiency, cost_residual

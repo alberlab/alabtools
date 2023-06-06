@@ -268,7 +268,7 @@ class CtRep(object):
             "The discretized normalized spot counts are not available."
         
         # Set sex chromosome domains to NaN (might screw up the computation)
-        nu_cp = self.nu.copy()
+        nu_cp = self.nu.copy().astype(float)
         for sex_chrom in ['chrX', 'chrY']:
             nu_cp[:, self.index.chromstr == sex_chrom, :] = np.nan
         
