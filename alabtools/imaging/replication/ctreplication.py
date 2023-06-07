@@ -293,6 +293,7 @@ class CtRep(object):
             None
         """
         
+        # Assert that the method is acceptable
         acceptable_methods = ['bernoulli']
         assert method in acceptable_methods,\
             "The input method must be one of the following: {}".format(acceptable_methods)
@@ -320,9 +321,33 @@ class CtRep(object):
             self.pr = pr
             self.efficiency_cost_residual = costs
             self.efficiency = efficiency
-
     
-    def compute_rt(self, mat):
+    def impute_replication(self, method):
+        
+        # Assert that the method is acceptable
+        acceptable_methods = ['bernoulli_maxlikelihood']
+        assert method in acceptable_methods,\
+            "The input method must be one of the following: {}".format(acceptable_methods)
+        
+        if method == 'bernoulli_maxlikelihood':
+                
+            # Assert that the required data is available
+            assert self.nu is not None,\
+                "The discretized normalized spot counts are not available."
+            assert self.efficiency is not None,\
+                "The efficiency of replication is not available."
+            
+            # Compute the replication probability
+            pr = self.replication_probability()
+            
+            # Impute the replication with the Bernoulli model
+            n, lkl_max = bernoulli.likelihood_maximization_n(self.nu, self.efficiency, pr)
+            
+            # Update the attributes of the current object
+            self.n = n
+            self.likelihood_max = lkl_max
+    
+    def compute_rt(self, mat, isolate_s=True):
         """Computes the RT from an input matrix.
         
         Only S cells are considered for the computation.
@@ -331,60 +356,70 @@ class CtRep(object):
             rt (np.array(ndomain), dtype=float): RT of each domain.
         """
         
-        # Check that cycle has been computed
-        assert self.cycle is not None,\
-            "The cell-cycle state of each cell must be computed first."
         # Check that the input matrix has the correct shape
         assert mat.shape == (self.ncell, self.ndomain, self.ncopy_max),\
             "The input matrix has the wrong shape."
+        # Check that cycle has been computed
+        if isolate_s:
+            assert self.cycle is not None,\
+                "The cell-cycle state of each cell must be computed first."
         
         # Isolate the S data
-        mat_s = mat[self.cycle == 1, :, :]
+        if isolate_s:
+            mat_cp = mat[self.cycle == 1, :, :]
+        else:
+            mat_cp = mat.copy()
         
         # Compute the RT
-        rt = np.nanmean(mat_s, axis=(0, 2))  # np.array(ndomain)
+        rt = np.nanmean(mat_cp, axis=(0, 2))  # np.array(ndomain)
         
         return rt
     
-    def s_sort(self, mat):
-        """Sorts the matrix by increasing volume in S phase,
+    def sort_by_volume(self, mat, isolate_s=True):
+        """Sorts the matrix by increasing volume,
         and transforms it into a haploid matrix where copies
         of the same cell are concatenated contiguously.
 
         Args:
             mat (np.array(ncell, ndomain, ncopy_max)): Input matrix.
+            isolate_s (bool): If True, only S cells are considered.
 
         Returns:
-            mat_s_srt_hap (np.array(ncell_s * ncopy_max, ndomain)):
-                        Haploid matrix ranked by increasing volume in S.
-            volume_s_srt (np.array(ncell_s)):
-                        Volume of each cell in S, ranked from smallest to largest.
+            mat_srt_hap (np.array(ncell_s * ncopy_max, ndomain)):
+                        Haploid matrix ranked by increasing volume.
+            volume_srt (np.array(ncell_s)):
+                        Volume of each cell, ranked from smallest to largest.
         """
         
         # Assert the input
         assert mat.shape == (self.ncell, self.ndomain, self.ncopy_max),\
             "The input matrix has the wrong shape."
-        # Assert that cycle has been computed
-        assert self.cycle is not None,\
-            "The cell-cycle state of each cell must be computed first."
         # Assert that the volume has been computed
         assert self.volume is not None,\
             "The volume of each cell is not available."
+        if isolate_s:
+            # Assert that cycle has been computed
+            assert self.cycle is not None,\
+                "The cell-cycle state of each cell must be computed first."
         
         # Isolate S cells
-        volume_s = self.volume[self.cycle == 1]
-        mat_s = mat[self.cycle == 1, :, :]   # np.array(ncell_s, ndomain, ncopy_max)
+        if isolate_s:
+            volume_srt = self.volume[self.cycle == 1]
+            mat_srt = mat[self.cycle == 1, :, :]
+        else:
+            volume_srt = self.volume.copy()
+            mat_srt = mat.copy()
         
         # Sort the cells by increasing volume
-        volume_s_srt = volume_s[np.argsort(volume_s)]
-        mat_s_srt = mat_s[np.argsort(volume_s), :, :]
+        mat_srt = mat_srt[np.argsort(volume_srt), :, :]
+        volume_srt = volume_srt[np.argsort(volume_srt)]
         
         # Reshape the matrix to a 2D array (ncell_s * ncopy_max, ndomain)
         ncell_s = int(np.sum(self.cycle == 1))
-        mat_s_srt_hap = np.zeros((ncell_s * self.ncopy_max, self.ndomain))
+        mat_srt_hap = np.zeros((ncell_s * self.ncopy_max, self.ndomain))
         for cell in range(ncell_s):
             for copy in range(self.ncopy_max):
-                mat_s_srt_hap[cell * self.ncopy_max + copy, :] = mat_s_srt[cell, :, copy]
+                mat_srt_hap[cell * self.ncopy_max + copy, :] = mat_srt[cell, :, copy]
         
-        return mat_s_srt_hap, volume_s_srt
+        return mat_srt_hap, volume_srt
         
