@@ -14,6 +14,11 @@ def compute_pi(eff, phased):
                     Probability of observing nu given n.
     """
     
+    # Check input
+    assert isinstance(eff, float), "eff must be a float."
+    assert eff >= 0 and eff <= 1, "eff must be between 0 and 1."
+    assert isinstance(phased, bool), "phased must be a boolean."
+    
     if phased:
         # There are 2 possible values of n (1, 2)
         # and 3 possible values of nu (0, 1, 2)
@@ -68,6 +73,13 @@ def compute_phi(eff, pr, phased):
                     Expected fraction of domains with nu counts.
     """
     
+    # Check input
+    assert isinstance(eff, float), "eff must be a float."
+    assert eff >= 0 and eff <= 1, "eff must be between 0 and 1."
+    assert isinstance(pr, float), "pr must be a float."
+    assert pr >= 0 and pr <= 1, "pr must be between 0 and 1."
+    assert isinstance(phased, bool), "phased must be a boolean."
+    
     # Compute the probability of observing nu given n
     pi = compute_pi(eff, phased)
     
@@ -87,12 +99,12 @@ def compute_phi(eff, pr, phased):
     
     return phi
 
-def efficiency_cost_function(eps, f, pr, phased):
+def efficiency_cost_function(eff, f, pr, phased):
     """Computes the cost function for the estimation
     of the detection efficiency.
 
     Args:
-        eps (float): Detection efficiency.
+        eff (float): Detection efficiency.
         f (np.array, dtype=float): Observed fraction of events with nu counts.
         pr (float): Probability of replication.
         phased (bool): Whether the data is phased or not.
@@ -100,13 +112,27 @@ def efficiency_cost_function(eps, f, pr, phased):
     Returns:
         cost (float): Cost function.
     """
+
+    # Check the input
+    if isinstance(eff, list) or isinstance(eff, np.ndarray):
+        assert len(eff) == 1, "eff must be a scalar."
+        eff = eff[0]
+    assert isinstance(eff, float), "eff must be a float."
+    assert eff >= 0 and eff <= 1, "eff must be between 0 and 1."
+    assert isinstance(phased, bool), "phased must be a boolean."
+    if phased:
+        assert f.shape == (3,), "f must have 3 rows."
+    else:
+        assert f.shape == (5,), "f must have 5 rows."
+    assert isinstance(pr, float), "pr must be a float."
+    assert pr >= 0 and pr <= 1, "pr must be between 0 and 1."
     
     # Compute the theoretical fractions
-    phi = compute_phi(eps, pr, phased)
+    phi = compute_phi(eff, pr, phased)
     assert phi.shape == f.shape, "pi and f must have the same shape."
     
     # Compute the cost function
-    cost = np.sqrt(np.sum((f - phi) ** 2))
+    cost = ((f - phi) ** 2).sum() ** 0.5
     
     return cost
 
@@ -145,11 +171,11 @@ def efficiency_optimization(f, pr, phased):
     
     # Loop over cells to impute the efficiency
     for cell in range(ncell):
-        f0, f1, f2 = f[:, cell]
         cost = partial(efficiency_cost_function,
-                       f=np.array([f0, f1, f2]),
-                       pr=pr[cell])
-        res = minimize(cost, x0=0.5, method='Nelder-Mead')
+                       f=f[:, cell],
+                       pr=pr[cell],
+                       phased=phased)
+        res = minimize(cost, x0=0.5, bounds=[(0, 1)])
         efficiency.append(res.x[0])
         cost_residual.append(res.fun)
     

@@ -215,8 +215,17 @@ class CtRep(object):
         
         # Update the attributes of the current object
         self.cycle = cycle
+        # Compute the continuous normalized spot counts (rho)
         self.rho = cellcycle.normalize_bias(self.nraw, self.cycle)
-        self.nu = nu = np.round(self.rho).astype(int)
+        # Compute the discretized normalized spot counts (nu)
+        self.nu = np.round(self.rho).astype(int)
+        # Fix the cases where the number of spots is too high
+        if self.ncopy_max == 1:  # unphased
+            self.nu[self.nu > 4] = 4
+        elif self.ncopy_max == 2:  # phased
+            self.nu[self.nu > 2] = 2
+        else:  # error: neither unphased nor phased
+            raise ValueError("The number of copies per domain must be 1 or 2.")
                 
         return r
 
@@ -271,12 +280,13 @@ class CtRep(object):
         for sex_chrom in ['chrX', 'chrY']:
             nu_cp[:, self.index.chromstr == sex_chrom, :] = np.nan
         
+        # Count the unique values of nu_cp
+        nu_unique = np.unique(nu_cp[~np.isnan(nu_cp)])
+
         # Count the fraction of domains with 0, 1 or 2 copies in each cell
-        f0 = np.nanmean(nu_cp == 0, axis=(1, 2))  # np.array(ncell)
-        f1 = np.nanmean(nu_cp == 1, axis=(1, 2))
-        f2 = np.nanmean(nu_cp == 2, axis=(1, 2))
-        
-        f = np.array([f0, f1, f2])  # np.array(3, ncell)
+        f = np.zeros((len(nu_unique), self.ncell))  # np.array(nunique, ncell)
+        for nu in nu_unique:
+            f[int(nu), :] = np.nanmean(nu_cp == nu, axis=(1, 2))  # np.array(ncell)
         
         return f
     
