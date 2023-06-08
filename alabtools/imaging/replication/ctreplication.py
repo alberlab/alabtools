@@ -217,7 +217,6 @@ class CtRep(object):
         self.cycle = cycle
         self.rho = cellcycle.normalize_bias(self.nraw, self.cycle)
         self.nu = nu = np.round(self.rho).astype(int)
-        self.nu[nu > 2] = 2
                 
         return r
 
