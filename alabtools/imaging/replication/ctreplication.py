@@ -314,8 +314,16 @@ class CtRep(object):
             # Compute the replication probability
             pr = self.replication_probability()
             
+            # Define whether the data are phased or not
+            if self.ncopy_max == 1:
+                phased = False
+            elif self.ncopy_max == 2:
+                phased = True
+            else:
+                raise ValueError("The number of copies per domain must be 1 or 2.")
+            
             # Impute the efficiency with the Bernoulli model
-            efficiency, costs = bernoulli.efficiency_optimization(f, pr)
+            efficiency, costs = bernoulli.efficiency_optimization(f, pr, phased)
             
             # Update the attributes of the current object
             self.pr = pr
@@ -407,17 +415,20 @@ class CtRep(object):
             volume_srt = self.volume[self.cycle == 1]
             mat_srt = mat[self.cycle == 1, :, :]
         else:
-            volume_srt = self.volume.copy()
-            mat_srt = mat.copy()
+            volume_srt = np.copy(self.volume)
+            mat_srt = np.copy(mat)
         
         # Sort the cells by increasing volume
         mat_srt = mat_srt[np.argsort(volume_srt), :, :]
         volume_srt = volume_srt[np.argsort(volume_srt)]
         
         # Reshape the matrix to a 2D array (ncell_s * ncopy_max, ndomain)
-        ncell_s = int(np.sum(self.cycle == 1))
-        mat_srt_hap = np.zeros((ncell_s * self.ncopy_max, self.ndomain))
-        for cell in range(ncell_s):
+        if isolate_s:
+            ncell = int(np.sum(self.cycle == 1))
+        else:
+            ncell = self.ncell
+        mat_srt_hap = np.zeros((ncell * self.ncopy_max, self.ndomain))
+        for cell in range(ncell):
             for copy in range(self.ncopy_max):
                 mat_srt_hap[cell * self.ncopy_max + copy, :] = mat_srt[cell, :, copy]
         
