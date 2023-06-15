@@ -47,6 +47,7 @@ class CtRep(object):
             self.cell_labels = None
             self.genome = None
             self.index = None
+            self.volume = None
             self.cycle = None
             self.nraw = None
             self.rho = None
@@ -76,6 +77,8 @@ class CtRep(object):
             warnings.warn("Loaded CtRep has no attribute 'genome'.")
         if not hasattr(loaded_ctrep, 'index'):
             warnings.warn("Loaded CtRep has no attribute 'index'.")
+        if not hasattr(loaded_ctrep, 'volume'):
+            warnings.warn("Loaded CtRep has no attribute 'volume'.")
         if not hasattr(loaded_ctrep, 'cycle'):
             warnings.warn("Loaded CtRep has no attribute 'cycle'.")
         if not hasattr(loaded_ctrep, 'rho'):
@@ -95,6 +98,41 @@ class CtRep(object):
         """
         with open(self.filename, 'wb') as f:
             pickle.dump(self, f)
+    
+    def pop_cells(self, indices):
+        """Removes the cells with the input indices.
+        
+        Args:
+            indices (np.array(n, dtype=int)): Indices of the cells to remove.
+                Must be a subset of the numbers from 0 to ncell-1.
+        """
+        
+        # assert the input indices
+        assert len(indices) <= self.ncell,\
+            "The length of the input indices must be less than or equal to the number of cells."
+        for i in indices:
+            assert i in np.arange(self.ncell),\
+                "The input indices must be a subset of the numbers from 0 to ncell-1."
+
+        if self.cell_labels is not None:
+            self.cell_labels = np.delete(self.cell_labels, indices)
+        if self.volume is not None:
+            self.volume = np.delete(self.volume, indices)
+        if self.cycle is not None:
+            self.cycle = np.delete(self.cycle, indices)
+        if self.nraw is not None:
+            self.nraw = np.delete(self.nraw, indices, axis=0)
+        if self.rho is not None:
+            self.rho = np.delete(self.rho, indices, axis=0)
+        if self.nu is not None:
+            self.nu = np.delete(self.nu, indices, axis=0)
+        if self.n is not None:
+            self.n = np.delete(self.n, indices, axis=0)
+        if self.efficiency is not None:
+            self.efficiency = np.delete(self.efficiency, indices)
+        if self.eta is not None:
+            self.eta = np.delete(self.eta, indices)
+        self.ncell -= len(indices)
     
     def read_ct(self, ct=None, ctenv=None):
         """Reads data from a CtFile or CtEnvelope.
@@ -218,15 +256,16 @@ class CtRep(object):
         # Compute the continuous normalized spot counts (rho)
         self.rho = cellcycle.normalize_bias(self.nraw, self.cycle)
         # Compute the discretized normalized spot counts (nu)
-        self.nu = np.round(self.rho).astype(int)
-        # Fix the cases where the number of spots is too high
+        nu = np.round(self.rho).astype(int)
+        # Fix the nu values outside range
         if self.ncopy_max == 1:  # unphased
-            self.nu[self.nu > 4] = 4
+            nu[nu > 4] = 4
         elif self.ncopy_max == 2:  # phased
-            self.nu[self.nu > 2] = 2
-        else:  # error: neither unphased nor phased
+            nu[nu > 2] = 2
+        else:
             raise ValueError("The number of copies per domain must be 1 or 2.")
-                
+        self.nu = nu
+
         return r
 
     def replication_probability(self):
@@ -266,7 +305,7 @@ class CtRep(object):
         Sex chromosomes are excluded from the computation.
 
         Returns:
-            f (np.array(3, ncell), dtype=float): Fraction of domains with 0, 1 or 2 copies.
+            f (np.array(3, ncell), dtype=float): Fraction of domains with set number of copies.
         """
         
         # Assert that the required data is available
@@ -283,10 +322,14 @@ class CtRep(object):
         # Count the unique values of nu_cp
         nu_unique = np.unique(nu_cp[~np.isnan(nu_cp)])
 
-        # Count the fraction of domains with 0, 1 or 2 copies in each cell
+        # Count the fraction of domains with nu copies in each cell
         f = np.zeros((len(nu_unique), self.ncell))  # np.array(nunique, ncell)
         for nu in nu_unique:
-            f[int(nu), :] = np.nanmean(nu_cp == nu, axis=(1, 2))  # np.array(ncell)
+            f[int(nu), :] = np.nansum(nu_cp == nu, axis=(1, 2)) / np.nansum(~np.isnan(nu_cp), axis=(1, 2))
+        
+        for cell in range(self.ncell):
+            assert np.isclose(np.sum(f[:, cell]), 1),\
+                "The fractions don't sum to 1 for cell {}. sum(f) = {}".format(cell, np.sum(f[:, cell]))
         
         return f
     
@@ -358,7 +401,7 @@ class CtRep(object):
             pr = self.replication_probability()
             
             # Impute the replication with the Bernoulli model
-            n, lkl_max = bernoulli.likelihood_maximization_n(self.nu, self.efficiency, pr)
+            n, lkl_max = bernoulli.likelihood_maximization_n(self.nu, self.efficiency)
             
             # Update the attributes of the current object
             self.n = n
