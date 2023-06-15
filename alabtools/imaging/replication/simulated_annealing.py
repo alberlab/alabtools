@@ -80,3 +80,10 @@ def update(n, nu):
     n_new[j] = n[i]
     
     return n_new
+
+
+# Since n is a 3D array (ncell, ndomain, ncopy),
+# even though we are only working on one cell,
+# we still have a 2D array.
+# I think the easiest thing is just to perform the
+# algorithm on each copy separately in this code.
