@@ -10,6 +10,7 @@ from alabtools.imaging import CtFile, CtEnvelope
 from alabtools.parallel import Controller
 from . import cellcycle
 from . import bernoulli
+from . import simulated_annealing
 
 class CtRep(object):
     """
@@ -382,30 +383,51 @@ class CtRep(object):
             self.efficiency_cost_residual = costs
             self.efficiency = efficiency
     
-    def impute_replication(self, method):
+    def run_replication(self, cfg):
         
-        # Assert that the method is acceptable
-        acceptable_methods = ['bernoulli_maxlikelihood']
-        assert method in acceptable_methods,\
-            "The input method must be one of the following: {}".format(acceptable_methods)
+        # Check that cfg is a dictionary
+        assert isinstance(cfg, dict), "The input cfg must be a dictionary."
         
-        if method == 'bernoulli_maxlikelihood':
-                
-            # Assert that the required data is available
-            assert self.nu is not None,\
-                "The discretized normalized spot counts are not available."
-            assert self.efficiency is not None,\
-                "The efficiency of replication is not available."
-            
-            # Compute the replication probability
-            pr = self.replication_probability()
-            
-            # Impute the replication with the Bernoulli model
-            n, lkl_max = bernoulli.likelihood_maximization_n(self.nu, self.efficiency)
-            
-            # Update the attributes of the current object
-            self.n = n
-            self.likelihood_max = lkl_max
+        # Check that the required keys are present in cfg
+        required_keys = ['parallel', 'alpha', 'tmp0', 'n_steps', 'J']
+        for key in required_keys:
+            assert key in cfg.keys(), "The input cfg must have the key '{}'.".format(key)
+        
+        # create a temporary directory to store nodes' results
+        temp_dir = tempfile.mkdtemp(dir=os.getcwd())
+        sys.stdout.write("Temporary directory for nodes' results: {}\n".format(temp_dir))
+        
+        # create a Controller
+        controller = Controller(cfg)
+        
+        # Compute the replication probability
+        pr = self.replication_probability()
+        
+        # Save the data needed for the parallel and reduce tasks to temporary files
+        np.save(os.path.join(temp_dir, 'nu.npy'), self.nu)
+        np.save(os.path.join(temp_dir, 'efficiency.npy'), self.efficiency)
+        np.save(os.path.join(temp_dir, 'pr.npy'), pr)
+        np.save(os.path.join(temp_dir, 'chromstr.npy'), self.index.chromstr)
+        
+        # set the parallel and reduce tasks
+        parallel_task = partial(simulated_annealing.parallel_function,
+                                cfg=cfg,
+                                temp_dir=temp_dir)
+        reduce_task = partial(simulated_annealing.reduce_function,
+                              temp_dir=temp_dir)
+
+        # run the parallel and reduce tasks
+        n, sa_costs, sa_probs = controller.map_reduce(parallel_task,
+                                                      reduce_task,
+                                                      args=np.arange(self.ncell)) 
+        
+        # Delete the temporary directory and its contents
+        os.system('rm -r {}'.format(temp_dir))
+        
+        # Update the attributes of the current object
+        self.n = n
+
+        return sa_costs, sa_probs
     
     def compute_rt(self, mat, isolate_s=True):
         """Computes the RT from an input matrix.

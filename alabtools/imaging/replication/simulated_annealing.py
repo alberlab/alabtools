@@ -1,6 +1,7 @@
-from . import bernoulli
 import numpy as np
-from alabtools.utils import Genome, Index
+import pickle
+import os
+from . import bernoulli
 
 def likelihood(nu, n, eps):
     """Compute the likelihood of the data nu given the model parameters.
@@ -17,8 +18,11 @@ def likelihood(nu, n, eps):
     # Compute the observed probability of the data
     pi = bernoulli.compute_pi(nu, n, eps)
     
+    # Remove the elements where n == 0
+    pi[n == 0] = np.nan
+    
     # Compute the likelihood
-    lkl = np.prod(pi)
+    lkl = np.nanprod(pi)
     
     return lkl
 
@@ -40,14 +44,14 @@ def ising(n, J, mask):
     # Multiply the arrays element-wise, (2 * n_i - 3) * (2 * n_i+1 - 3)
     isi = (2 * n - 3) * (2 * n_roll - 3)
     
-    # Remove the last element, has spurious pair
-    isi[-1] = 0
-    
     # Remove the remaining spurious pairs using the mask
-    isi[mask] = 0  # these will be the elements where chr changes
+    isi[mask] = np.nan
+    
+    # Remove the elements where n == 0
+    isi[n == 0] = np.nan
     
     # Return the exponential of the sum of the array
-    isi = np.exp(J * np.sum(isi))
+    isi = np.exp(J * np.nansum(isi))
     
     return isi
 
@@ -77,45 +81,6 @@ def cost_function(nu, n, eps, J, mask):
     
     return cost
 
-def initialize(nu, r):
-    """Initialize the number of copies.
-
-    Args:
-        nu (np.array, int): Number of observation.
-        r (float): Fraction of replicates.
-
-    Returns:
-        n (np.array, int): Number of copies.
-    """
-    
-    # Compute fraction of 100% replicates from the data
-    r_data = np.sum(nu == 2) / len(nu)
-    # If r_obs is larger than r, throw an error
-    if r_data > r:
-        raise ValueError('More replicates than imposed!')
-    
-    # Translate the fraction to an integer
-    n_r = int(r * len(nu))
-    n_r_data = int(r_data * len(nu))
-    if n_r > len(nu):
-        n_r = len(nu)
-    if n_r_data > len(nu):
-        n_r_data = len(nu)
-    
-    # Find the indices where nu != 2
-    idx = np.where(nu != 2)[0]
-    # Randomly select n_r - n_r_data indices
-    idx_r = np.random.choice(idx, n_r - n_r_data, replace=False)
-    
-    # Initialize n
-    n = np.ones(len(nu))
-    # Set the values of n to 2 where nu == 2
-    n[nu == 2] = 2
-    # Set the values of n to 2 for the randomly selected indices
-    n[idx_r] = 2
-    
-    return n
-
 def update(n, nu):
     """Update the number of copies.
 
@@ -130,10 +95,11 @@ def update(n, nu):
     # Randomly select i and j with:
     # - i != j
     # - n[i] != n[j]
+    # - n[i], n[j] != 0
     # - nu[i], nu[j] != 2
     while True:
         i, j = np.random.choice(len(n), 2, replace=False)
-        if n[i] != n[j] and nu[i] != 2 and nu[j] != 2:
+        if n[i] != n[j] and n[i] != 0 and n[j] != 0 and nu[i] != 2 and nu[j] != 2:
             break
     
     # Update the values (swap i and j)
@@ -160,7 +126,7 @@ def accept_probability(cost, cost_new, tmp):
     if cost_new > cost:
         return np.exp(-(cost_new - cost) / tmp)
 
-def simulated_annealing(nu, r, eps, J, ising_mask, tmp0, alpha, n_steps):
+def simulated_annealing(nu, r, eps, J, ising_mask, n0, tmp0, alpha, n_steps):
     """Perform the simulated annealing algorithm.
 
     Args:
@@ -169,6 +135,7 @@ def simulated_annealing(nu, r, eps, J, ising_mask, tmp0, alpha, n_steps):
         eps (float): Detection efficiency.
         J (float): Ising model parameter.
         ising_mask (np.array, bool): Mask to remove spurious pairs.
+        n0 (np.array, int): Initialized number of copies.
         tmp0 (float): Initial temperature.
         alpha (float): Temperature schedule parameter.
         n_steps (int): Number of steps.
@@ -180,7 +147,7 @@ def simulated_annealing(nu, r, eps, J, ising_mask, tmp0, alpha, n_steps):
     """
 
     # Initialize n
-    n = initialize(nu, r)
+    n = n0
     
     # Create lists to store the cost and acceptance probability
     cost_list = list()
@@ -207,20 +174,186 @@ def simulated_annealing(nu, r, eps, J, ising_mask, tmp0, alpha, n_steps):
     
     return n, cost_list, prob_list
 
+
 def parallel_function(cellID, cfg, temp_dir):
+    """Parallel function to perform the simulated annealing algorithm.
     
-    # As in cellcycle.py, I can read the data I need from the temp_dir
-    # I can create an Index object if I need to
-    
-    return None
+    Saves the results as pickle file in the temporary directory.
 
-def reduce_function(out_names):
-    
-    
-    return None
+    Args:
+        cellID (int): Cell ID.
+        cfg (dict): Configuration dictionary.
+        temp_dir (str): Temporary directory.
 
-# Since n is a 3D array (ncell, ndomain, ncopy),
-# even though we are only working on one cell,
-# we still have a 2D array.
-# I think the easiest thing is just to perform the
-# algorithm on each copy separately in this code.
+    Returns:
+        out_name (str): Name of the temporary file.
+    """
+    
+    # Read the data from the temporary files    
+    # Normalized observed counts (nu)
+    nu = np.load(os.path.join(temp_dir, 'nu.npy'))[cellID, :, :]
+    # Detection efficiency
+    eps = np.load(os.path.join(temp_dir, 'efficiency.npy'))[cellID]
+    # Replication probability (pr)
+    pr = np.load(os.path.join(temp_dir, 'pr.npy'))[cellID]
+    # chromstr
+    chromstr = np.load(os.path.join(temp_dir, 'chromstr.npy'))
+    
+    # Assert that the data is in the correct format
+    ndomain, ncopy_max = nu.shape
+    assert len(chromstr) == ndomain, 'len(chromstr) != ndomain'
+    
+    # Read parameters from the config file
+    sex = cfg['sex']
+    J = cfg['J']
+    tmp0 = cfg['tmp0']
+    alpha = cfg['alpha']
+    n_steps = cfg['n_steps']
+    
+    # Create the mask to remove spurious pairs in the Ising model
+    ising_mask = create_ising_mask(chromstr)
+    
+    # Initialize the data for the simulated annealing results
+    n = initialize(nu, pr, chromstr, sex)
+    sa_costs = []
+    sa_probs = []
+    
+    # Create the output file name
+    out_name = os.path.join(temp_dir, '{}.pkl'.format(cellID))
+    
+    # Perform SA only for S cells
+    if pr != 0 and pr != 1:
+        for i in range(ncopy_max):
+            # Perform SA only if pr > fr0_i
+            fr0_i = np.sum(n[:, i] == 2) / ndomain
+            if pr > fr0_i:
+                n_i, cost_list, prob_list = simulated_annealing(nu[:, i],
+                                                                pr,
+                                                                eps,
+                                                                J,
+                                                                ising_mask,
+                                                                n[:, i],
+                                                                tmp0,
+                                                                alpha,
+                                                                n_steps)
+                # Store the results
+                n[:, i] = n_i
+                sa_costs.append(cost_list)
+                sa_probs.append(prob_list)
+    
+    # Save the results to temporary files
+    with open(out_name, 'wb') as f:
+        pickle.dump({'n': n, 'sa_costs': sa_costs, 'sa_probs': sa_probs}, f)
+    
+    # Free memory
+    del nu, eps, r, chromstr, ising_mask, n, sa_costs, sa_probs
+    
+    return out_name
+
+def reduce_function(out_names, temp_dir):
+    """Reduce function to combine the results of the simulated annealing algorithm.
+
+    Args:
+        out_names (list, str): List of temporary files.
+        temp_dir (str): Temporary directory.
+
+    Returns:
+        n (np.array, int): Number of copies.
+        sa_costs (dict): Cost functions of SA algorithm for all cells/copies.
+        sa_probs (dict): Acceptance probabilities of SA algorithm for all cells/copies.
+        
+    """
+    
+    # Read nu from the temporary files
+    nu = np.load(os.path.join(temp_dir, 'nu.npy'))
+    ncell, ndomain, ncopy_max = nu.shape
+    
+    # Initialize the number of copies array
+    n = np.zeros((ncell, ndomain, ncopy_max), dtype=int)
+    
+    # We store the cost and acceptance probabilities as dictionaries
+    sa_costs = dict()
+    sa_probs = dict()
+    
+    for out_name in out_names:
+        # Load the data from the dictionary
+        with open(out_name, 'rb') as f:
+            data = pickle.load(f)
+        # Get the cellID
+        cellID = int(os.path.basename(out_name).split('.')[0])
+        # Take the data from the dictionary
+        n_cell = data['n']
+        sa_costs_cell = data['sa_costs']
+        sa_probs_cell = data['sa_probs']
+        # Store the data
+        n[cellID, :, :] = n_cell
+        sa_costs[cellID] = sa_costs_cell
+        sa_probs[cellID] = sa_probs_cell
+        
+    return n, sa_costs, sa_probs
+
+
+def create_ising_mask(chromstr):
+    """Create the mask to remove spurious pairs in the Ising model.
+    
+    Args:
+        chromstr (np.array, str): Chromosome strings.
+        
+    Returns:
+        mask (np.array, bool): Mask to remove spurious pairs
+                               (True = remove, False = keep)
+    
+    """
+    
+    # roll the array, from (0, 1, 2, ..., N) to (1, 2, ..., N, 0) 
+    chromstr_roll = np.roll(chromstr, -1)
+    
+    # Create the mask
+    mask = chromstr != chromstr_roll
+    
+    return mask
+
+def initialize(nu, pr, chromstr, sex):
+    
+    # Take ndomain, ncopy_max
+    ndomain, ncopy_max = nu.shape
+    
+    # Start with a matrix of ones
+    n = np.ones(nu.shape, dtype=int)  # (ndomain, ncopy_max)
+    
+    # If organism is male, set n = 0 for the second copy of chrX and chrY
+    if sex == 'XY':
+        n[np.logical_and(chromstr == 'chrX', chromstr == 'chrY'), 1] = 0
+    
+    # Case 1: cell in G1
+    if pr == 0:
+        return n
+    
+    # Case 2: cell in G2
+    if pr == 1:
+        n = 2 * n  # all domains have been replicated
+        return n
+    
+    # Case 3: cell in S phase
+    # Set the values of n to 2 where nu == 2 (100% replicated)
+    n[nu == 2] = 2
+    # Loop over the copies
+    for i in range(ncopy_max):
+        # Compute fraction of 100% replicates
+        fr0_i = np.sum(n[:, i] == 2) / ndomain
+        # Skip if fr0_i > pr (already replicated)
+        if fr0_i > pr:
+            continue
+        # Otherwise, translate the probability/fraction into integer
+        nr = int(np.ceil(pr * ndomain))
+        nr0_i = int(np.ceil(fr0_i * ndomain))
+        # Find the indices where n != 0 and n != 2
+        # (the ones with n == 0 are just to be ignored,
+        #  the ones with n == 2 are already replicated)
+        idx = np.where(np.logical_and(n[:, i] != 0, n[:, i] != 2))[0]
+        # Randomly select nr - nr0_i indices
+        idx_r = np.random.choice(idx, nr - nr0_i, replace=False)
+        # Set the values of n to 2 for the randomly selected indices
+        n[idx_r, i] = 2
+    
+    return n
