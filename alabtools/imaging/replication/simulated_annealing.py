@@ -45,6 +45,7 @@ def ising(n, J, mask):
     
     # Multiply the arrays element-wise, (2 * n_i - 3) * (2 * n_i+1 - 3)
     isi = (2 * n - 3) * (2 * n_roll - 3)
+    isi = isi.astype(float)
     
     # Remove the spurious pairs using the mask
     isi[mask] = np.nan
