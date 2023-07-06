@@ -253,7 +253,7 @@ def parallel_function(cellID, cfg, temp_dir):
         pickle.dump({'n': n, 'sa_costs': sa_costs, 'sa_probs': sa_probs}, f)
     
     # Free memory
-    del nu, eps, r, chromstr, ising_mask, n, sa_costs, sa_probs
+    del nu, eps, chromstr, ising_mask, n, sa_costs, sa_probs
     
     return out_name
 
