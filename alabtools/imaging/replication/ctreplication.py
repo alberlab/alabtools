@@ -384,6 +384,16 @@ class CtRep(object):
             self.efficiency = efficiency
     
     def run_replication(self, cfg):
+        """Runs the simulated annealing algorithm to impute the number of copies.
+        It runs on each cell independently and in parallel.
+
+        Args:
+            cfg (dict or json): Configuration file.
+
+        Returns:
+            sa_costs (list, dtype=float): Cost during the simulated annealing.
+            sa_probs (list, dtype=float): Probability of accepting a new state.
+        """
         
         # Check that cfg is a dictionary
         assert isinstance(cfg, dict), "The input cfg must be a dictionary."
