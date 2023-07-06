@@ -389,7 +389,7 @@ class CtRep(object):
         assert isinstance(cfg, dict), "The input cfg must be a dictionary."
         
         # Check that the required keys are present in cfg
-        required_keys = ['parallel', 'alpha', 'tmp0', 'n_steps', 'J']
+        required_keys = ['parallel', 'alpha', 'tmp0', 'n_steps', 'J', 'sex']
         for key in required_keys:
             assert key in cfg.keys(), "The input cfg must have the key '{}'.".format(key)
         
