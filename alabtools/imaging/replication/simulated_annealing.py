@@ -350,20 +350,21 @@ def initialize(nu, pr, chromstr, sex):
     n[nu == 2] = 2
     # Loop over the copies
     for i in range(ncopy_max):
-        # Compute fraction of 100% replicates
-        fr0_i = np.sum(n[:, i] == 2) / ndomain
-        # Skip if fr0_i > pr (already replicated)
-        if fr0_i > pr:
+        # Count how many domains have n=0, n=1, n=2
+        n0 = int(np.sum(n[:, i] == 0))
+        n1 = int(np.sum(n[:, i] == 1))
+        n2 = int(np.sum(n[:, i] == 2))
+        # Translate the probability pr into number of domains
+        # We have to exclude n=0, since they are not biological
+        nr = int(pr * (n1 + n2))
+        # Skip if there are at least nr domains already replicated
+        if n2 >= nr:
             continue
-        # Otherwise, translate the probability/fraction into integer
-        nr = int(np.ceil(pr * ndomain))
-        nr0_i = int(np.ceil(fr0_i * ndomain))
+        # Otherwise, transform some n=1 into n=2 (so that n2 = nr)
         # Find the indices where n == 1
-        # (the ones with n == 0 are just to be ignored,
-        #  the ones with n == 2 are already replicated)
         idx = np.where(n[:, i] == 1)[0]
-        # Randomly select nr - nr0_i indices
-        idx_r = np.random.choice(idx, nr - nr0_i, replace=False)
+        # Randomly select nr - n2 indices
+        idx_r = np.random.choice(idx, nr - n2, replace=False)
         # Set the values of n to 2 for the randomly selected indices
         n[idx_r, i] = 2
     
