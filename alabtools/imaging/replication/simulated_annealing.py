@@ -38,20 +38,26 @@ def ising(n, J, mask):
         isi (float): Ising model probability.
     """
     
+    beta = 1.  # inverse temperature
+    
     # roll the array, from (n0, n1, n2, ..., nN) to (n1, n2, ..., nN, n0)
     n_roll = np.roll(n, -1)
     
     # Multiply the arrays element-wise, (2 * n_i - 3) * (2 * n_i+1 - 3)
     isi = (2 * n - 3) * (2 * n_roll - 3)
     
-    # Remove the remaining spurious pairs using the mask
+    # Remove the spurious pairs using the mask
     isi[mask] = np.nan
     
     # Remove the elements where n == 0
     isi[n == 0] = np.nan
     
     # Return the exponential of the sum of the array
-    isi = np.exp(J * np.nansum(isi))
+    isi = np.exp(beta * J * np.nansum(isi))
+    
+    # Normalize the probability by the partition function Z
+    z = 2 * (2 * np.cosh(beta * J)) ** (len(n) - 1)
+    isi = isi / z
     
     return isi
 
@@ -77,7 +83,7 @@ def cost_function(nu, n, eps, J, mask):
     isi = ising(n, J, mask)
     
     # Compute the cost
-    cost = -np.log(lkl) - np.log(isi)
+    cost = - np.log(lkl) - np.log(isi)
     
     return cost
 
@@ -126,12 +132,11 @@ def accept_probability(cost, cost_new, tmp):
     if cost_new > cost:
         return np.exp(-(cost_new - cost) / tmp)
 
-def simulated_annealing(nu, r, eps, J, ising_mask, n0, tmp0, alpha, n_steps):
+def simulated_annealing(nu, eps, J, ising_mask, n0, tmp0, alpha, n_steps):
     """Perform the simulated annealing algorithm.
 
     Args:
         nu (np.array, int): Number of observation.
-        r (float): Fraction of replicates.
         eps (float): Detection efficiency.
         J (float): Ising model parameter.
         ising_mask (np.array, bool): Mask to remove spurious pairs.
@@ -226,20 +231,22 @@ def parallel_function(cellID, cfg, temp_dir):
         for i in range(ncopy_max):
             # Perform SA only if pr > fr0_i
             fr0_i = np.sum(n[:, i] == 2) / ndomain
-            if pr > fr0_i:
-                n_i, cost_list, prob_list = simulated_annealing(nu[:, i],
-                                                                pr,
-                                                                eps,
-                                                                J,
-                                                                ising_mask,
-                                                                n[:, i],
-                                                                tmp0,
-                                                                alpha,
-                                                                n_steps)
-                # Store the results
-                n[:, i] = n_i
-                sa_costs.append(cost_list)
-                sa_probs.append(prob_list)
+            if pr <= fr0_i:
+                continue
+            n_i, cost_list, prob_list = simulated_annealing(nu[:, i],
+                                                            eps,
+                                                            J,
+                                                            ising_mask,
+                                                            n[:, i],
+                                                            tmp0,
+                                                            alpha,
+                                                            n_steps)
+            # Store the results
+            n[:, i] = n_i
+            sa_costs.append(cost_list)
+            sa_probs.append(prob_list)
+            # Free memory
+            del n_i, cost_list, prob_list
     
     # Save the results to temporary files
     with open(out_name, 'wb') as f:
@@ -282,19 +289,22 @@ def reduce_function(out_names, temp_dir):
         # Get the cellID
         cellID = int(os.path.basename(out_name).split('.')[0])
         # Take the data from the dictionary
-        n_cell = data['n']
-        sa_costs_cell = data['sa_costs']
-        sa_probs_cell = data['sa_probs']
+        n_cellID = data['n']
+        sa_costs_cellID = data['sa_costs']
+        sa_probs_cellID = data['sa_probs']
         # Store the data
-        n[cellID, :, :] = n_cell
-        sa_costs[cellID] = sa_costs_cell
-        sa_probs[cellID] = sa_probs_cell
+        n[cellID, :, :] = n_cellID
+        sa_costs[cellID] = sa_costs_cellID
+        sa_probs[cellID] = sa_probs_cellID
+        # Free memory
+        del n_cellID, sa_costs_cellID, sa_probs_cellID
         
     return n, sa_costs, sa_probs
 
 
 def create_ising_mask(chromstr):
-    """Create the mask to remove spurious pairs in the Ising model.
+    """Create the mask to remove spurious pairs in the Ising model,
+    i.e. interactions between different chromosomes.
     
     Args:
         chromstr (np.array, str): Chromosome strings.
@@ -321,9 +331,9 @@ def initialize(nu, pr, chromstr, sex):
     # Start with a matrix of ones
     n = np.ones(nu.shape, dtype=int)  # (ndomain, ncopy_max)
     
-    # If organism is male, set n = 0 for the second copy of chrX and chrY
+    # If organism is male, set n = 0 for the second copy of chrX or chrY
     if sex == 'XY':
-        n[np.logical_and(chromstr == 'chrX', chromstr == 'chrY'), 1] = 0
+        n[np.logical_or(chromstr == 'chrX', chromstr == 'chrY'), 1] = 0
     
     # Case 1: cell in G1
     if pr == 0:
@@ -347,10 +357,10 @@ def initialize(nu, pr, chromstr, sex):
         # Otherwise, translate the probability/fraction into integer
         nr = int(np.ceil(pr * ndomain))
         nr0_i = int(np.ceil(fr0_i * ndomain))
-        # Find the indices where n != 0 and n != 2
+        # Find the indices where n == 1
         # (the ones with n == 0 are just to be ignored,
         #  the ones with n == 2 are already replicated)
-        idx = np.where(np.logical_and(n[:, i] != 0, n[:, i] != 2))[0]
+        idx = np.where(n[:, i] == 1)[0]
         # Randomly select nr - nr0_i indices
         idx_r = np.random.choice(idx, nr - nr0_i, replace=False)
         # Set the values of n to 2 for the randomly selected indices
