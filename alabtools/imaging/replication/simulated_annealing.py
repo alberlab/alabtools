@@ -3,8 +3,8 @@ import pickle
 import os
 from . import bernoulli
 
-def likelihood(nu, n, eps):
-    """Compute the likelihood of the data nu given the model parameters.
+def log_likelihood(nu, n, eps):
+    """Compute the Log-Likelihood of the data nu given the model parameters.
 
     Args:
         nu (np.array, int): Number of observation.
@@ -12,7 +12,7 @@ def likelihood(nu, n, eps):
         eps (float): Detection efficiency.
 
     Returns:
-        lkl (float): Likelihood.
+        lkl (float): Log-Likelihood.
     """
     
     # Compute the observed probability of the data
@@ -24,13 +24,13 @@ def likelihood(nu, n, eps):
     # Assert that there are no pi == 0
     assert np.sum(pi == 0) == 0, 'pi == 0 encountered'
     
-    # Compute the likelihood
-    lkl = np.nanprod(pi)
+    # Compute the log-likelihood
+    lkl = np.nansum(np.log(pi))
     
     return lkl
 
-def ising(n, J, mask):
-    """Compute the probability of the configuration of n given the Ising model.
+def log_ising(n, J, mask):
+    """Compute the log-likelihood of the configuration of n given the Ising model.
 
     Args:
         n (np.array, int): Number of copies.
@@ -38,7 +38,7 @@ def ising(n, J, mask):
         mask (np.array, bool): Mask to remove spurious pairs.
 
     Returns:
-        isi (float): Ising model probability.
+        isi (float): Ising model log-probability.
     """
     
     beta = 1.  # inverse temperature
@@ -56,12 +56,12 @@ def ising(n, J, mask):
     # Remove the elements where n == 0
     isi[n == 0] = np.nan
     
-    # Return the exponential of the sum of the array
-    isi = np.exp(beta * J * np.nansum(isi))
+    # Compute the Ising model log-probability
+    isi = beta * J * np.nansum(isi)  # p = exp(beta * J * isi)
     
     # Normalize the probability by the partition function Z
-    z = 2 * (2 * np.cosh(beta * J)) ** (len(n) - 1)
-    isi = isi / z
+    log_z = (len(n) - 1) * np.log(np.cosh(beta * J)) + len(n) * np.log(2)
+    isi = isi - log_z
     
     return isi
 
@@ -80,14 +80,14 @@ def cost_function(nu, n, eps, J, mask):
         cost (float): Cost function.
     """
     
-    # Compute the likelihood
-    lkl = likelihood(nu, n, eps)
+    # Compute the log-likelihood
+    lkl = log_likelihood(nu, n, eps)
     
     # Compute the Ising model
-    isi = ising(n, J, mask) if J != 0 else 1.
+    isi = log_ising(n, J, mask) if J != 0. else 0.
     
     # Compute the cost
-    cost = - np.log(lkl) - np.log(isi)
+    cost = - lkl - isi
     
     return cost
 
