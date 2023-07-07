@@ -21,13 +21,8 @@ def likelihood(nu, n, eps):
     # Remove the elements where n == 0
     pi[n == 0] = np.nan
     
-    # Find the indices where pi == 0
-    idx = np.where(pi == 0)[0]
-    # Print indices, n, nu where pi == 0
-    print('pi == 0:')
-    for i in idx:
-        print('i = {}, n = {}, nu = {}'.format(i, n[i], nu[i]))
-    print('\n')
+    # Assert that there are no pi == 0
+    assert np.sum(pi == 0) == 0, 'pi == 0 encountered'
     
     # Compute the likelihood
     lkl = np.nanprod(pi)
@@ -89,7 +84,7 @@ def cost_function(nu, n, eps, J, mask):
     lkl = likelihood(nu, n, eps)
     
     # Compute the Ising model
-    isi = ising(n, J, mask)
+    isi = ising(n, J, mask) if J != 0 else 1.
     
     # Compute the cost
     cost = - np.log(lkl) - np.log(isi)
