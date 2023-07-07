@@ -21,6 +21,14 @@ def likelihood(nu, n, eps):
     # Remove the elements where n == 0
     pi[n == 0] = np.nan
     
+    # Find the indices where pi == 0
+    idx = np.where(pi == 0)[0]
+    # Print indices, n, nu where pi == 0
+    print('pi == 0:')
+    for i in idx:
+        print('i = {}, n = {}, nu = {}'.format(i, n[i], nu[i]))
+    print('\n')
+    
     # Compute the likelihood
     lkl = np.nanprod(pi)
     
@@ -230,9 +238,9 @@ def parallel_function(cellID, cfg, temp_dir):
     # Perform SA only for S cells
     if pr != 0 and pr != 1:
         for i in range(ncopy_max):
-            # Perform SA only if pr > fr0_i
-            fr0_i = np.sum(n[:, i] == 2) / ndomain
-            if pr <= fr0_i:
+            # Perform SA only if
+            n1, n2 = int(np.sum(n[:, i] == 1)), int(np.sum(n[:, i] == 2))
+            if pr <= n2 / (n1 + n2):
                 continue
             n_i, cost_list, prob_list = simulated_annealing(nu[:, i],
                                                             eps,
@@ -351,9 +359,7 @@ def initialize(nu, pr, chromstr, sex):
     # Loop over the copies
     for i in range(ncopy_max):
         # Count how many domains have n=0, n=1, n=2
-        n0 = int(np.sum(n[:, i] == 0))
-        n1 = int(np.sum(n[:, i] == 1))
-        n2 = int(np.sum(n[:, i] == 2))
+        n1, n2 = int(np.sum(n[:, i] == 1)), int(np.sum(n[:, i] == 2))
         # Translate the probability pr into number of domains
         # We have to exclude n=0, since they are not biological
         nr = int(pr * (n1 + n2))
