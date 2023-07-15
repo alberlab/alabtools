@@ -2,9 +2,8 @@ import numpy as np
 from scipy.special import binom
 from scipy.optimize import minimize
 
-def compute_pi(nu, n, eps):
-    """Computes the probability of observing nu given n
-    only in the case of a detection efficiency.
+def binomial(nu, n, eps):
+    """Computes the binomial probability of observing nu given n.
     
     If multiple arguments are arrays, they must have the same shape.
 
@@ -12,18 +11,65 @@ def compute_pi(nu, n, eps):
         nu (int or np.array((n), dtype=int)):
                 Number of observed spots.
         n (int or np.array((n), dtype=int)):
-                Number of copies.
+                Number of true spots.
         eps (float or np.array((n), dtype=float)):
                 Detection efficiency.
 
     Returns:
-        pi (float or np.array((n), dtype=float)):
+        (float or np.array((n), dtype=float)):
                 Probability of observing nu given n.
     """
     
-    # Compute the probability of observing nu given n
-    pi = binom(n, nu) * eps ** nu * (1 - eps) ** (n - nu)
+    return binom(n, nu) * eps ** nu * (1 - eps) ** (n - nu)
+
+def poisson(z, lam):
+    """Computes the Poisson probability of having z
+    false positives given a false positive rate lam.
+
+    Args:
+        z (int or np.array((n), dtype=int)):
+                Number of false positives.
+        lam (float or np.array((n), dtype=float)):
+                False positive rate.
+
+    Returns:
+        (float or np.array((n), dtype=float)):
+                Poisson probability of having z false positives.
+    """
     
+    return lam ** z * np.exp(-lam) / np.math.factorial(z)
+
+def compute_pi(nu, n, eps, lam):
+    """Computes the probability of observing nu given n
+    in the case of a detection efficiency and false positives.
+
+    Args:
+        nu (int):
+                Number of observed spots.
+        n (int):
+                Number of copies.
+        eps (float):
+                Detection efficiency.
+        lam (float):
+                False positive rate.
+
+    Returns:
+        pi_p (float or np.array((n), dtype=float)):
+                Probability of observing nu given n.
+    """
+    
+    # Initialize the probability to 0
+    pi = 0
+    
+    # Loop over all possible values of z
+    for z in range(np.max(nu) + 1):
+        # If nu is an array, the maximum in the loop is different for each element
+        # If we loop z up to np.max(nu), some nu - z will be negative
+        # In the compute_pi function, binom(n, nu) will be 0
+        # So we don't have to worry about the case where nu - z is negative,
+        # as these will give a 0 contribution to the sum
+        pi += binom(nu, z) * poisson(z, lam) * binomial(nu - z, n, eps)
+        
     return pi
 
 def compute_phi(eps, pr, nu_max, phased):
@@ -186,83 +232,3 @@ def likelihood_maximization_n(nu, efficiency):
     lkl_max[lkl_1 < lkl_2] = lkl_2[lkl_1 < lkl_2]
     
     return n, lkl_max
-
-
-# PRIMED PIS: INCLUDING NOISE PROBABILITY IN THE MODEL
-
-def compute_pi_prime(nu, n, eps, eta):
-    """Computes the probability of observing nu given n
-    in the case of a detection efficiency and a noise.
-
-    Args:
-        nu (int):
-                Number of observed spots.
-        n (int):
-                Number of copies.
-        eps (float):
-                Detection efficiency.
-        eta (float):
-                Noise probability.
-
-    Returns:
-        pi_p (float or np.array((n), dtype=float)):
-                Probability of observing nu given n.
-    """
-    
-    # Assert istances of input
-    assert isinstance(nu, int), "nu must be an integer."
-    assert isinstance(n, int), "n must be an integer."
-    assert isinstance(eps, float), "eps must be a float."
-    assert isinstance(eta, float), "eta must be a float."
-    assert nu >= 0, "nu must be positive."
-    assert n > 0, "n must be positive."
-    assert eps >= 0 and eps <= 1, "eps must be between 0 and 1."
-    assert eta >= 0 and eta <= 1, "eta must be between 0 and 1."
-    
-    # Initialize the probability to 0
-    pi_p = 0
-    # Loop over all possible values of nu_p
-    for nu_p in range(nu + 1):
-        pi = compute_pi(nu - nu_p, n, eps)
-        pi_p += binom(nu, nu_p) * eta ** nu_p * (1 - eta) ** (nu - nu_p) * pi
-    
-    return pi_p
-
-def compute_mean_from_pi_prime(n, eps, eta):
-    """Computes the mean number of observed spots in
-    the pi_prime model, fixing the number of copies.
-
-    Args:
-        n (int): Number of copies.
-        eps (float): Detection efficiency.
-        eta (float): Noise probability.
-
-    Returns:
-        mean_nu (float): Mean number of observed spots.
-    """
-    
-    # Assert istances of input
-    assert isinstance(n, int), "n must be an integer."
-    assert isinstance(eps, float), "eps must be a float."
-    assert isinstance(eta, float), "eta must be a float."
-    # Assert values of input
-    assert n > 0, "n must be positive."
-    assert eps >= 0 and eps <= 1, "eps must be between 0 and 1."
-    assert eta >= 0 and eta <= 1, "eta must be between 0 and 1."
-    
-    # Define the range of possible values of nu
-    # (could be infinite but taking 100 is enough)
-    nu_range = np.arange(100)
-    
-    # Compute the probability of observing each nu
-    pi_p_range = []
-    for nu in nu_range:
-        nu = int(nu)
-        pi_p = compute_pi_prime(nu, n, eps, eta)
-        pi_p_range.append(pi_p)
-    pi_p_range = np.array(pi_p_range)
-    
-    # Compute the mean number of observed spots
-    mean_nu = (nu_range * pi_p_range).sum()
-    
-    return mean_nu
