@@ -54,6 +54,7 @@ class CtRep(object):
             self.rho = None
             self.nu = None
             self.efficiency = None
+            self.fpr = None
             self.n = None
     
     def load(self):
@@ -88,6 +89,8 @@ class CtRep(object):
             warnings.warn("Loaded CtRep has no attribute 'nu'.")
         if not hasattr(loaded_ctrep, 'efficiency'):
             warnings.warn("Loaded CtRep has no attribute 'efficiency'.")
+        if not hasattr(loaded_ctrep, 'fpr'):
+            warnings.warn("Loaded CtRep has no attribute 'fpr'.")
         if not hasattr(loaded_ctrep, 'n'):
             warnings.warn("Loaded CtRep has no attribute 'n'.")
         
@@ -131,8 +134,8 @@ class CtRep(object):
             self.n = np.delete(self.n, indices, axis=0)
         if self.efficiency is not None:
             self.efficiency = np.delete(self.efficiency, indices)
-        if self.eta is not None:
-            self.eta = np.delete(self.eta, indices)
+        if self.fpr is not None:
+            self.fpr = np.delete(self.fpr, indices)
         self.ncell -= len(indices)
     
     def read_ct(self, ct=None, ctenv=None):
@@ -301,12 +304,13 @@ class CtRep(object):
         return pr
     
     def compute_fraction(self):
-        """Computes the fraction of domains with 0, 1 or 2 copies in each cell.
+        """Computes the fraction of domains with nu copies in each cell.
         
         Sex chromosomes are excluded from the computation.
 
         Returns:
-            f (np.array(3, ncell), dtype=float): Fraction of domains with set number of copies.
+            f (np.array(nu_max+1, ncell), dtype=float):
+                    Fraction of domains with set number of copies.
         """
         
         # Assert that the required data is available
@@ -320,19 +324,19 @@ class CtRep(object):
         for sex_chrom in ['chrX', 'chrY']:
             nu_cp[:, self.index.chromstr == sex_chrom, :] = np.nan
         
-        # Count the unique values of nu_cp
-        nu_unique = np.unique(nu_cp[~np.isnan(nu_cp)])
+        # Count the maximum value of nu_cp
+        nu_max = int(np.nanmax(nu_cp))
 
         # Count the fraction of domains with nu copies in each cell
-        f = np.zeros((len(nu_unique), self.ncell))  # np.array(nunique, ncell)
-        for nu in nu_unique:
+        f = np.zeros((nu_max + 1, self.ncell))  # np.array(nu_max + 1, ncell)
+        for nu in np.arange(nu_max + 1):
             f[int(nu), :] = np.nansum(nu_cp == nu, axis=(1, 2)) / np.nansum(~np.isnan(nu_cp), axis=(1, 2))
         
         for cell in range(self.ncell):
             assert np.isclose(np.sum(f[:, cell]), 1),\
                 "The fractions don't sum to 1 for cell {}. sum(f) = {}".format(cell, np.sum(f[:, cell]))
         
-        return f
+        return f, np.arange(nu_max + 1)
     
     def impute_efficiency(self, method):
         """Imputes the efficiency of replication in each cell.
@@ -362,7 +366,7 @@ class CtRep(object):
                 "The discretized normalized spot counts are not available."
             
             # Compute the fractions of domains with 0, 1 or 2 copies
-            f = self.compute_fraction()
+            f, nu = self.compute_fraction()
             
             # Compute the replication probability
             pr = self.replication_probability()
@@ -376,12 +380,42 @@ class CtRep(object):
                 raise ValueError("The number of copies per domain must be 1 or 2.")
             
             # Impute the efficiency with the Bernoulli model
-            efficiency, costs = bernoulli.efficiency_optimization(f, pr, phased)
+            efficiency, fpr, costs = bernoulli.efficiency_optimization(f, nu, pr, phased)
             
             # Update the attributes of the current object
             self.pr = pr
             self.efficiency_cost_residual = costs
             self.efficiency = efficiency
+            self.fpr = fpr
+    
+    def impute_replication(self):
+        """Imputes the number of copies in each domain of each cell.
+        
+        Uses the efficiency of replication estimated with the Bernoulli model.
+
+        Returns:
+            None
+        """
+        
+        # Assert that the required data is available
+        assert self.cycle is not None,\
+            "The cell-cycle state of each cell must be computed first."
+        assert self.volume is not None,\
+            "The volume of each cell is not available."
+        assert self.nu is not None,\
+            "The discretized normalized spot counts are not available."
+        assert self.efficiency is not None,\
+            "The efficiency of replication is not available."
+        assert self.fpr is not None,\
+            "The false positive rate is not available."
+        
+        # Perform the likelihood maximization
+        n, lkl_max = bernoulli.likelihood_maximization_n(self.nu,
+                                                         self.efficiency,
+                                                         self.fpr)
+        
+        # Update the attributes of the current object
+        self.n = n
     
     def run_replication(self, cfg):
         """Runs the simulated annealing algorithm to impute the number of copies.
