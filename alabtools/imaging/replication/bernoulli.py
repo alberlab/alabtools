@@ -208,7 +208,7 @@ def efficiency_optimization(f, nu, pr, phased):
     
     return eps_res, lam_res, costopt_res
 
-def likelihood_maximization_n(nu, efficiency, fpr):
+def likelihood_maximization_n(nu, efficiency, fpr, chromstr, w_size):
     
     # Take data dimensions
     ncell, ndomain, ncopy_max = nu.shape
@@ -240,9 +240,25 @@ def likelihood_maximization_n(nu, efficiency, fpr):
     lkl_1 = compute_pi(nu, 1, efficiency, fpr)
     lkl_2 = compute_pi(nu, 2, efficiency, fpr)
     
+    lkl_w_1 = np.ones(lkl_1.shape)
+    lkl_w_2 = np.ones(lkl_2.shape)
+    
+    for i in range(ndomain):
+        lkl_i_1 = lkl_1[:, i, :]
+        lkl_i_2 = lkl_2[:, i, :]
+        for j in range(i + 1, i + w_size):
+            if j == ndomain:
+                break
+            if chromstr[i] != chromstr[j]:
+                break
+            lkl_i_1 = lkl_i_1 * lkl_1[:, j, :]
+            lkl_i_2 = lkl_i_2 * lkl_2[:, j, :]
+        lkl_w_1[:, i, :] = lkl_i_1
+        lkl_w_2[:, i, :] = lkl_i_2
+    
     # Maximize the likelihood: choose n=1 if lkl_1 > lkl_2
     n = np.ones((ncell, ndomain, ncopy_max), dtype=int)
-    n[lkl_1 < lkl_2] = 2
+    n[lkl_w_1 < lkl_w_2] = 2
     
     # Return the maximum likelihood
     lkl_max = np.copy(lkl_1)

@@ -388,10 +388,13 @@ class CtRep(object):
             self.efficiency = efficiency
             self.fpr = fpr
     
-    def impute_replication(self):
+    def impute_replication(self, window_size):
         """Imputes the number of copies in each domain of each cell.
         
         Uses the efficiency of replication estimated with the Bernoulli model.
+        
+        Args:
+            window_size (int): Size of the window for the likelihood maximization.
 
         Returns:
             None
@@ -412,7 +415,9 @@ class CtRep(object):
         # Perform the likelihood maximization
         n, lkl_max = bernoulli.likelihood_maximization_n(self.nu,
                                                          self.efficiency,
-                                                         self.fpr)
+                                                         self.fpr,
+                                                         self.index.chromstr,
+                                                         window_size)
         
         # Update the attributes of the current object
         self.n = n
