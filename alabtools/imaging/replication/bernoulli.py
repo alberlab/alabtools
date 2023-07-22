@@ -8,38 +8,55 @@ def binomial(nu, n, eps):
     If multiple arguments are arrays, they must have the same shape.
 
     Args:
-        nu (int or np.array((n), dtype=int)):
+        nu (int or np.array(dtype=int)):
                 Number of observed spots.
-        n (int or np.array((n), dtype=int)):
+        n (int or np.array(dtype=int)):
                 Number of true spots.
-        eps (float or np.array((n), dtype=float)):
+        eps (float or np.array(dtype=float)):
                 Detection efficiency.
 
     Returns:
-        (float or np.array((n), dtype=float)):
+        (float or np.array(dtype=float)):
                 Probability of observing nu given n.
     """
     
     return binom(n, nu) * eps ** nu * (1 - eps) ** (n - nu)
 
 def poisson(z, lam):
-    """Computes the Poisson probability of having z
-    false positives given a false positive rate lam.
+    """Computes the Poisson probability of having z false positives.
 
     Args:
-        z (int or np.array((n), dtype=int)):
+        z (int or np.array(dtype=int)):
                 Number of false positives.
-        lam (float or np.array((n), dtype=float)):
+        lam (float or np.array(dtype=float)):
                 False positive rate.
 
     Returns:
-        (float or np.array((n), dtype=float)):
+        (float or np.array(dtype=float)):
                 Poisson probability of having z false positives.
     """
     
     return lam ** z * np.exp(-lam) / np.math.factorial(z)
 
-def compute_pi(nu, n, eps, lam):
+def gaussian(rho, mu, sigma):
+    """Computes the Gaussian probability of having a
+    continuous normalized count rho.
+
+    Args:
+        rho (float or np.array(dtype=float)):
+                Normalized (continuous) count.
+        mu (float or np.array(dtype=float)):
+                Mean of the distribution.
+        sigma (float or np.array(dtype=float)):
+                Standard deviation of the distribution.
+
+    Returns:
+        (float or np.array(dtype=float)):
+                Gaussian probability of having rho.
+    """
+    return np.exp(- (rho - mu) ** 2 / (2 * sigma ** 2)) / (sigma * np.sqrt(2 * np.pi))
+
+def compute_pi(nu, n, eps, lam, only_eff = False):
     """Computes the probability of observing nu given n
     in the case of a detection efficiency and false positives.
 
@@ -52,6 +69,9 @@ def compute_pi(nu, n, eps, lam):
                 Detection efficiency.
         lam (float):
                 False positive rate.
+        only_eff (bool):
+                Whether to compute only with the efficiency or not.
+                (default: False).
 
     Returns:
         pi_p (float or np.array((n), dtype=float)):
@@ -60,6 +80,10 @@ def compute_pi(nu, n, eps, lam):
     
     # Initialize the probability to 0
     pi = 0
+    
+    if only_eff:
+        pi = binomial(nu, n, eps).astype(float)
+        return pi
     
     # Loop over all possible values of z
     for z in range(np.max(nu) + 1):
