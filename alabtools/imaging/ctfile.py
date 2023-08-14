@@ -573,7 +573,8 @@ class CtFile(h5py.File):
         if self.mode == 'r':
             raise IOError('Cannot set data from FOF-CT file. File is read-only.')
         
-        genome, index, cell_labels, coordinates, intensity, nspot, ncopy, ncell, ndomain, ncopy_max, nspot_max = fofct_process(fofct_file, in_assembly=in_assembly)
+        genome, index, cell_labels, coordinates, intensity, nspot, ncopy, ncell, ndomain, ncopy_max, nspot_max = fofct_process(fofct_file,
+                                                                                                                               in_assembly=in_assembly)
         
         self.set_ndomain(ndomain)
         self.set_genome(genome)
