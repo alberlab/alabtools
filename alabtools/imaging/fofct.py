@@ -1,113 +1,175 @@
 # Contains functions to read FOF-CT (4DN Fish Omics Format - Chromatin Tracing) files.
 
 import warnings
+import os
+import sys
 import numpy as np
+from alabtools.utils import Genome, Index
 
-def read_fofct(fofct_file):
+
+# Functions to read the FOF-CT file
+
+def read(filename):
     """
     Read the FOF-CT (4DN Fish Omics Format - Chromatin Tracing) csv file.
     
     Get the genome assembly, column names and data from the FOF-CT file.
     
     Args:
-        focal_file (str): path to the csv file
+        filename (str): path to the csv file
     
     Returns:
         assembly (list of str): assembly names
-        col_names (np.array of str): column names
+        cols (np.array of str): column names
         data (np.array of str): data
     """
 
-    # READ THE FILE
-    csv = open(fofct_file, 'r')
-    lines = csv.readlines()
-    csv.close()
+    # OPEN THE FILE AND READ THE LINES
+    with open(filename, 'r') as csv:
+        lines = csv.readlines()
 
     # SEPARATE HEADER AND DATA
-    i_header_stop = 0  # index of the last line of the header
-    for line in lines:
-        if line[0] == '#' or line[1] == '#':  # header lines can start with #, ## or "#
-            i_header_stop += 1
-        elif 'Trace_ID' in line:
-            # This is to deal with files that just have a column_names line like
-            #  Spot_ID,Trace_ID,X,Y,Z,Chrom,Chrom_Start,Chrom_End
-            i_header_stop += 1
-        else:
-            break  # header ends
-    header_lines = lines[:i_header_stop]
-    data_lines = lines[i_header_stop:]
-            
+    header_lines, data_lines = separate_header_data(lines)
+    
+    # CHECK THAT HEADER AND DATA ARE NOT EMPTY    
     if len(header_lines) == 0:
         raise ValueError('The header is empty.')
     if len(data_lines) == 0:
         raise ValueError('The data is empty.')
 
     # CLEAN THE HEADER
-    header = []
-    for line in header_lines:
-        while line[0] == '#' or line[0] == '"':
-            line = line[1:]  # remove special characters at the beginning of the line (e.g. #, ##, ")
-        if line[-1] == '\n':
-            line = line[:-1]  # if the line ends with a line break, remove it
-        while line[-1] == ',':
-            line = line[:-1]  # if the line ends with commas, remove all of them
-        while line[-1] == '"':
-            line = line[:-1]  # if the line ends with quotes, remove all of them
-        header.append(line)
+    header = clean_header(header_lines)
 
     # READ ASSEMBLY AND COLUMN NAMES FROM HEADER
-    assembly = None
-    col_names = None
-    for line in header:
-        line = line.replace(' ', '')  # remove all spaces
-        if 'genome_assembly' in line:  # read the genome assembly
-            # Some datasets have multiple assemblies separated by /
-            line = line.split('=')[1]  # split the line at the equal sign and take the second part
-            assembly = line.split('/')  # take both assemblies if / is present
-        if 'columns' in line:
-            line = line.split('=')[1]  # split the line at the equal sign and take the second part
-            if line[0] == '(':
-                line = line[1:]  # if there is a '(' at the beginning, remove it
-            if line[-1] == ')':
-                line = line[:-1]  # if there is a ')' at the end, remove it
-            col_names = line.split(',')  # split the line at the commas
-            col_names = np.array(col_names)
-        if 'Trace_ID' in line and '=' not in line:
-            # This is to deal with files that just have a column_names line like
-            #   Spot_ID,Trace_ID,X,Y,Z,Chrom,Chrom_Start,Chrom_End
-            # so they are missing the 'columns=' part
-            if line[0] == '(':
-                line = line[1:]  # if there is a '(' at the beginning, remove it
-            if line[-1] == ')':
-                line = line[:-1]  # if there is a ')' at the end, remove it
-            col_names = line.split(',')  # split the line at the commas
-            col_names = np.array(col_names)
+    assembly = extract_assembly(header)
+    cols = extract_cols(header)
+    
+    # CHECK IF ASSEMBLY AND COLUMNS ARE CORRECT
     if assembly is None:
         raise ValueError('The genome assembly is not specified in the header.')
-    if col_names is None:
+    if cols is None:
         raise ValueError('The column names are not specified in the header.')
-    
-    # CHECK IF COLUMN NAMES ARE CORRECT
-    if 'X' not in col_names or 'Y' not in col_names or 'Z' not in col_names \
-        or 'Chrom' not in col_names or 'Chrom_Start' not in col_names or 'Chrom_End' not in col_names \
-            or 'Trace_ID' not in col_names:
-                raise ValueError('FOF-CT file is not in the correct format.')
+    required_cols = ['X', 'Y', 'Z', 'Chrom', 'Chrom_Start', 'Chrom_End', 'Trace_ID', 'Spot_ID']
+    for col in required_cols:
+        if col not in cols:
+            raise ValueError('The column {} is not present in the header.'.format(col))
 
     # CONVERT DATA TO NUMPY ARRAY
-    data = []
-    for line in data_lines:
-        if line[-1] == '\n':
-            line = line[:-1]  # if the line ends with a line break, remove it
-        line = line.replace(' ', '')  # remove all spaces
-        values = line.split(',')  # split the line at the commas
-        data.append(values)
-    data = np.array(data)
-    data[data == ''] = np.nan  # replace empty values with NaN
+    data = convert_data_to_array(data_lines)
 
-    return assembly, col_names, data
+    return assembly, cols, data
+
+def separate_header_data(lines):
+    """Separate the header and data from the FOF-CT file,
+    given the lines of the file.
+
+    Args:
+        lines (list of str): lines of the FOF-CT file
+    Returns:
+        header (list of str): header lines
+        data (list of str): data lines
+    """
+    # Initialize the index where the header ends
+    i_header_stop = 0
+    for line in lines:
+        # header lines start with # or ## or contain Trace_ID
+        if line[0] == '#' or line[1] == '#' or 'Trace_ID' in line:
+            i_header_stop += 1
+        else:
+            break  # header ends
+    header = lines[:i_header_stop]
+    data = lines[i_header_stop:]
+    return header, data
+
+def clean_header(header):
+    """Clean the header lines of the FOF-CT file.
+
+    Args:
+        header (list of str): header lines
+    Returns:
+        header_clean (list of str): cleaned header lines
+    """
+    header_clean = []
+    for line in header:
+        line = line.strip('#" ,\n()[]{}')
+        header_clean.append(line)
+    return header_clean
+
+def extract_assembly(header):
+    """Extract the genome assembly from the header lines of the FOF-CT file.
+
+    Args:
+        header (list of str): header lines (cleaned)
+    Returns:
+        assembly (list of str): assembly names
+    """
+    assembly_keys = ['genome_assembly', 'assembly']  # possible keys for the assembly
+    assembly = None
+    for line in header:
+        line = line.replace(' ', '')
+        for assembly_key in assembly_keys:
+            if assembly_key not in line:
+                continue
+            # Some datasets have multiple assemblies separated by /
+            line = line.split('=')[1]
+            assembly = line.split('/')  # take both assemblies if / is present
+            # stop looping through the assembly keys if the assembly is found
+            break
+        if assembly is not None:
+            # stop looping through the header lines if the assembly is found
+            break
+    return assembly
+
+def extract_cols(header):
+    """Extract the column names from the header lines of the FOF-CT file.
+
+    Args:
+        header (list of str): header lines (cleaned)
+    Returns:
+        cols (np.array of str): column names
+    """
+    col_keys = ['Spot_ID, Trace_ID', 'X', 'Y', 'Z',
+                'Chrom', 'Chrom_Start', 'Chrom_End']  # possible keys for the columns
+    cols = None
+    for line in header:
+        line = line.replace(' ', '')
+        for col_key in col_keys:
+            if col_key not in line:
+                continue
+            # if the column key is in the line, extract the column names
+            if '=' in line:  # = may or may not be present
+                line = line.split('=')[1]  # if it is, take the right part
+            cols = line.split(',')
+            cols = np.array(cols)
+            # stop looping through the column keys if the columns are found
+            break
+        if cols is not None:
+            # stop looping through the header lines if the columns are found
+            break
+    return cols
+
+def convert_data_to_array(data):
+    """Convert the data from the FOF-CT file to a numpy array.
+
+    Args:
+        data (list of str): data lines
+    Returns:
+        data_arr (np.array of str): data
+    """
+    data_arr = []
+    for line in data:
+        line = line.strip('#" ,\n()[]{}')
+        line = line.replace(' ', '')
+        values = line.split(',')
+        data_arr.append(values)
+    data_arr = np.array(data_arr)
+    data_arr[data_arr == ''] = np.nan
+    return data_arr
 
 
-def get_domains_fofct(data, col_names):
+# Functions to process the genome and index
+
+def get_domains(data, cols):
     """
     Get the domains from the FOF-CT data.
     The domains are found as unique ordered tuples (chr, start, end).
@@ -115,29 +177,55 @@ def get_domains_fofct(data, col_names):
     
     Args:
         data (np.array of str): data (from read_fofct)
-        col_names (np.array of str): column names (from read_fofct)
+        cols (np.array of str): column names (from read_fofct)
     
     Returns:
-        chrstr (np.array of str): chromosome strings
+        chromstr (np.array of str): chromosome strings
         start (np.array of int): start positions
         end (np.array of int): end positions
     """
     
     # GET THE SPOTS' CHROMOSOME, START AND END POSITIONS
-    spots_chrstr = data[:, col_names == 'Chrom']
-    spots_start = data[:, col_names == 'Chrom_Start']
-    spots_end = data[:, col_names == 'Chrom_End']
+    spots_chromstr = data[:, cols == 'Chrom']
+    spots_start = data[:, cols == 'Chrom_Start']
+    spots_end = data[:, cols == 'Chrom_End']
     
     # IDENTIFY DOMAINS (UNSORTED)
     # The domains are found as unique ordered tuples (chr, start, end)
-    domains = np.unique(np.hstack((spots_chrstr, spots_start, spots_end)), axis=0)
+    domains = np.unique(np.hstack((spots_chromstr, spots_start, spots_end)), axis=0)
 
     # SORT DOMAINS BY CHROMOSOME
-    chrstr, start, end = domains.T
-    chrint = []  # convert the chromosome string to an integer (e.g. 'chr1' -> 1)
-    for c in chrstr:
-        c = c.split('chr')[1]  # remove the 'chr' part
-        if c.isdigit():  # if it's a number
+    chromstr, start, end = domains.T
+    chromint = chrstr_to_int(chromstr)
+    domains = domains[np.argsort(chromint)]  # Sort the domains by chromint
+    
+    # SORT DOMAINS BY START POSITION WITHIN EACH CHROMOSOME
+    chromstr, start, end = domains.T
+    start = start.astype(int)  # cast to int to avoid problems with sorting
+    for c in np.unique(chromstr):
+        idx = chromstr == c
+        domains[idx] = domains[idx][np.argsort(start[idx])]
+
+    # convert the domains to numpy arrays
+    chromstr, start, end = domains.T
+    start = start.astype(int)
+    end = end.astype(int)
+    
+    return chromstr, start, end
+
+def chrstr_to_int(chromstr):
+    """Converts chromosome strings to integers,
+    e.g. 'chr1' -> 1, 'chrX' -> 23.
+
+    Args:
+        chrstr (np.array of str): chromosome strings
+    Returns:
+        chrint (np.array of int): chromosome integers
+    """
+    chromint = []
+    for c in chromstr:
+        c = c.split('chr')[1]
+        if c.isdigit():
             c = int(c)
         elif c == 'X':
             c = 23  # if it's mouse this should be 20, but it doesn't matter
@@ -148,141 +236,361 @@ def get_domains_fofct(data, col_names):
         else:
             c = 26  # This is to deal with other chr labels (e.g. 'chr1_random')
         c = int(c)
-        chrint.append(c)
-    chrint = np.array(chrint)
-    domains = domains[np.argsort(chrint)]  # Sort the domains by chrint
-    
-    # SORT DOMAINS BY START POSITION WITHIN EACH CHROMOSOME
-    chrstr, start, end = domains.T
-    start = start.astype(int)  # cast to int to avoid problems with sorting
-    for c in np.unique(chrstr):
-        idx = chrstr == c
-        domains[idx] = domains[idx][np.argsort(start[idx])]
+        chromint.append(c)
+    chromint = np.array(chromint)
+    return chromint
 
-    # convert the domains to numpy arrays
-    chrstr, start, end = domains.T
-    start = start.astype(int)
-    end = end.astype(int)
-    
-    return chrstr, start, end
+def extract_genome_index(assembly, chromstr, start, end):
+    """Extracts the genome and index objects from the FOF-CT data.
 
-def get_processed_data_fofct(data, col_names, genome, index):
+    Args:
+        assembly (list of str): genome assembly names
+        chromstr (np.array of str): chromosome strings
+        start (np.array of int): start positions
+        end (np.array of int): end positions
+
+    Returns:
+        genome (Genome): genome object
+        index (Index): index object
     """
-    Gets the processed data from the FOF-CT file (a table of strings, numpy object array),
-    i.e. converts it to the numpy arrays of interest.
     
-    HDF5 only supports homogeneous arrays (i.e. hyperrectangulars), but coord and nspot
-    are heterogeneous (e.g. multiple spots per domain). We solve this issue by max-padding.
+    # Add lower case version of assembly
+    # Could be necessary for genome filenames in alabtools/genomes
+    assembly = assembly + [a.lower() for a in assembly]
+    
+    # Initialize the Genome object
+    genome = None
+    # Loop through the assembly names to fine the assembly file
+    for ass in assembly:
+        # Path to the assembly file
+        genome_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/genomes/'
+        assembly_file = os.path.join(genome_dir, ass + '.info')
+        # Check if assembly_file is present
+        if not os.path.isfile(assembly_file):
+            continue
+        sys.stdout.write('Assembly {} found in alabtools/genomes. Using this.\n'.format(ass))
+        # Create the Genome object
+        # Note: if some chromosomes in np.unique(chrstr) are not in the assembly file, they will be ignored.
+        genome = Genome(ass, usechr=np.unique(chromstr))
+        break            
+    if genome is None:
+        raise ValueError('Assembly {} not found in alabtools/genomes. Need to include it.'.format(ass))
+            
+    # Create the Index object
+    index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+    
+    return genome, index
+
+
+# Functions to process the data
+
+def get_hashmaps(data, cols):
+    """Creates hashmaps that map cellIDs, chroms, traceIDs and spotIDs to integers,
+    i.e. the position of the cell/chrom/trace/spot in the final arrays.
+    
+    Also returns the maximum copy number and the maximum number of spots.
+    
+    The hashmap for cellIDs is a 1-level dictionary.
+    Example:
+        cell_labels = {'cell1': 0, 'cell2': 1, 'cell3': 2}
+    Usage:
+        cellID = 'cell1'
+        cellnum = cell_labels[cellID]
+    
+    The hashmap for the traces is a 3-level dictionary.
+    Example:
+        trace_hashmap = {'cell1': {'chr1': {'trace1': 0, 'trace2': 1},
+                                   'chr2': {'trace1': 0},
+                                   'chr3': {'trace1': 0, 'trace2': 1, 'trace3': 2}
+                                  },
+                         'cell2': {'chr1': {'trace1': 0, 'trace2': 1},
+                                   'chr2': {'trace1': 0, 'trace2': 1, 'trace3': 2}
+                                  }
+                        }
+    Usage:
+        cellID, chrom, traceID = 'cell1', 'chr1', 'trace1'
+        tracenum = trace_hashmap[cellID][chrom][traceID]
+    
+    The hashmap for the spots is a 4-level dictionary.
+    Example:
+        spot_hashmap = {'cell1': {'chr1': {'trace1': {'spot1': 0, 'spot2': 1},
+                                           'trace2': {'spot1': 0, 'spot2': 1, 'spot3': 2}
+                                           },
+                                  'chr2': {'trace1': {'spot1': 0, 'spot2': 1, 'spot3': 2},
+                                           'trace2': {'spot1': 0, 'spot2': 1}
+                                           }
+                                  },
+                        'cell2': {'chr1': {'trace1': {'spot1': 0, 'spot2': 1},
+                                           'trace2': {'spot1': 0}
+                                           },
+                                  'chr2': {'trace1': {'spot1': 0, 'spot2': 1}
+                                           }
+                                  }
+                        }
+    Usage:
+        cellID, chrom, traceID, spotID = 'cell1', 'chr1', 'trace1', 'spot1'
+        spotnum = spot_hashmap[cellID][chrom][traceID][spotID]
+    
     
     Args:
-        data (np.array of str): data (from read_fofct)
-        col_names (np.array of str): column names (from read_fofct)
-        genome (alabtools.utils.Genome)
-        index (alautils.utils.Index)
-        
-    @param data: np.array of str (data)
-            col_names: np.array of str (column names)
-    @return: 
+        data (np.array of str): data
+        cols (np.array of str): column names
+    
+    Returns:
+        cell_labels (dict): cell hashmap
+        trace_hashmap (dict): trace hashmap
+        spot_hashmap (dict): spot hashmap
+        ncell (int): number of cells
+        ncopy_max (int): maximum copy number of a trace.
+        nspot_max (int): maximum number of spots in a trace.
     """
     
-    # READ ALL ARRAYS FROM DATA
-    x = data[:, col_names == 'X'].transpose()[0].astype(np.float64)
-    y = data[:, col_names == 'Y'].transpose()[0].astype(np.float64)
-    z = data[:, col_names == 'Z'].transpose()[0].astype(np.float64)
-    chrstr = data[:, col_names == 'Chrom'].transpose()[0]
-    start = data[:, col_names == 'Chrom_Start'].transpose()[0].astype(np.int64)
-    end = data[:, col_names == 'Chrom_End'].transpose()[0].astype(np.int64)
-    traceID = data[:, col_names == 'Trace_ID'].transpose()[0]
-    if 'Cell_ID' in col_names:
-        cellID = data[:, col_names == 'Cell_ID'].transpose()[0]
+    # Extract the columns from the data
+    cellIDs = data[:, cols == 'Cell_ID'].squeeze()
+    chroms = data[:, cols == 'Chrom'].squeeze()
+    traceIDs = data[:, cols == 'Trace_ID'].squeeze()
+    spotIDs = data[:, cols == 'Spot_ID'].squeeze()
+    
+    # Initialize the hashmaps and the related variables
+    cell_hashmap = {}
+    ncell = 0
+    trace_hashmap = {}
+    ncopy_max = 1
+    spot_hashmap = {}
+    nspot_max = 1
+    
+    # Fill the hashmaps by looping through the spots
+    for cellID, chrom, traceID, spotID in zip(cellIDs, chroms, traceIDs, spotIDs):
+        cell_hashmap, ncell = process_cell_hashmap(cellID, cell_hashmap, ncell)
+        trace_hashmap, ncopy_max = process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max)
+        spot_hashmap, nspot_max = process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max)
+    
+    return cell_hashmap, trace_hashmap, spot_hashmap, ncell, ncopy_max, nspot_max
+
+def process_cell_hashmap(cellID, cell_hashmap, ncell):
+    """Adds a cellID to the cell hashmap if it is not present.
+    If it is already present, does nothing.
+    Also increments the number of cells if necessary.
+    """
+    if cellID not in cell_hashmap:
+            cell_hashmap[cellID] = ncell
+            ncell += 1
+    return cell_hashmap, ncell
+
+def process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max):
+    """Adds a traceID to the trace hashmap if it is not present.
+    If it is already present, does nothing.
+    Also increments the maximum copy number if necessary.
+    """
+    # Case 1: cellID is not yet in the hashmap
+    if cellID not in trace_hashmap:
+        trace_hashmap[cellID] = {chrom: {traceID: 0}}
+    # Case 2: cellID is in the hashmap but chrom is not
+    elif chrom not in trace_hashmap[cellID]:
+        trace_hashmap[cellID][chrom] = {traceID: 0}
+    # Case 3: cellID and chrom are in the hashmap, but traceID is not
+    elif traceID not in trace_hashmap[cellID][chrom]:
+        # Get the maximum trace ID for this cell/chrom
+        max_ID = max(trace_hashmap[cellID][chrom].values())
+        trace_hashmap[cellID][chrom][traceID] = max_ID + 1
+        # Update the maximum copy number if possible
+        # max_ID + 2 because max_ID is 0-based and we want the copy number
+        if max_ID + 2 > ncopy_max:
+            ncopy_max = max_ID + 2
+    # Case 4: cellID, chrom and traceID are in the hashmap
     else:
-        # if Cell_ID is not present, assume Cell_ID = Trace_ID
-        # these should be the cases where imaging is performed only on one chromosome,
-        # and thus there is no need to distinguish between chromosomes in the same cell.
-        cellID = np.copy(traceID)
+        pass
+    return trace_hashmap, ncopy_max
+
+def process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max):
+    """Adds a spotID to the spot hashmap if it is not present.
+    If the spotID is already present it raises an error.
+    Also increments the maximum number of spots if necessary.
+    """
+    # Case 1: cellID is not yet in the hashmap
+    if cellID not in spot_hashmap:
+        spot_hashmap[cellID] = {chrom: {traceID: {spotID: 0}}}
+    # Case 2: cellID is in the hashmap, but chrom is not
+    elif chrom not in spot_hashmap[cellID]:
+        spot_hashmap[cellID][chrom] = {traceID: {spotID: 0}}
+    # Case 3: cellID and chrom are in the hashmap, but traceID is not
+    elif traceID not in spot_hashmap[cellID][chrom]:
+        spot_hashmap[cellID][chrom][traceID] = {spotID: 0}
+    # Case 4: cellID, chrom and traceID are in the hashmap, but spotID is not
+    elif spotID not in spot_hashmap[cellID][chrom][traceID]:
+        # Get the maximum spot ID for this cell/chrom/trace
+        max_ID = max(spot_hashmap[cellID][chrom][traceID].values())
+        spot_hashmap[cellID][chrom][traceID][spotID] = max_ID + 1
+        # Update the maximum number of spots if necessary
+        # max_ID + 2 because max_ID is 0-based and we want the number of spots
+        if max_ID + 2 > nspot_max:
+            nspot_max = max_ID + 2
+    # Case 5: cellID, chrom, traceID and spotID are in the hashmap
+    else:
+        raise ValueError('Spot ID is present twice in the data!')
+    return spot_hashmap, nspot_max
+
+def extract_data(data, cols,
+                 cell_hashmap, index_hashmap, trace_hashmap, spot_hashmap,
+                 ncell, ndomain, ncopy_max, nspot_max):
+    
+    """Extracts the data from the FoF-CT data.
+
+    Args:
+        data (np.array of str): data
+        cols (np.array of str): column names
+        cell_hashmap (dict):
+                hashmap to convert cellID to cell number
+        index_hashmap (dict):
+                hashmap to convert domain (chrom, start, end)
+                to domain number
+        trace_hashmap (dict):
+                hashmap to convert traceID (along with cell/chrom)
+                to trace number
+        spot_hashmap (dict):
+                hashmap to convert spotID (along with cell/chrom/trace)
+                to spot number
+        ncell (int): number of cells
+        ndomain (int): number of domains
+        ncopy_max (int): maximum number of copies (traces)
+        nspot_max (int): maximum number of spots
+
+    Returns:
+        cell_labels (np.array(ncell), dtype='S10'): cell labels
+        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)):
+                coordinates of the spots
+        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float64)):
+                intensity of the spots
+        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int64)):
+                number of spots in each trace
+        ncopy (np.array(ncell, ndomain, dtype=int64)):
+                number of copies (traces) in each domain
+    """
+    
+    # Initialize data
+    cell_labels = np.array(list(cell_hashmap.keys())).astype('S10')
+    coordinates = np.full((ncell, ndomain, ncopy_max, nspot_max, 3),
+                         np.nan,
+                         dtype=np.float64)
+    intensity = np.full((ncell, ndomain, ncopy_max, nspot_max),
+                         np.nan,
+                         dtype=np.float64)
+    nspot = np.zeros((ncell, ndomain, ncopy_max),
+                     dtype=np.int64)
+    ncopy = np.zeros((ncell, ndomain),
+                     dtype=np.int64)
+    
+    # Unpack the data into arrays
+    xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums = unpack_data(data, cols)
+    
+    # Loop through the spots and fill in the data
+    for x, y, z, chrstr, start, end, spotID, traceID, cellID, lum in zip(xs, ys, zs,
+                                                                         chromstrs, starts, ends,
+                                                                         spotIDs, traceIDs, cellIDs,
+                                                                         lums):
+        
+        # get indices from the hashmaps
+        cellnum = cell_hashmap[cellID]
+        domnum = index_hashmap[(chrstr, start, end)]
+        tracenum = trace_hashmap[cellID][chrstr][traceID]
+        spotnum = spot_hashmap[cellID][chrstr][traceID][spotID]
+        
+        # fill in the data
+        coordinates[cellnum, domnum, tracenum, spotnum, :] = [x, y, z]
+        intensity[cellnum, domnum, tracenum, spotnum] = lum
+        # TO DECIDE: I can also compute these two as in set_manually in the CtFile class
+        nspot[cellnum, domnum, tracenum] += 1
+        ncopy[cellnum, domnum] = len(trace_hashmap[cellID][chrstr])
+        
+    return cell_labels, coordinates, intensity, nspot, ncopy
+
+def unpack_data(data, cols):
+    """Unpacks the data from the FOF-CT data into separate arrays.
+
+    Args:
+        data (np.array of str): data
+        cols (np.array of str): column names
+
+    Returns:
+        xs (np.array of float64): x coordinates
+        ys (np.array of float64): y coordinates
+        zs (np.array of float64): z coordinates
+        chromstrs (np.array of str): chromosome strings
+        starts (np.array of int64): start positions
+        ends (np.array of int64): end positions
+        spotIDs (np.array of str): spot IDs
+        traceIDs (np.array of str): trace IDs
+        cellIDs (np.array of str): cell IDs
+        lums (np.array of float64): spot intensities
+    """
+    xs = data[:, cols == 'X'].astype(np.float64).squeeze()
+    ys = data[:, cols == 'Y'].astype(np.float64).squeeze()
+    zs = data[:, cols == 'Z'].astype(np.float64).squeeze()
+    chromstrs = data[:, cols == 'Chrom'].squeeze()
+    starts = data[:, cols == 'Chrom_Start'].astype(np.int64).squeeze()
+    ends = data[:, cols == 'Chrom_End'].astype(np.int64).squeeze()
+    spotIDs = data[:, cols == 'Spot_ID'].squeeze()
+    traceIDs = data[:, cols == 'Trace_ID'].squeeze()
+    if 'Cell_ID' in cols:
+        cellIDs = data[:, cols == 'Cell_ID'].squeeze()
+    else:
+        # if datasets has only one chromosome TraceID = CellID
+        cellIDs = np.copy(traceIDs)
         warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
+    if 'Intensity' in cols:
+        lums = data[:, cols == 'Intensity'].astype(np.float64).squeeze()
+    else:
+        lums = np.full(len(xs), np.nan)
+    return xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums
     
-    # GET ATTRIBUTES
-    ncell = len(np.unique(cellID))
-    nspot_tot = np.sum(~np.isnan(x))
-    ntrace_tot = len(np.unique(traceID))
-    cell_labels = np.unique(cellID)
+
+
+# Final function to process the FOF-CT file into the desired format
+
+def process(filename, in_assembly=None):
+    """
+    Read the FOF-CT (4DN Fish Omics Format - Chromatin Tracing) csv file.
     
-    # CREATE COORD, NSPOT, NCOPY ARRAYS
-    coord = []  # coordinates of spots (cell -> domain -> copy -> spot -> coord)
-    nspot = []  # number of spots (cell -> domain -> copy -> nspot)
-    ncopy = []  # number of copies (cell -> domain -> ncopy)
-    nspot_max = 0  # maximum number of spots in a copy (for max-padding)
-    ncopy_max = 0  # maximum number of copies in a domain (for max-padding)
-    # Loop over: cell -> domain -> copy -> spot -> coord (x, y, z)
-    for cell in cell_labels:
-        # get cell data
-        x_cell = x[cellID == cell]
-        y_cell = y[cellID == cell]
-        z_cell = z[cellID == cell]
-        chrstr_cell = chrstr[cellID == cell]
-        start_cell = start[cellID == cell]
-        end_cell = end[cellID == cell]
-        traceID_cell = traceID[cellID == cell]
-        coord_cell = []  # coordinates for a cell
-        nspot_cell = []  # number of spots for a cell
-        ncopy_cell = []  # number of copies for a cell
-        for dom in zip(index.chromstr, index.start, index.end):
-            if dom[0] not in genome.chroms:
-                warnings.warn("{} not present in Genome. Removed.".format(dom[0]), UserWarning)
-                continue
-            # get domain data (within cell)
-            x_dom = x_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-            y_dom = y_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-            z_dom = z_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-            traceID_dom = traceID_cell[(chrstr_cell == dom[0]) & (start_cell == dom[1]) & (end_cell == dom[2])]
-            coord_dom = []  # coordinates for a domain in a cell
-            nspot_dom = []  # number of spots for a domain in a cell
-            ncopy_dom = len(np.unique(traceID_dom))  # number of copies of a domain in a cell
-            if ncopy_dom > ncopy_max:
-                ncopy_max = ncopy_dom  # update ncopy_max
-            for trc in np.unique(traceID_dom):  # Here trace and copy are used as synonyms
-                # get trace data (within cell/domain)
-                x_trc = x_dom[traceID_dom == trc]
-                y_trc = y_dom[traceID_dom == trc]
-                z_trc = z_dom[traceID_dom == trc]
-                # I checked that some data have NaNs in x, y, z. To be safe here I remove them
-                x_trc_nonan = x_trc[~np.isnan(x_trc) & ~np.isnan(y_trc) & ~np.isnan(z_trc)]
-                y_trc_nonan = y_trc[~np.isnan(x_trc) & ~np.isnan(y_trc) & ~np.isnan(z_trc)]
-                z_trc_nonan = z_trc[~np.isnan(x_trc) & ~np.isnan(y_trc) & ~np.isnan(z_trc)]
-                coord_trc = []  # coordinates for a copy in a domain in a cell
-                nspot_trc = len(x_trc_nonan)
-                if nspot_trc > nspot_max:
-                    nspot_max = nspot_trc  # update nspot_max
-                for xx, yy, zz in zip(x_trc_nonan, y_trc_nonan, z_trc_nonan):  # loop over spots
-                    # append spot to trace
-                    coord_trc.append([xx, yy, zz])
-                # append trace to domain
-                coord_dom.append(coord_trc)
-                nspot_dom.append(nspot_trc)
-            # append domain to cell
-            coord_cell.append(coord_dom)
-            nspot_cell.append(nspot_dom)
-            ncopy_cell.append(ncopy_dom)
-        # append cell to arrays
-        coord.append(coord_cell)
-        nspot.append(nspot_cell)
-        ncopy.append(ncopy_cell)
+    Get the genome assembly, column names and data from the FOF-CT file.
     
-    # CREATE HOMOGENEOUS ARRAYS (coord and nspot)
-    ncopy = np.array(ncopy).astype(np.int64)  # already homogeneous
+    Args:
+        filename (str): path to the csv file
+        in_assembly (str): genome assembly name (e.g. hg38)
+    
+    Returns:
+        genome (Genome): genome object
+        index (Index): index object
+        cell_labels (np.array(ncell), dtype='S10'): cell labels
+        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)):
+                coordinates of the spots
+        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float64)):
+                intensity of the spots
+        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int64)):
+                number of spots in each trace
+        ncopy (np.array(ncell, ndomain, dtype=int64)):
+                number of copies (traces) in each domain
+    """
+    
+    # READ THE FILE
+    assembly, cols, data = read(filename)
+    
+    # GET THE DOMAINS
+    chromstr, start, end = get_domains(data, cols)
+    
+    # GET THE HASHMAPS
+    cell_hashmap, trace_hashmap, spot_hashmap, ncell, ncopy_max, nspot_max = get_hashmaps(data, cols)
+    
+    # GET THE GENOME AND INDEX
+    genome, index = extract_genome_index(assembly, chromstr, start, end)
     ndomain = len(index)
-    coord_homo = np.nan * np.zeros((ncell, ndomain, ncopy_max, nspot_max, 3), dtype=np.float64)
-    nspot_homo = np.zeros((ncell, ndomain, ncopy_max), dtype=np.int64)
-    for cell in range(ncell):  # Loop to go heterogeneous -> homogeneous
-        for dom in range(ndomain):
-            for trc in range(ncopy[cell, dom]):
-                nspot_homo[cell, dom, trc] = nspot[cell][dom][trc]
-                for spot in range(nspot[cell][dom][trc]):
-                    for i in range(3):
-                        coord_homo[cell, dom, trc, spot, i] = coord[cell][dom][trc][spot][i]
-    # final cast
-    coord = coord_homo
-    nspot = nspot_homo.astype(np.int64)
+    index_hashmap = index.get_index_hashmap()
     
-    return ncell, nspot_tot, ntrace_tot, nspot_max, ncopy_max, cell_labels, coord, nspot, ncopy
+    # EXTRACT THE DATA
+    cell_labels, coordinates, intensity, nspot, ncopy = extract_data(data, cols,
+                                                                     cell_hashmap, index_hashmap, trace_hashmap, spot_hashmap,
+                                                                     ncell, ndomain, ncopy_max, nspot_max)
+    
+    # FREE UP MEMORY
+    del cols, data, chromstr, start, end, cell_hashmap, trace_hashmap, spot_hashmap, index_hashmap
+    
+    return genome, index, cell_labels, coordinates, intensity, nspot, ncopy, ncell, ndomain, ncopy_max, nspot_max
