@@ -128,8 +128,7 @@ def extract_cols(header):
     Returns:
         cols (np.array of str): column names
     """
-    col_keys = ['Spot_ID, Trace_ID', 'X', 'Y', 'Z',
-                'Chrom', 'Chrom_Start', 'Chrom_End']  # possible keys for the columns
+    col_keys = ['Spot_ID, Trace_ID', 'Cell_ID']  # possible keys for the columns
     cols = None
     for line in header:
         line = line.replace(' ', '')
@@ -139,6 +138,8 @@ def extract_cols(header):
             # if the column key is in the line, extract the column names
             if '=' in line:  # = may or may not be present
                 line = line.split('=')[1]  # if it is, take the right part
+                line = line.replace(' ', '')
+                line = line.strip('#" ,\n()[]{}')
             cols = line.split(',')
             cols = np.array(cols)
             # stop looping through the column keys if the columns are found
@@ -390,13 +391,12 @@ def process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max):
         trace_hashmap[cellID][chrom] = {traceID: 0}
     # Case 3: cellID and chrom are in the hashmap, but traceID is not
     elif traceID not in trace_hashmap[cellID][chrom]:
-        # Get the maximum trace ID for this cell/chrom
-        max_ID = max(trace_hashmap[cellID][chrom].values())
-        trace_hashmap[cellID][chrom][traceID] = max_ID + 1
-        # Update the maximum copy number if possible
-        # max_ID + 2 because max_ID is 0-based and we want the copy number
-        if max_ID + 2 > ncopy_max:
-            ncopy_max = max_ID + 2
+        # Add the traceID to the hashmap with the next available ID
+        total_traces = len(trace_hashmap[cellID][chrom])
+        trace_hashmap[cellID][chrom][traceID] = total_traces
+        # Update the maximum copy number if necessary
+        if total_traces + 1 > ncopy_max:
+            ncopy_max = total_traces + 1
     # Case 4: cellID, chrom and traceID are in the hashmap
     else:
         pass
@@ -418,13 +418,12 @@ def process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max
         spot_hashmap[cellID][chrom][traceID] = {spotID: 0}
     # Case 4: cellID, chrom and traceID are in the hashmap, but spotID is not
     elif spotID not in spot_hashmap[cellID][chrom][traceID]:
-        # Get the maximum spot ID for this cell/chrom/trace
-        max_ID = max(spot_hashmap[cellID][chrom][traceID].values())
-        spot_hashmap[cellID][chrom][traceID][spotID] = max_ID + 1
+        # Add the spotID to the hashmap with the next available ID
+        total_spots = len(spot_hashmap[cellID][chrom][traceID])
+        spot_hashmap[cellID][chrom][traceID][spotID] = total_spots
         # Update the maximum number of spots if necessary
-        # max_ID + 2 because max_ID is 0-based and we want the number of spots
-        if max_ID + 2 > nspot_max:
-            nspot_max = max_ID + 2
+        if total_spots + 1 > nspot_max:
+            nspot_max = total_spots + 1
     # Case 5: cellID, chrom, traceID and spotID are in the hashmap
     else:
         raise ValueError('Spot ID is present twice in the data!')
