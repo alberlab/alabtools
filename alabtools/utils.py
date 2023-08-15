@@ -794,10 +794,9 @@ class Index(object):
         (chr, start, end) to its position in the index.
         """
         hashmap = {}
-        for i, c, s, e in enumerate(zip(self.chromstr,
-                                        self.start,
-                                        self.end)):
-            dom = (c, s, e)
+        for i, dom in enumerate(zip(self.chromstr,
+                                    self.start,
+                                    self.end)):
             if dom not in hashmap:
                 hashmap[dom] = [i]
             else:
