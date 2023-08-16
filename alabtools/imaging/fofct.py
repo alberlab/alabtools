@@ -314,23 +314,23 @@ def get_hashmaps(data, cols):
     
     The hashmap for the spots is a 4-level dictionary.
     Example:
-        spot_hashmap = {'cell1': {'chr1': {'trace1': {'spot1': 0, 'spot2': 1},
-                                           'trace2': {'spot1': 0, 'spot2': 1, 'spot3': 2}
-                                           },
-                                  'chr2': {'trace1': {'spot1': 0, 'spot2': 1, 'spot3': 2},
-                                           'trace2': {'spot1': 0, 'spot2': 1}
-                                           }
+        spot_hashmap = {'cell1': {('chr1', 1000, 2000)': {'trace1': {'spot1': 0, 'spot2': 1},
+                                                          'trace2': {'spot1': 0, 'spot2': 1, 'spot3': 2}
+                                                         },
+                                  ('chr2', 3000, 4000)': {'trace1': {'spot1': 0, 'spot2': 1, 'spot3': 2},
+                                                          'trace2': {'spot1': 0, 'spot2': 1}
+                                                         }
                                   },
-                        'cell2': {'chr1': {'trace1': {'spot1': 0, 'spot2': 1},
-                                           'trace2': {'spot1': 0}
-                                           },
-                                  'chr2': {'trace1': {'spot1': 0, 'spot2': 1}
-                                           }
+                        'cell2': {('chr1', 2000, 3000)': {'trace1': {'spot1': 0, 'spot2': 1},
+                                                          'trace2': {'spot1': 0}
+                                                         },
+                                  ('chr2', 5000, 6000)': {'trace1': {'spot1': 0, 'spot2': 1}
+                                                         }
                                   }
                         }
     Usage:
-        cellID, chrom, traceID, spotID = 'cell1', 'chr1', 'trace1', 'spot1'
-        spotnum = spot_hashmap[cellID][chrom][traceID][spotID]
+        cellID, domain, traceID, spotID = 'cell1', ('chr1', 1000, 2000), 'trace1', 'spot1'
+        spotnum = spot_hashmap[cellID][domain][traceID][spotID]
     
     
     Args:
@@ -349,6 +349,8 @@ def get_hashmaps(data, cols):
     # Extract the columns from the data
     cellIDs = data[:, cols == 'Cell_ID'].squeeze()
     chroms = data[:, cols == 'Chrom'].squeeze()
+    starts = data[:, cols == 'Start'].squeeze()
+    ends = data[:, cols == 'End'].squeeze()
     traceIDs = data[:, cols == 'Trace_ID'].squeeze()
     spotIDs = data[:, cols == 'Spot_ID'].squeeze()
     
@@ -361,10 +363,11 @@ def get_hashmaps(data, cols):
     nspot_max = 1
     
     # Fill the hashmaps by looping through the spots
-    for cellID, chrom, traceID, spotID in zip(cellIDs, chroms, traceIDs, spotIDs):
+    for cellID, chrom, start, end, traceID, spotID in zip(cellIDs, chroms, starts, ends, traceIDs, spotIDs):
+        domain = (chrom, start, end)
         cell_hashmap, ncell = process_cell_hashmap(cellID, cell_hashmap, ncell)
         trace_hashmap, ncopy_max = process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max)
-        spot_hashmap, nspot_max = process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max)
+        spot_hashmap, nspot_max = process_spot_hashmap(cellID, domain, traceID, spotID, spot_hashmap, nspot_max)
     
     return cell_hashmap, trace_hashmap, spot_hashmap, ncell, ncopy_max, nspot_max
 
@@ -402,29 +405,29 @@ def process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max):
         pass
     return trace_hashmap, ncopy_max
 
-def process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max):
+def process_spot_hashmap(cellID, domain, traceID, spotID, spot_hashmap, nspot_max):
     """Adds a spotID to the spot hashmap if it is not present.
     If the spotID is already present it raises an error.
     Also increments the maximum number of spots if necessary.
     """
     # Case 1: cellID is not yet in the hashmap
     if cellID not in spot_hashmap:
-        spot_hashmap[cellID] = {chrom: {traceID: {spotID: 0}}}
-    # Case 2: cellID is in the hashmap, but chrom is not
-    elif chrom not in spot_hashmap[cellID]:
-        spot_hashmap[cellID][chrom] = {traceID: {spotID: 0}}
-    # Case 3: cellID and chrom are in the hashmap, but traceID is not
-    elif traceID not in spot_hashmap[cellID][chrom]:
-        spot_hashmap[cellID][chrom][traceID] = {spotID: 0}
-    # Case 4: cellID, chrom and traceID are in the hashmap, but spotID is not
-    elif spotID not in spot_hashmap[cellID][chrom][traceID]:
+        spot_hashmap[cellID] = {domain: {traceID: {spotID: 0}}}
+    # Case 2: cellID is in the hashmap, but domain is not
+    elif domain not in spot_hashmap[cellID]:
+        spot_hashmap[cellID][domain] = {traceID: {spotID: 0}}
+    # Case 3: cellID and domain are in the hashmap, but traceID is not
+    elif traceID not in spot_hashmap[cellID][domain]:
+        spot_hashmap[cellID][domain][traceID] = {spotID: 0}
+    # Case 4: cellID, domain and traceID are in the hashmap, but spotID is not
+    elif spotID not in spot_hashmap[cellID][domain][traceID]:
         # Add the spotID to the hashmap with the next available ID
-        total_spots = len(spot_hashmap[cellID][chrom][traceID])
-        spot_hashmap[cellID][chrom][traceID][spotID] = total_spots
+        total_spots = len(spot_hashmap[cellID][domain][traceID])
+        spot_hashmap[cellID][domain][traceID][spotID] = total_spots
         # Update the maximum number of spots if necessary
         if total_spots + 1 > nspot_max:
             nspot_max = total_spots + 1
-    # Case 5: cellID, chrom, traceID and spotID are in the hashmap
+    # Case 5: cellID, domain, traceID and spotID are in the hashmap
     else:
         raise ValueError('Spot ID is present twice in the data!')
     return spot_hashmap, nspot_max
@@ -492,7 +495,7 @@ def extract_data(data, cols,
         cellnum = cell_hashmap[cellID]
         domnum = index_hashmap[(chrstr, start, end)]
         tracenum = trace_hashmap[cellID][chrstr][traceID]
-        spotnum = spot_hashmap[cellID][chrstr][traceID][spotID]
+        spotnum = spot_hashmap[cellID][(chrstr, start, end)][traceID][spotID]
         
         # fill in the data
         coordinates[cellnum, domnum, tracenum, spotnum, :] = [x, y, z]
