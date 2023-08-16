@@ -49,7 +49,7 @@ def read(filename):
         raise ValueError('The genome assembly is not specified in the header.')
     if cols is None:
         raise ValueError('The column names are not specified in the header.')
-    required_cols = ['X', 'Y', 'Z', 'Chrom', 'Chrom_Start', 'Chrom_End', 'Trace_ID', 'Spot_ID']
+    required_cols = ['X', 'Y', 'Z', 'Chrom', 'Chrom_Start', 'Chrom_End', 'Trace_ID']
     for col in required_cols:
         if col not in cols:
             raise ValueError('The column {} is not present in the header.'.format(col))
@@ -526,17 +526,20 @@ def unpack_data(data, cols):
     chromstrs = data[:, cols == 'Chrom'].squeeze()
     starts = data[:, cols == 'Chrom_Start'].astype(np.int64).squeeze()
     ends = data[:, cols == 'Chrom_End'].astype(np.int64).squeeze()
-    spotIDs = data[:, cols == 'Spot_ID'].squeeze()
+    try:
+        spotIDs = data[:, cols == 'Spot_ID'].squeeze()
+    except IndexError:
+        spotIDs = np.arange(len(xs))
     traceIDs = data[:, cols == 'Trace_ID'].squeeze()
-    if 'Cell_ID' in cols:
+    try:
         cellIDs = data[:, cols == 'Cell_ID'].squeeze()
-    else:
-        # if datasets has only one chromosome TraceID = CellID
+    except IndexError:
+        # if datasets has only one chromosome, maybe they assumed TraceID = CellID
         cellIDs = np.copy(traceIDs)
         warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
-    if 'Intensity' in cols:
+    try:
         lums = data[:, cols == 'Intensity'].astype(np.float64).squeeze()
-    else:
+    except IndexError:
         lums = np.full(len(xs), np.nan)
     return xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums
     
