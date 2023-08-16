@@ -526,20 +526,20 @@ def unpack_data(data, cols):
     chromstrs = data[:, cols == 'Chrom'].squeeze()
     starts = data[:, cols == 'Chrom_Start'].astype(np.int64).squeeze()
     ends = data[:, cols == 'Chrom_End'].astype(np.int64).squeeze()
-    try:
+    if 'Spot_ID' in cols:
         spotIDs = data[:, cols == 'Spot_ID'].squeeze()
-    except IndexError:
+    else:
         spotIDs = np.arange(len(xs))
     traceIDs = data[:, cols == 'Trace_ID'].squeeze()
-    try:
+    if 'Cell_ID' in cols:
         cellIDs = data[:, cols == 'Cell_ID'].squeeze()
-    except IndexError:
+    else:
         # if datasets has only one chromosome, maybe they assumed TraceID = CellID
         cellIDs = np.copy(traceIDs)
         warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
-    try:
+    if 'Intensity' in cols:
         lums = data[:, cols == 'Intensity'].astype(np.float64).squeeze()
-    except IndexError:
+    else:
         lums = np.full(len(xs), np.nan)
     return xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums
     
