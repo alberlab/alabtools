@@ -347,12 +347,7 @@ def get_hashmaps(data, cols):
     """
     
     # Extract the columns from the data
-    cellIDs = data[:, cols == 'Cell_ID'].squeeze()
-    chroms = data[:, cols == 'Chrom'].squeeze()
-    starts = data[:, cols == 'Start'].squeeze()
-    ends = data[:, cols == 'End'].squeeze()
-    traceIDs = data[:, cols == 'Trace_ID'].squeeze()
-    spotIDs = data[:, cols == 'Spot_ID'].squeeze()
+    _, _, _, chroms, starts, ends, spotIDs, traceIDs, cellIDs, _ = unpack_data(data, cols)
     
     # Initialize the hashmaps and the related variables
     cell_hashmap = {}
