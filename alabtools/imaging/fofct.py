@@ -472,10 +472,6 @@ def extract_data(data, cols,
     intensity = np.full((ncell, ndomain, ncopy_max, nspot_max),
                          np.nan,
                          dtype=np.float32)
-    nspot = np.zeros((ncell, ndomain, ncopy_max),
-                     dtype=np.int32)
-    ncopy = np.zeros((ncell, ndomain),
-                     dtype=np.int32)
     
     # Unpack the data into arrays
     xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums = unpack_data(data, cols)
@@ -495,11 +491,8 @@ def extract_data(data, cols,
         # fill in the data
         coordinates[cellnum, domnum, tracenum, spotnum, :] = [x, y, z]
         intensity[cellnum, domnum, tracenum, spotnum] = lum
-        # TO DECIDE: I can also compute these two as in set_manually in the CtFile class
-        nspot[cellnum, domnum, tracenum] += 1
-        ncopy[cellnum, domnum] = len(trace_hashmap[cellID][chrstr])
         
-    return cell_labels, coordinates, intensity, nspot, ncopy
+    return cell_labels, coordinates, intensity
 
 def unpack_data(data, cols):
     """Unpacks the data from the FOF-CT data into separate arrays.
@@ -586,11 +579,11 @@ def process(filename, in_assembly=None):
     index_hashmap = index.get_index_hashmap()
     
     # EXTRACT THE DATA
-    cell_labels, coordinates, intensity, nspot, ncopy = extract_data(data, cols,
-                                                                     cell_hashmap, index_hashmap, trace_hashmap, spot_hashmap,
-                                                                     ncell, ndomain, ncopy_max, nspot_max)
+    cell_labels, coordinates, intensity = extract_data(data, cols,
+                                                       cell_hashmap, index_hashmap, trace_hashmap, spot_hashmap,
+                                                       ncell, ndomain, ncopy_max, nspot_max)
     
     # FREE UP MEMORY
     del cols, data, chromstr, start, end, cell_hashmap, trace_hashmap, spot_hashmap, index_hashmap
     
-    return genome, index, cell_labels, coordinates, intensity, nspot, ncopy, ncell, ndomain, ncopy_max, nspot_max
+    return genome, index, cell_labels, coordinates, intensity, ncell, ndomain, ncopy_max, nspot_max
