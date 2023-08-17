@@ -454,13 +454,13 @@ def extract_data(data, cols,
 
     Returns:
         cell_labels (np.array(ncell), dtype='S10'): cell labels
-        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)):
+        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float32)):
                 coordinates of the spots
-        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float64)):
+        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float32)):
                 intensity of the spots
-        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int64)):
+        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int32)):
                 number of spots in each trace
-        ncopy (np.array(ncell, ndomain, dtype=int64)):
+        ncopy (np.array(ncell, ndomain, dtype=int32)):
                 number of copies (traces) in each domain
     """
     
@@ -468,14 +468,14 @@ def extract_data(data, cols,
     cell_labels = np.array(list(cell_hashmap.keys())).astype('S10')
     coordinates = np.full((ncell, ndomain, ncopy_max, nspot_max, 3),
                          np.nan,
-                         dtype=np.float64)
+                         dtype=np.float32)
     intensity = np.full((ncell, ndomain, ncopy_max, nspot_max),
                          np.nan,
-                         dtype=np.float64)
+                         dtype=np.float32)
     nspot = np.zeros((ncell, ndomain, ncopy_max),
-                     dtype=np.int64)
+                     dtype=np.int32)
     ncopy = np.zeros((ncell, ndomain),
-                     dtype=np.int64)
+                     dtype=np.int32)
     
     # Unpack the data into arrays
     xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums = unpack_data(data, cols)
@@ -509,23 +509,23 @@ def unpack_data(data, cols):
         cols (np.array of str): column names
 
     Returns:
-        xs (np.array of float64): x coordinates
-        ys (np.array of float64): y coordinates
-        zs (np.array of float64): z coordinates
+        xs (np.array of float32): x coordinates
+        ys (np.array of float32): y coordinates
+        zs (np.array of float32): z coordinates
         chromstrs (np.array of str): chromosome strings
-        starts (np.array of int64): start positions
-        ends (np.array of int64): end positions
+        starts (np.array of int32): start positions
+        ends (np.array of int32): end positions
         spotIDs (np.array of str): spot IDs
         traceIDs (np.array of str): trace IDs
         cellIDs (np.array of str): cell IDs
-        lums (np.array of float64): spot intensities
+        lums (np.array of float32): spot intensities
     """
-    xs = data[:, cols == 'X'].astype(np.float64).squeeze()
-    ys = data[:, cols == 'Y'].astype(np.float64).squeeze()
-    zs = data[:, cols == 'Z'].astype(np.float64).squeeze()
+    xs = data[:, cols == 'X'].astype(np.float32).squeeze()
+    ys = data[:, cols == 'Y'].astype(np.float32).squeeze()
+    zs = data[:, cols == 'Z'].astype(np.float32).squeeze()
     chromstrs = data[:, cols == 'Chrom'].squeeze()
-    starts = data[:, cols == 'Chrom_Start'].astype(np.int64).squeeze()
-    ends = data[:, cols == 'Chrom_End'].astype(np.int64).squeeze()
+    starts = data[:, cols == 'Chrom_Start'].astype(np.int32).squeeze()
+    ends = data[:, cols == 'Chrom_End'].astype(np.int32).squeeze()
     if 'Spot_ID' in cols:
         spotIDs = data[:, cols == 'Spot_ID'].squeeze()
     else:
@@ -538,7 +538,7 @@ def unpack_data(data, cols):
         cellIDs = np.copy(traceIDs)
         warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
     if 'Intensity' in cols:
-        lums = data[:, cols == 'Intensity'].astype(np.float64).squeeze()
+        lums = data[:, cols == 'Intensity'].astype(np.float32).squeeze()
     else:
         lums = np.full(len(xs), np.nan)
     return xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums
@@ -561,13 +561,13 @@ def process(filename, in_assembly=None):
         genome (Genome): genome object
         index (Index): index object
         cell_labels (np.array(ncell), dtype='S10'): cell labels
-        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)):
+        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float32)):
                 coordinates of the spots
-        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float64)):
+        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float32)):
                 intensity of the spots
-        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int64)):
+        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int32)):
                 number of spots in each trace
-        ncopy (np.array(ncell, ndomain, dtype=int64)):
+        ncopy (np.array(ncell, ndomain, dtype=int32)):
                 number of copies (traces) in each domain
     """
     
