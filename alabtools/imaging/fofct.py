@@ -424,7 +424,7 @@ def process_spot_hashmap(cellID, domain, traceID, spotID, spot_hashmap, nspot_ma
             nspot_max = total_spots + 1
     # Case 5: cellID, domain, traceID and spotID are in the hashmap
     else:
-        raise ValueError('Spot ID is present twice in the data!')
+        raise ValueError('SpotID {} is present twice in the data!').format(spotID)
     return spot_hashmap, nspot_max
 
 def extract_data(data, cols,
