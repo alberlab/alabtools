@@ -379,6 +379,10 @@ class TestCtFile(unittest.TestCase):
         np.testing.assert_allclose(ct.coordinates, test_data['coordinates'], equal_nan=True)
 
 
+if __name__ == '__main__':
+    unittest.main()
+
+
 def writeFofctFile(filename, data):
     """Write a FoF-CT file (csv format) from the data.
     
@@ -434,6 +438,8 @@ def writeFofctFile(filename, data):
     
     return None
 
+# Functions to generate random data for testing
+
 def createTestData():
     """Generates random chromating tracing data for testing.
     
@@ -454,23 +460,44 @@ def createTestData():
     
     # set seed for reproducibility
     np.random.seed(0)
-    
-    # set genome assembly
+    # set attributes
+    assembly, chroms, ncell, ndomain, ncopy_max, nspot_max = set_attributes()
+    # create the index
+    chromstr, start, end = create_index(chroms, ndomain)
+    # create cell_labels
+    cell_labels = create_cell_labels(ncell)
+    # create ncopy
+    ncopy = create_ncopy(ncell, ndomain, ncopy_max, chromstr)
+    # create nspot
+    nspot = create_nspot(ncell, ndomain, ncopy_max, nspot_max, ncopy)
+    # create coordinates
+    coordinates = create_coordinates(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot)
+    # compute total number of spots
+    nspot_tot = np.sum(nspot)
+    # compute total number of traces
+    ntrace_tot = compute_ntrace_tot(chroms, chromstr, ncopy)
+    # return everything as a dictionary
+    data = create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot, coordinates)
+    return data
+
+
+def set_attributes():
+    """Set the attributes of the CtFile object for testing."""
     assembly = 'hg38'
     chroms = ['chr1', 'chr2', 'chrX']
-    
-    # set the attributes
     ncell = 5
     ndomain = 205
     ncopy_max = 2
     nspot_max = 7
-    
-    # create the index
-    # first partition the domains among the chromosomes
-    sizes = np.random.rand(len(chroms))  # list of # of domains for each chromosome
-    sizes = ndomain * sizes / np.sum(sizes)
-    sizes = np.round(sizes).astype(int)
-    sizes[0] += ndomain - np.sum(sizes)  # adjust sizes[0] so that np.sum(sizes) == ndomain
+    return assembly, chroms, ncell, ndomain, ncopy_max, nspot_max
+
+def create_index(chroms, ndomain):
+    """Create the index for testing, i.e. the chromosome, start and end arrays."""
+    # Size (in number of domains) of each chromosome
+    sizes = np.random.rand(len(chroms))  # between 0 and 1
+    sizes = ndomain * sizes / np.sum(sizes)  # normalize to ndomain (float)
+    sizes = np.round(sizes).astype(int)  # round to integer
+    sizes[0] += ndomain - np.sum(sizes)  # normalize to ndomain (integer)
     if np.any(sizes <= 0):
         raise ValueError('One of the sizes is <= 0. Try again.')
     chromstr = []
@@ -480,66 +507,57 @@ def createTestData():
         for i in range(size):
             chromstr.append(chrom)
             # generate start[i] between end[-1]+1000 and end[i-1]+10000
-            if i == 0:  # if i=0 there is end[-1], so start from 0
+            if i == 0:  # there is no end[-1]
                 start.append(np.random.randint(0, 10000))
             else:
                 start.append(end[-1] + np.random.randint(1000, 10000))
-            # generate end[i] between start[-1]+100 and start[i]+1000
             end.append(start[-1] + np.random.randint(100, 1000))
-    chromstr, start, end = np.array(chromstr), np.array(start), np.array(end)
-    
-    # create cell_labels
-    cell_labels = np.arange(ncell).astype('S10')
-    
-    # create ncopy
-    # If I allows for ncopy to be 0, then there is the risk that,
-    # for small data, a domain has no copy in any cell, and thus
-    # that domain is missed in the test.
-    # For now I am not allowing for ncopy to be 0, but this feature
-    # can be added in the future.
+    return np.array(chromstr), np.array(start), np.array(end)
+
+def create_cell_labels(ncell):
+    """Create the cell labels for testing."""
+    return np.arange(ncell).astype('S10')
+
+def create_ncopy(ncell, ndomain, ncopy_max, chromstr):
+    """Create the ncopy array for testing.
+    We avoid 0 because - if data size is small - it may not be possible to
+    reconstruct the original data from the CtFile object."""
     ncopy = np.random.randint(1, ncopy_max + 1, size=(ncell, ndomain))
-    ncopy[:, chromstr == 'chrX'] = 1  # force ncopy=1 for chrX
-    ncopy[:, chromstr == 'chrY'] = 1  # force ncopy=1 for chrY
-    
-    # create nspot
+    ncopy[:, chromstr == 'chrX'] = 1
+    ncopy[:, chromstr == 'chrY'] = 1
+    return ncopy
+
+def create_nspot(ncell, ndomain, ncopy_max, nspot_max, ncopy):
+    """Create the nspot array for testing.
+    We avoid 0 because - if data size is small - it may not be possible to
+    reconstruct the original data from the CtFile object."""
     nspot = np.zeros((ncell, ndomain, ncopy_max), dtype=int)
     for cellnum in range(ncell):
         for domainnum in range(ndomain):
             for copynum in range(ncopy[cellnum, domainnum]):
-                # Same as for ncopy, I am not allowing for nspot to be 0.
-                # If I allows for nspot to be 0, then there is the risk that,
-                # for small data, a copy has no spot in any cell, and thus
-                # that copy is missed in the test.
                 nspot[cellnum, domainnum, copynum] = np.random.randint(1, nspot_max + 1)
+    return nspot
 
-    # create coordinates
-    # create boxes to confine the coordinates of each copy, making them highly separated
-    boxsize = 500  # length of the box side
-    separation = 5000  # minimum distance between centroids of boxes
-    centers = np.linspace(0, separation * (ncopy_max - 1), ncopy_max)  # same for x, y, and z
-    # initialize coordinates
+def create_coordinates(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot):
+    """Create the coordinates array for testing.
+    The coordinates are generated such that the spots of different alleles are
+    highly separated in 3D space, to avoid any ambiguity in the reconstruction."""
+    boxsize = 500
+    separation = 5000
+    centers = np.linspace(0, separation * (ncopy_max - 1), ncopy_max)
     coordinates = np.full((ncell, ndomain, ncopy_max, nspot_max, 3), np.nan)
-    # loop over cells, domains, copies, and spots to generate coordinates
     for cellnum in range(ncell):
         for domainnum in range(ndomain):
             for copynum in range(ncopy[cellnum, domainnum]):
                 for spotnum in range(nspot[cellnum, domainnum, copynum]):
                     x, y, z = centers[copynum] + boxsize * (np.random.rand(3) - 0.5)
                     coordinates[cellnum, domainnum, copynum, spotnum, :] = [x, y, z]
-    
-    # compute total number of spots
-    nspot_tot = np.sum(nspot)
-    
-    # compute total number of traces
-    ntrace_tot = 0
-    # a trace is a chromosome copy in a cell
-    # so we have to loop over chromosomes and check how many copies are in each cell
-    for chrom in chroms:
-        ncopy_chrom = ncopy[:, np.array(chromstr) == chrom]  # ncell x ndomain_chrom
-        ncopy_max_chrom = np.max(ncopy_chrom, axis=1)  # ncell
-        ntrace_tot += np.sum(ncopy_max_chrom)
-    
-    # return everything as a dictionary
+    return coordinates
+
+def create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max,
+                          nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot,
+                          coordinates):
+    """Create the data dictionary for testing."""
     data = {
         'assembly': assembly,
         'chromstr': chromstr,
@@ -556,9 +574,15 @@ def createTestData():
         'nspot': nspot,
         'coordinates': coordinates
     }
-    
     return data
 
-
-if __name__ == '__main__':
-    unittest.main()
+def compute_ntrace_tot(chroms, chromstr, ncopy):
+    """Compute the total number of traces for testing."""
+    ntrace_tot = 0
+    # a trace is a chromosome copy in a cell
+    # so we have to loop over chromosomes and check how many copies are in each cell
+    for chrom in chroms:
+        ncopy_chrom = ncopy[:, np.array(chromstr) == chrom]  # ncell x ndomain_chrom
+        ncopy_max_chrom = np.max(ncopy_chrom, axis=1)  # ncell
+        ntrace_tot += np.sum(ncopy_max_chrom)
+    return ntrace_tot
