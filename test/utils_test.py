@@ -103,18 +103,25 @@ class TestIndex(unittest.TestCase):
         return super().tearDown()
     
     def test_get_chromint(self):
-        """Test initialization of Genome from binary chromosomes.
-        """
-        # Define the input
-        chromstr = ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX']
-        start = [0, 100, 200, 0, 100, 0, 0, 100]
-        end = [100, 200, 300, 100, 200, 100, 100, 200]
-        # Initialize the Index object
+        """Test initialization of Genome from binary chromosomes."""
+        chromstr, start, end, chromint = generate_domains()
         index = Index(chrom=chromstr, start=start, end=end)
-        # Check the results
-        chromint = [1, 1, 1, 2, 2, 7, 100, 100]
         np.testing.assert_array_equal(index.get_chromint(), chromint)
-        
+    
+    def test_get_index_hashmap(self):
+        """Test get_index_hashmap method in Index."""
+        chromstr, start, end, _ = generate_domains()
+        index = Index(chrom=chromstr, start=start, end=end)
+        hashmap = index.get_index_hashmap()
+        for i, dom in enumerate(zip(chromstr, start, end)):
+            self.assertEqual(hashmap[dom], [i])
+
+def generate_domains():
+    chromstr = ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX']
+    chromint = [1, 1, 1, 2, 2, 7, 100, 100]
+    start = [0, 100, 200, 0, 100, 0, 0, 100]
+    end = [100, 200, 300, 100, 200, 100, 100, 200]
+    return chromstr, start, end, chromint
     
 
 if __name__ == '__main__':

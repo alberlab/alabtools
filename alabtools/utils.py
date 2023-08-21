@@ -788,6 +788,20 @@ class Index(object):
             chromint.append(c)
         chromint = np.array(chromint)
         return chromint
+    
+    def get_index_hashmap(self):
+        """Creates a dictionary that maps a domain
+        (chr, start, end) to its position in the index.
+        """
+        hashmap = {}
+        for i, dom in enumerate(zip(self.chromstr,
+                                    self.start,
+                                    self.end)):
+            if dom not in hashmap:
+                hashmap[dom] = [i]
+            else:
+                hashmap[dom].append(i)
+        return hashmap
 
     def __getitem__(self, key):
         return np.rec.fromarrays((self.chrom[key],

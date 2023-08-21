@@ -49,7 +49,7 @@ def read(filename):
         raise ValueError('The genome assembly is not specified in the header.')
     if cols is None:
         raise ValueError('The column names are not specified in the header.')
-    required_cols = ['X', 'Y', 'Z', 'Chrom', 'Chrom_Start', 'Chrom_End', 'Trace_ID']
+    required_cols = ['X', 'Y', 'Z', 'Chrom', 'Chrom_Start', 'Chrom_End', 'Trace_ID', 'Spot_ID']
     for col in required_cols:
         if col not in cols:
             raise ValueError('The column {} is not present in the header.'.format(col))
@@ -128,7 +128,8 @@ def extract_cols(header):
     Returns:
         cols (np.array of str): column names
     """
-    col_keys = ['Spot_ID, Trace_ID', 'Cell_ID']  # possible keys for the columns
+    col_keys = ['Spot_ID, Trace_ID', 'X', 'Y', 'Z',
+                'Chrom', 'Chrom_Start', 'Chrom_End']  # possible keys for the columns
     cols = None
     for line in header:
         line = line.replace(' ', '')
@@ -138,8 +139,6 @@ def extract_cols(header):
             # if the column key is in the line, extract the column names
             if '=' in line:  # = may or may not be present
                 line = line.split('=')[1]  # if it is, take the right part
-                line = line.replace(' ', '')
-                line = line.strip('#" ,\n()[]{}')
             cols = line.split(',')
             cols = np.array(cols)
             # stop looping through the column keys if the columns are found
@@ -314,23 +313,23 @@ def get_hashmaps(data, cols):
     
     The hashmap for the spots is a 4-level dictionary.
     Example:
-        spot_hashmap = {'cell1': {('chr1', 1000, 2000)': {'trace1': {'spot1': 0, 'spot2': 1},
-                                                          'trace2': {'spot1': 0, 'spot2': 1, 'spot3': 2}
-                                                         },
-                                  ('chr2', 3000, 4000)': {'trace1': {'spot1': 0, 'spot2': 1, 'spot3': 2},
-                                                          'trace2': {'spot1': 0, 'spot2': 1}
-                                                         }
+        spot_hashmap = {'cell1': {'chr1': {'trace1': {'spot1': 0, 'spot2': 1},
+                                           'trace2': {'spot1': 0, 'spot2': 1, 'spot3': 2}
+                                           },
+                                  'chr2': {'trace1': {'spot1': 0, 'spot2': 1, 'spot3': 2},
+                                           'trace2': {'spot1': 0, 'spot2': 1}
+                                           }
                                   },
-                        'cell2': {('chr1', 2000, 3000)': {'trace1': {'spot1': 0, 'spot2': 1},
-                                                          'trace2': {'spot1': 0}
-                                                         },
-                                  ('chr2', 5000, 6000)': {'trace1': {'spot1': 0, 'spot2': 1}
-                                                         }
+                        'cell2': {'chr1': {'trace1': {'spot1': 0, 'spot2': 1},
+                                           'trace2': {'spot1': 0}
+                                           },
+                                  'chr2': {'trace1': {'spot1': 0, 'spot2': 1}
+                                           }
                                   }
                         }
     Usage:
-        cellID, domain, traceID, spotID = 'cell1', ('chr1', 1000, 2000), 'trace1', 'spot1'
-        spotnum = spot_hashmap[cellID][domain][traceID][spotID]
+        cellID, chrom, traceID, spotID = 'cell1', 'chr1', 'trace1', 'spot1'
+        spotnum = spot_hashmap[cellID][chrom][traceID][spotID]
     
     
     Args:
@@ -347,7 +346,10 @@ def get_hashmaps(data, cols):
     """
     
     # Extract the columns from the data
-    _, _, _, chroms, starts, ends, spotIDs, traceIDs, cellIDs, _ = unpack_data(data, cols)
+    cellIDs = data[:, cols == 'Cell_ID'].squeeze()
+    chroms = data[:, cols == 'Chrom'].squeeze()
+    traceIDs = data[:, cols == 'Trace_ID'].squeeze()
+    spotIDs = data[:, cols == 'Spot_ID'].squeeze()
     
     # Initialize the hashmaps and the related variables
     cell_hashmap = {}
@@ -358,11 +360,10 @@ def get_hashmaps(data, cols):
     nspot_max = 1
     
     # Fill the hashmaps by looping through the spots
-    for cellID, chrom, start, end, traceID, spotID in zip(cellIDs, chroms, starts, ends, traceIDs, spotIDs):
-        domain = (chrom, start, end)
+    for cellID, chrom, traceID, spotID in zip(cellIDs, chroms, traceIDs, spotIDs):
         cell_hashmap, ncell = process_cell_hashmap(cellID, cell_hashmap, ncell)
         trace_hashmap, ncopy_max = process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max)
-        spot_hashmap, nspot_max = process_spot_hashmap(cellID, domain, traceID, spotID, spot_hashmap, nspot_max)
+        spot_hashmap, nspot_max = process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max)
     
     return cell_hashmap, trace_hashmap, spot_hashmap, ncell, ncopy_max, nspot_max
 
@@ -389,42 +390,44 @@ def process_trace_hashmap(cellID, chrom, traceID, trace_hashmap, ncopy_max):
         trace_hashmap[cellID][chrom] = {traceID: 0}
     # Case 3: cellID and chrom are in the hashmap, but traceID is not
     elif traceID not in trace_hashmap[cellID][chrom]:
-        # Add the traceID to the hashmap with the next available ID
-        total_traces = len(trace_hashmap[cellID][chrom])
-        trace_hashmap[cellID][chrom][traceID] = total_traces
-        # Update the maximum copy number if necessary
-        if total_traces + 1 > ncopy_max:
-            ncopy_max = total_traces + 1
+        # Get the maximum trace ID for this cell/chrom
+        max_ID = max(trace_hashmap[cellID][chrom].values())
+        trace_hashmap[cellID][chrom][traceID] = max_ID + 1
+        # Update the maximum copy number if possible
+        # max_ID + 2 because max_ID is 0-based and we want the copy number
+        if max_ID + 2 > ncopy_max:
+            ncopy_max = max_ID + 2
     # Case 4: cellID, chrom and traceID are in the hashmap
     else:
         pass
     return trace_hashmap, ncopy_max
 
-def process_spot_hashmap(cellID, domain, traceID, spotID, spot_hashmap, nspot_max):
+def process_spot_hashmap(cellID, chrom, traceID, spotID, spot_hashmap, nspot_max):
     """Adds a spotID to the spot hashmap if it is not present.
     If the spotID is already present it raises an error.
     Also increments the maximum number of spots if necessary.
     """
     # Case 1: cellID is not yet in the hashmap
     if cellID not in spot_hashmap:
-        spot_hashmap[cellID] = {domain: {traceID: {spotID: 0}}}
-    # Case 2: cellID is in the hashmap, but domain is not
-    elif domain not in spot_hashmap[cellID]:
-        spot_hashmap[cellID][domain] = {traceID: {spotID: 0}}
-    # Case 3: cellID and domain are in the hashmap, but traceID is not
-    elif traceID not in spot_hashmap[cellID][domain]:
-        spot_hashmap[cellID][domain][traceID] = {spotID: 0}
-    # Case 4: cellID, domain and traceID are in the hashmap, but spotID is not
-    elif spotID not in spot_hashmap[cellID][domain][traceID]:
-        # Add the spotID to the hashmap with the next available ID
-        total_spots = len(spot_hashmap[cellID][domain][traceID])
-        spot_hashmap[cellID][domain][traceID][spotID] = total_spots
+        spot_hashmap[cellID] = {chrom: {traceID: {spotID: 0}}}
+    # Case 2: cellID is in the hashmap, but chrom is not
+    elif chrom not in spot_hashmap[cellID]:
+        spot_hashmap[cellID][chrom] = {traceID: {spotID: 0}}
+    # Case 3: cellID and chrom are in the hashmap, but traceID is not
+    elif traceID not in spot_hashmap[cellID][chrom]:
+        spot_hashmap[cellID][chrom][traceID] = {spotID: 0}
+    # Case 4: cellID, chrom and traceID are in the hashmap, but spotID is not
+    elif spotID not in spot_hashmap[cellID][chrom][traceID]:
+        # Get the maximum spot ID for this cell/chrom/trace
+        max_ID = max(spot_hashmap[cellID][chrom][traceID].values())
+        spot_hashmap[cellID][chrom][traceID][spotID] = max_ID + 1
         # Update the maximum number of spots if necessary
-        if total_spots + 1 > nspot_max:
-            nspot_max = total_spots + 1
-    # Case 5: cellID, domain, traceID and spotID are in the hashmap
+        # max_ID + 2 because max_ID is 0-based and we want the number of spots
+        if max_ID + 2 > nspot_max:
+            nspot_max = max_ID + 2
+    # Case 5: cellID, chrom, traceID and spotID are in the hashmap
     else:
-        raise ValueError('SpotID {} is present twice in the data!').format(spotID)
+        raise ValueError('Spot ID is present twice in the data!')
     return spot_hashmap, nspot_max
 
 def extract_data(data, cols,
@@ -454,13 +457,13 @@ def extract_data(data, cols,
 
     Returns:
         cell_labels (np.array(ncell), dtype='S10'): cell labels
-        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float32)):
+        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)):
                 coordinates of the spots
-        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float32)):
+        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float64)):
                 intensity of the spots
-        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int32)):
+        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int64)):
                 number of spots in each trace
-        ncopy (np.array(ncell, ndomain, dtype=int32)):
+        ncopy (np.array(ncell, ndomain, dtype=int64)):
                 number of copies (traces) in each domain
     """
     
@@ -468,10 +471,14 @@ def extract_data(data, cols,
     cell_labels = np.array(list(cell_hashmap.keys())).astype('S10')
     coordinates = np.full((ncell, ndomain, ncopy_max, nspot_max, 3),
                          np.nan,
-                         dtype=np.float32)
+                         dtype=np.float64)
     intensity = np.full((ncell, ndomain, ncopy_max, nspot_max),
                          np.nan,
-                         dtype=np.float32)
+                         dtype=np.float64)
+    nspot = np.zeros((ncell, ndomain, ncopy_max),
+                     dtype=np.int64)
+    ncopy = np.zeros((ncell, ndomain),
+                     dtype=np.int64)
     
     # Unpack the data into arrays
     xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums = unpack_data(data, cols)
@@ -486,13 +493,16 @@ def extract_data(data, cols,
         cellnum = cell_hashmap[cellID]
         domnum = index_hashmap[(chrstr, start, end)]
         tracenum = trace_hashmap[cellID][chrstr][traceID]
-        spotnum = spot_hashmap[cellID][(chrstr, start, end)][traceID][spotID]
+        spotnum = spot_hashmap[cellID][chrstr][traceID][spotID]
         
         # fill in the data
         coordinates[cellnum, domnum, tracenum, spotnum, :] = [x, y, z]
         intensity[cellnum, domnum, tracenum, spotnum] = lum
+        # TO DECIDE: I can also compute these two as in set_manually in the CtFile class
+        nspot[cellnum, domnum, tracenum] += 1
+        ncopy[cellnum, domnum] = len(trace_hashmap[cellID][chrstr])
         
-    return cell_labels, coordinates, intensity
+    return cell_labels, coordinates, intensity, nspot, ncopy
 
 def unpack_data(data, cols):
     """Unpacks the data from the FOF-CT data into separate arrays.
@@ -502,36 +512,33 @@ def unpack_data(data, cols):
         cols (np.array of str): column names
 
     Returns:
-        xs (np.array of float32): x coordinates
-        ys (np.array of float32): y coordinates
-        zs (np.array of float32): z coordinates
+        xs (np.array of float64): x coordinates
+        ys (np.array of float64): y coordinates
+        zs (np.array of float64): z coordinates
         chromstrs (np.array of str): chromosome strings
-        starts (np.array of int32): start positions
-        ends (np.array of int32): end positions
+        starts (np.array of int64): start positions
+        ends (np.array of int64): end positions
         spotIDs (np.array of str): spot IDs
         traceIDs (np.array of str): trace IDs
         cellIDs (np.array of str): cell IDs
-        lums (np.array of float32): spot intensities
+        lums (np.array of float64): spot intensities
     """
-    xs = data[:, cols == 'X'].astype(np.float32).squeeze()
-    ys = data[:, cols == 'Y'].astype(np.float32).squeeze()
-    zs = data[:, cols == 'Z'].astype(np.float32).squeeze()
+    xs = data[:, cols == 'X'].astype(np.float64).squeeze()
+    ys = data[:, cols == 'Y'].astype(np.float64).squeeze()
+    zs = data[:, cols == 'Z'].astype(np.float64).squeeze()
     chromstrs = data[:, cols == 'Chrom'].squeeze()
-    starts = data[:, cols == 'Chrom_Start'].astype(np.int32).squeeze()
-    ends = data[:, cols == 'Chrom_End'].astype(np.int32).squeeze()
-    if 'Spot_ID' in cols:
-        spotIDs = data[:, cols == 'Spot_ID'].squeeze()
-    else:
-        spotIDs = np.arange(len(xs))
+    starts = data[:, cols == 'Chrom_Start'].astype(np.int64).squeeze()
+    ends = data[:, cols == 'Chrom_End'].astype(np.int64).squeeze()
+    spotIDs = data[:, cols == 'Spot_ID'].squeeze()
     traceIDs = data[:, cols == 'Trace_ID'].squeeze()
     if 'Cell_ID' in cols:
         cellIDs = data[:, cols == 'Cell_ID'].squeeze()
     else:
-        # if datasets has only one chromosome, maybe they assumed TraceID = CellID
+        # if datasets has only one chromosome TraceID = CellID
         cellIDs = np.copy(traceIDs)
         warnings.warn('Cell_ID not found in FOF-CT file. Assuming Cell_ID = Trace_ID.', UserWarning)
     if 'Intensity' in cols:
-        lums = data[:, cols == 'Intensity'].astype(np.float32).squeeze()
+        lums = data[:, cols == 'Intensity'].astype(np.float64).squeeze()
     else:
         lums = np.full(len(xs), np.nan)
     return xs, ys, zs, chromstrs, starts, ends, spotIDs, traceIDs, cellIDs, lums
@@ -554,13 +561,13 @@ def process(filename, in_assembly=None):
         genome (Genome): genome object
         index (Index): index object
         cell_labels (np.array(ncell), dtype='S10'): cell labels
-        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float32)):
+        coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)):
                 coordinates of the spots
-        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float32)):
+        intensity (np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float64)):
                 intensity of the spots
-        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int32)):
+        nspot (np.array(ncell, ndomain, ncopy_max, dtype=int64)):
                 number of spots in each trace
-        ncopy (np.array(ncell, ndomain, dtype=int32)):
+        ncopy (np.array(ncell, ndomain, dtype=int64)):
                 number of copies (traces) in each domain
     """
     
@@ -579,11 +586,11 @@ def process(filename, in_assembly=None):
     index_hashmap = index.get_index_hashmap()
     
     # EXTRACT THE DATA
-    cell_labels, coordinates, intensity = extract_data(data, cols,
-                                                       cell_hashmap, index_hashmap, trace_hashmap, spot_hashmap,
-                                                       ncell, ndomain, ncopy_max, nspot_max)
+    cell_labels, coordinates, intensity, nspot, ncopy = extract_data(data, cols,
+                                                                     cell_hashmap, index_hashmap, trace_hashmap, spot_hashmap,
+                                                                     ncell, ndomain, ncopy_max, nspot_max)
     
     # FREE UP MEMORY
     del cols, data, chromstr, start, end, cell_hashmap, trace_hashmap, spot_hashmap, index_hashmap
     
-    return genome, index, cell_labels, coordinates, intensity, ncell, ndomain, ncopy_max, nspot_max
+    return genome, index, cell_labels, coordinates, intensity, nspot, ncopy, ncell, ndomain, ncopy_max, nspot_max

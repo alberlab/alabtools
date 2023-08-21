@@ -8,7 +8,7 @@ import numpy as np
 import os
 import sys
 from alabtools import Genome, Index
-from .fofct import read_fofct, get_domains_fofct, get_processed_data_fofct
+from .fofct import process as fofct_process
 from .utils_imaging import sort_coord_by_boolmask
 
 __author__ = "Francesco Musella"
@@ -40,9 +40,10 @@ class CtFile(h5py.File):
     genome : Genome
     index : Index
     cell_labels = np.array(ncell, dtype='S10')
-    coordinates: np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float64)
-    nspot = np.array(ncell, ndomain, ncopy_max, dtype=int64)
-    ncopy = np.array(ncell, ndomain, dtype=int64)
+    coordinates: np.array(ncell, ndomain, ncopy_max, nspot_max, 3, dtype=float32)
+    intensity: np.array(ncell, ndomain, ncopy_max, nspot_max, dtype=float32)
+    nspot = np.array(ncell, ndomain, ncopy_max, dtype=int32)
+    ncopy = np.array(ncell, ndomain, dtype=int32)
     """
     
     def __init__(self, *args, **kwargs):
@@ -127,6 +128,11 @@ class CtFile(h5py.File):
             assert self['coordinates'].shape[2] == self._ncopy_max, 'coordinates.shape[2] != ncopy_max'
             assert self['coordinates'].shape[3] == self._nspot_max, 'coordinates.shape[3] != nspot_max'
             assert self['coordinates'].shape[4] == 3, 'coordinates.shape[4] != 3'
+        if 'intensity' in self:
+            assert self['intensity'].shape[0] == self._ncell, 'intensity.shape[0] != ncell'
+            assert self['intensity'].shape[1] == self._ndomain, 'intensity.shape[1] != ndomain'
+            assert self['intensity'].shape[2] == self._ncopy_max, 'intensity.shape[2] != ncopy_max'
+            assert self['intensity'].shape[3] == self._nspot_max, 'intensity.shape[3] != nspot_max'
         if 'nspot' in self:
             assert self['nspot'].shape[0] == self._ncell, 'nspot.shape[0] != ncell'
             assert self['nspot'].shape[1] == self._ndomain, 'nspot.shape[1] != ndomain'
@@ -142,8 +148,9 @@ class CtFile(h5py.File):
                 and self['nspot_max'] == other['nspot_max'] and self['ncopy_max'] == other['ncopy_max'] \
                     and np.array_equal(self['cell_labels'], other['cell_labels']) \
                         and np.array_equal(self['coordinates'], other['coordinates']) \
-                            and np.array_equal(self['nspot'], other['nspot']) \
-                                and np.array_equal(self['ncopy'], other['ncopy'])
+                            and np.array_equal(self['intensity'], other['intensity']) \
+                                and np.array_equal(self['nspot'], other['nspot']) \
+                                    and np.array_equal(self['ncopy'], other['ncopy'])
         return eq
     
     def get_ncell(self):
@@ -183,6 +190,9 @@ class CtFile(h5py.File):
     def get_coordinates(self):
         # These data are not huge, so we can load them all in memory
         return self['coordinates'][:]
+    
+    def get_intensity(self):
+        return self['intensity'][:]
 
     def get_nspot(self):
         return self['nspot'][:]
@@ -228,6 +238,11 @@ class CtFile(h5py.File):
             del self['coordinates']
         self.create_dataset('coordinates', data=coordinates)
     
+    def set_intensity(self, intensity):
+        if 'intensity' in self:
+            del self['intensity']
+        self.create_dataset('intensity', data=intensity)
+    
     def set_nspot(self, nspot):
         if 'nspot' in self:
             del self['nspot']
@@ -248,6 +263,7 @@ class CtFile(h5py.File):
     index = property(get_index, set_index, doc='a alabtools.Index instance')
     cell_labels = property(get_cell_labels, set_cell_labels, doc='labels of cell. np.array(ncell, dtype=object)')
     coordinates = property(get_coordinates, set_coordinates, doc='coordinates of spots. np.array(ncell, ndomain, ntrace_max, nspot_max, 3)')
+    intensity = property(get_intensity, set_intensity, doc='intensity of spots. np.array(ncell, ndomain, ntrace_max, nspot_max)')
     nspot = property(get_nspot, set_nspot, doc='number of spots. np.array(ncell, ndomain, ntrace_max)')
     ncopy = property(get_ncopy, set_ncopy, doc='number of copies. np.array(ncell, ndomain)')
     
@@ -259,7 +275,7 @@ class CtFile(h5py.File):
             return findidx[0]
     
     def get_cellID(self, cellnum):
-        assert isinstance(cellnum, (int, np.int64, np.int64))
+        assert isinstance(cellnum, (int, np.int32, np.int32))
         return self.cell_labels[cellnum]
     
     def _compute_ntrace_tot(self):
@@ -279,6 +295,22 @@ class CtFile(h5py.File):
             # sum over all cells to get the total number of traces of the chromosome
             ntrace_tot += np.sum(ncopy_max_chrom)
         return ntrace_tot
+    
+    @staticmethod
+    def _compute_nspot_ncopy(coordinates):
+        """Compute the number of spots (nspot) and the number of copies (ncopy)
+        from the coordinates of spots."""
+        # nonan_map is a boolean array that is True if the coordinates are not nan
+        nonan_map = ~np.isnan(coordinates)  # (ncell, ndomain, ncopy_max, nspot_max, 3)
+        # remove the last axis by taking the x coordinate
+        nonan_map = nonan_map[:, :, :, :, 0]  # (ncell, ndomain, ncopy_max, nspot_max) 
+        # now sum over the last axis to get the number of spots in each copy
+        nspot = np.sum(nonan_map, axis=3)  # (ncell, ndomain, ncopy_max)
+        # remove the last axis from nonan_map again by taking the first spot for each copy
+        nonan_map = nonan_map[:, :, :, 0]  # (ncell, ndomain, ncopy_max)
+        # now sum over the last axis to get the number of copies in each domain
+        ncopy = np.sum(nonan_map, axis=2)  # (ncell, ndomain)
+        return nspot, ncopy
     
     def sort_cells(self, order):
         """Orders the CtFile according to the input order.
@@ -481,7 +513,7 @@ class CtFile(h5py.File):
            ncopy and nspot are inferred from the coordinates array.
 
         Args:
-            coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3), np.float64)
+            coordinates (np.array(ncell, ndomain, ncopy_max, nspot_max, 3), np.float32)
             genome (Genome)
             index (Index)
             cell_labels (np.array(ncell, dtype='U10'), optional):
@@ -489,61 +521,41 @@ class CtFile(h5py.File):
 
         Returns:
             None
-        """
-        
-        # set the genome
+        """        
+        # set the genome / index
         assert isinstance(genome, Genome), 'genome must be a Genome instance'
-        self.genome = genome
-        
-        # set the index
+        self.set_genome(genome)
         assert isinstance(index, Index), 'index must be a Index instance'
         assert index.genome == self.genome, 'genome in index must match input genome'
-        self.index = index
-        
+        self.set_index(index)
         # set the coordinates
         assert len(coordinates.shape) == 5, 'coordinates must be a 5D array'
         assert coordinates.shape[1] == len(index),\
             'coordinates must have the same number of domains as the index'
         assert coordinates.shape[4] == 3, 'spatial coordinates must be 3D'
         try:
-            self.coordinates = coordinates.astype(np.float64)
+            self.set_coordinates(coordinates.astype(np.float32))
         except ValueError:
             "Coordinates must be numeric."
-        
         # set the cell labels
         if cell_labels is None:
             cell_labels = np.arange(coordinates.shape[0]).astype('U10')
         assert len(cell_labels) == coordinates.shape[0],\
             'cell_labels must have the same length as coordinates.shape[0]'
         assert cell_labels.dtype == 'U10', 'cell_labels must be of dtype U10'
-        self.cell_labels = cell_labels
-        
+        self.set_cell_labels(cell_labels)
         # set the attribues from coordinates.shape
-        self.ncell = coordinates.shape[0]
-        self.ndomain = coordinates.shape[1]
-        self.ncopy_max = coordinates.shape[2]
-        self.nspot_max = coordinates.shape[3]
-        
-        # compute nspot and ncopy
-        # nonan_map is a boolean array that is True if the coordinates are not nan
-        nonan_map = ~np.isnan(coordinates)  # (ncell, ndomain, ncopy_max, nspot_max, 3)
-        # remove the last axis by taking the x coordinate
-        nonan_map = nonan_map[:, :, :, :, 0]  # (ncell, ndomain, ncopy_max, nspot_max) 
-        # now sum over the last axis to get the number of spots in each copy
-        nspot = np.sum(nonan_map, axis=3)  # (ncell, ndomain, ncopy_max)
-        # remove the last axis from nonan_map again by taking the first spot for each copy
-        nonan_map = nonan_map[:, :, :, 0]  # (ncell, ndomain, ncopy_max)
-        # now sum over the last axis to get the number of copies in each domain
-        ncopy = np.sum(nonan_map, axis=2)  # (ncell, ndomain)
-        self.nspot = nspot
-        self.ncopy = ncopy
-        
-        # compute nspot_tot
-        nspot_tot = np.sum(self.nspot)
-        self.nspot_tot = nspot_tot
-        
-        # compute ntrace_tot
-        self.ntrace_tot = self._compute_ntrace_tot()
+        self.set_ncell(coordinates.shape[0])
+        self.set_ndomain(coordinates.shape[1])
+        self.set_ncopy_max(coordinates.shape[2])
+        self.set_nspot_max(coordinates.shape[3])
+        # set nspot and ncopy
+        nspot, ncopy = self._compute_nspot_ncopy(coordinates)
+        self.set_nspot(nspot)
+        self.set_ncopy(ncopy)
+        # set nspot_tot and ntrace_tot
+        self.set_nspot_tot(np.sum(nspot))
+        self.set_ntrace_tot(self._compute_ntrace_tot())
     
     
     def set_from_fofct(self, fofct_file, in_assembly=None):
@@ -557,64 +569,21 @@ class CtFile(h5py.File):
         if self.mode == 'r':
             raise IOError('Cannot set data from FOF-CT file. File is read-only.')
         
-        # READ THE FOF-CT FILE
-        assembly, col_names, data = read_fofct(fofct_file)
+        genome, index, cell_labels, coordinates, intensity, ncell, ndomain, ncopy_max, nspot_max = fofct_process(fofct_file,
+                                                                                                                 in_assembly=in_assembly)
         
-        # CHECK THE ASSEMBLY
-        if assembly is not None:  # include lower case version of assembly
-            # because in alabtools, assembly names are often lower case
-            assembly = assembly + [a.lower() for a in assembly]
-        if in_assembly is not None:  # overwrite the assembly if provided
-            if assembly is None:
-                sys.stdout.write('Assembly not found in FOF-CT file. Using the one provided.\n')
-            if assembly is not None:
-                sys.stdout.write('Assembly found in FOF-CT file. Overwriting with the one provided.\n')
-                match = False
-                for a in assembly:
-                    if a == in_assembly:
-                        match = True
-                if not match:
-                    warnings.warn('The assembly provided {} does not match the one \
-                        in the FOF-CT file {}.'.format(in_assembly, assembly))
-            assembly = [in_assembly]
-        if assembly is None and in_assembly is None:
-            raise ValueError('Assembly not found in FOF-CT file. Please provide it.')
-        
-        # FIND THE DOMAINS
-        chrstr, start, end = get_domains_fofct(data, col_names)
-        ndomain = len(chrstr)
         self.set_ndomain(ndomain)
-        
-        # SET GENOME
-        found_assembly = False
-        for a in assembly:
-            # Path to the assembly file
-            genome_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/genomes/'
-            assembly_file = os.path.join(genome_dir, a + '.info')
-            if os.path.isfile(assembly_file):
-                sys.stdout.write('Assembly {} found in alabtools/genomes. Using this.\n'.format(a))
-                # Note: if some chromosomes in np.unique(chrstr) are not in the assembly file, they will be ignored.
-                genome = Genome(a, usechr=np.unique(chrstr))
-                found_assembly = True
-                break            
-        if not found_assembly:
-            raise ValueError('Assembly {} not found in alabtools/genomes. Need to include it.'.format(a))
         self.set_genome(genome)
-                
-        # SET INDEX
-        index = Index(chrom=chrstr, start=start, end=end, genome=genome)
         self.set_index(index)
-        
-        # SET OTHER ATTRIBUTES AND DATA (COORD, NSPOT, NCOPY)
-        ncell, nspot_tot, ntrace_tot, nspot_max, ncopy_max,\
-            cell_labels, coord, nspot, ncopy = get_processed_data_fofct(data, col_names,
-                                                                        self.genome, self.index)
         self.set_ncell(ncell)
-        self.set_nspot_tot(nspot_tot)
-        self.set_ntrace_tot(ntrace_tot)
         self.set_nspot_max(nspot_max)
         self.set_ncopy_max(ncopy_max)
         self.set_cell_labels(cell_labels)
-        self.set_coordinates(coord)
+        self.set_coordinates(coordinates)
+        if not np.all(np.isnan(intensity)):
+            self.set_intensity(intensity)
+        nspot, ncopy = self._compute_nspot_ncopy(coordinates)
         self.set_nspot(nspot)
         self.set_ncopy(ncopy)
+        self.set_nspot_tot(np.sum(self.nspot))
+        self.set_ntrace_tot(self._compute_ntrace_tot())
