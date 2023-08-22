@@ -305,11 +305,11 @@ class CtFile(h5py.File):
         # remove the last axis by taking the x coordinate
         nonan_map = nonan_map[:, :, :, :, 0]  # (ncell, ndomain, ncopy_max, nspot_max) 
         # now sum over the last axis to get the number of spots in each copy
-        nspot = np.sum(nonan_map, axis=3)  # (ncell, ndomain, ncopy_max)
+        nspot = np.sum(nonan_map, axis=3, dtype=np.int32)  # (ncell, ndomain, ncopy_max)
         # remove the last axis from nonan_map again by taking the first spot for each copy
         nonan_map = nonan_map[:, :, :, 0]  # (ncell, ndomain, ncopy_max)
         # now sum over the last axis to get the number of copies in each domain
-        ncopy = np.sum(nonan_map, axis=2)  # (ncell, ndomain)
+        ncopy = np.sum(nonan_map, axis=2, dtype=np.int32)  # (ncell, ndomain)
         return nspot, ncopy
     
     def sort_cells(self, order):
