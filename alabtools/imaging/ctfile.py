@@ -329,6 +329,8 @@ class CtFile(h5py.File):
         self.ncopy = self.ncopy[order]
         self.nspot = self.nspot[order]
         self.coordinates = self.coordinates[order]
+        if 'intensity' in self:
+            self.intensity = self.intensity[order]
     
     def sort_copies(self):
         """Sorts copies of each chromosome in each cell.
@@ -366,72 +368,70 @@ class CtFile(h5py.File):
         for i in range(3):
             coord_srt[..., i] = self.coordinates[..., i][idx_srt]
         self.coordinates = coord_srt
+        
+        # Sort intensity
+        if 'intensity' in self:
+            self.intensity = self.intensity[idx_srt]
     
     def sort_spots(self):
         """Sorts the spots in each domain/cell.
-        
         NaN spots are put at the end.
         """
-        
         # Initialize NaN map
         nan_map = np.isnan(self.coordinates[..., 0])  # ncell, ndomain, ncopy_max, nspot_max
-        
         # Sort coordinates
         idx = sort_coord_by_boolmask(nan_map, axis=3)
         coord_srt = np.copy(self.coordinates)
         for i in range(3):
             coord_srt[..., i] = self.coordinates[..., i][idx]
         self.coordinates = coord_srt
+        # Sort intensity
+        if 'intensity' in self:
+            self.intensity = self.intensity[idx]
     
     def trim(self):
         """
         Trims the data to remove redundant copies and spots.
-        
         This operation might be required if the data have an excessive max-padding.
-        
         A copy label c is reduntant if:
             self.coordinates[:, :, c, :, :] is all NaN
         A spot label s is redundant if:
             self.coordinates[:, :, :, s, :] is all NaN
-        
         ATTENTION: this method works if the data data are organized so that
         the reduntant copies and spots are at the end of the array.
         Use sort_copies() and sort_spots() to ensure this.
         """
-        
         # Defines the map of NaN values from self.coordinates
         nan_map = np.isnan(self.coordinates)  # np.array(ncell, ndomain, ncopy_max, nspot_max, 3)
-        
         # Trim copies
-        # Loop over copies in reverse order
-        for cp in range(self.ncopy_max - 1, -1, -1):
-            if not np.all(nan_map[:, :, cp, :, :]):
+        while True:
+            if not np.all(nan_map[:, :, self.ncopy_max-1, :, :]):
                 # If the copy is not redundant, we can exit the loop
                 break
-            sys.stdout.write('Trimming copy {}...\n'.format(cp))
-            self.ncopy_max = self.ncopy_max - 1
-            self.coordinates = self.coordinates[:, :, :cp, :, :]
-            self.nspot = self.nspot[:, :, :self.ncopy_max]
-            # Update the map of NaN values
+            sys.stdout.write('Trimming copy {}...\n'.format(self.ncopy_max-1))
+            self.nspot = self.nspot[:, :, :self.ncopy_max-1]
+            self.coordinates = self.coordinates[:, :, :self.ncopy_max-1, :, :]
+            if 'intensity' in self:
+                self.intensity = self.intensity[:, :, :self.ncopy_max-1, :, :]
+            self.ncopy_max = self.ncopy_max-1
             nan_map = np.isnan(self.coordinates)
-        
         # Trim spots
-        for sp in range(self.nspot_max - 1, -1, -1):
-            if not np.all(nan_map[:, :, :, sp, :]):
+        while True:
+            if not np.all(nan_map[:, :, :, self.nspot_max-1, :]):
                 break
-            sys.stdout.write('Trimming spot {}...\n'.format(sp))
-            self.nspot_max = self.nspot_max - 1
-            self.coordinates = self.coordinates[:, :, :, :sp, :]
+            sys.stdout.write('Trimming spot {}...\n'.format(self.nspot_max-1))
+            self.coordinates = self.coordinates[:, :, :, :self.nspot_max-1, :]
+            if 'intensity' in self:
+                self.intensity = self.intensity[:, :, :, :self.nspot_max-1]
+            self.nspot_max = self.nspot_max-1
             nan_map = np.isnan(self.coordinates)
     
     def pop_cells(self, indices):
         """Removes the cells with the input indices.
-        
         Args:
             indices (np.array(n, dtype=int)): Indices of the cells to remove.
                 Must be a subset of the numbers from 0 to ncell-1.
         """
-        
         # assert the input indices
         assert len(indices) <= self.ncell,\
             "The length of the input indices must be less than or equal to the number of cells."
@@ -461,12 +461,10 @@ class CtFile(h5py.File):
         @param tag2: tag to distinguish cell labels from other
         @return new_ct: a CtFile instance
         """
-        
         if self.genome != other.genome:
             raise ValueError('Cannot merge CtFile instances with different genomes.')
         if self.index != other.index:
             raise ValueError('Cannot merge CtFile instances with different indexes.')
-        
         if len(np.intersect1d(self.cell_labels, other.cell_labels)) != 0 \
             and tag1 is None and tag2 is None:
             raise ValueError('There is an overlap in cell labels. Please provide tags to distinguish them.')
@@ -498,6 +496,12 @@ class CtFile(h5py.File):
         new_coord[self.ncell:, :, :other.ncopy_max, :other.nspot_max, :] = other.coordinates
         new_ct.set_coordinates(new_coord)
         
+        if 'intensity' in self and 'intensity' in other:
+            new_intensity = np.nan * np.zeros((new_ct.ncell, new_ct.ndomain, new_ct.ncopy_max, new_ct.nspot_max))
+            new_intensity[:self.ncell, :, :self.ncopy_max, :self.nspot_max] = self.intensity
+            new_intensity[self.ncell:, :, :other.ncopy_max, :other.nspot_max] = other.intensity
+            new_ct.set_intensity(new_intensity)
+        
         new_nspot = np.nan * np.zeros((new_ct.ncell, new_ct.ndomain, new_ct.ncopy_max))
         new_nspot[:self.ncell, :, :self.ncopy_max] = self.nspot
         new_nspot[self.ncell:, :, :other.ncopy_max] = other.nspot
@@ -508,7 +512,7 @@ class CtFile(h5py.File):
         
         return new_ct
     
-    def set_manually(self, coordinates, genome, index, cell_labels=None):
+    def set_manually(self, coordinates, genome, index, cell_labels=None, intensity=None):
         """Set the CtFile attributes by manually inputting the data.
            ncopy and nspot are inferred from the coordinates array.
 
@@ -537,6 +541,15 @@ class CtFile(h5py.File):
             self.set_coordinates(coordinates.astype(np.float32))
         except ValueError:
             "Coordinates must be numeric."
+        # set the intensity
+        if intensity is not None:
+            assert len(intensity.shape) == 4, 'intensity must be a 4D array'
+            assert intensity.shape == coordinates.shape[:-1],\
+                'intensity must have the same shape as coordinates'
+            try:
+                self.set_intensity(intensity.astype(np.float32))
+            except ValueError:
+                "Intensity must be numeric."
         # set the cell labels
         if cell_labels is None:
             cell_labels = np.arange(coordinates.shape[0]).astype('U10')
