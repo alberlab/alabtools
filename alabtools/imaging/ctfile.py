@@ -12,7 +12,7 @@ from .fofct import process as fofct_process
 from .utils_imaging import sort_coord_by_boolmask
 
 __author__ = "Francesco Musella"
-__ct_version__ = 0.1
+__ct_version__ = 1.1
 __email__ = "fmusella@g.ucla.edu"
 
 
@@ -50,7 +50,6 @@ class CtFile(h5py.File):
         
         self._genome = None
         self._index = None
-        self._data = None
         
         h5py.File.__init__(self, *args, **kwargs)  # inherits init from h5py.File
         
@@ -148,9 +147,10 @@ class CtFile(h5py.File):
                 and self['nspot_max'] == other['nspot_max'] and self['ncopy_max'] == other['ncopy_max'] \
                     and np.array_equal(self['cell_labels'], other['cell_labels']) \
                         and np.array_equal(self['coordinates'], other['coordinates']) \
-                            and np.array_equal(self['intensity'], other['intensity']) \
-                                and np.array_equal(self['nspot'], other['nspot']) \
-                                    and np.array_equal(self['ncopy'], other['ncopy'])
+                            and np.array_equal(self['nspot'], other['nspot']) \
+                                and np.array_equal(self['ncopy'], other['ncopy'])
+        if 'intensity' in self and 'intensity' in other:
+            eq = eq and np.array_equal(self['intensity'], other['intensity'])
         return eq
     
     def get_ncell(self):
