@@ -443,6 +443,8 @@ class CtFile(h5py.File):
         self.ncopy = np.delete(self.ncopy, indices, axis=0)
         self.nspot = np.delete(self.nspot, indices, axis=0)
         self.coordinates = np.delete(self.coordinates, indices, axis=0)
+        if 'intensity' in self:
+            self.intensity = np.delete(self.intensity, indices, axis=0)
         # update attributes
         self.ncell -= len(indices)
         self.nspot_tot = np.sum(self.nspot)
