@@ -405,7 +405,7 @@ def writeFofctFile(filename, data):
     fofct_file.write('"#experimenter_name: Francesco Musella,,,\n')
     fofct_file.write('###lab_name: Frank Alber,\n')
     fofct_file.write('#""description: test FOFCT file for CtFile reading,\n')
-    fofct_file.write('##columns=(Spot_ID,Trace_ID,X,Y,Z,' +
+    fofct_file.write('##columns=(Spot_ID,Trace_ID,X,Y,Z,Intensity,' +
                         'Chrom,Chrom_Start,Chrom_End,Cell_ID,' +
                         'Extra_Cell_ROI_ID,Additional_Feature)\n')
     
@@ -421,11 +421,13 @@ def writeFofctFile(filename, data):
                     x = data['coordinates'][cellnum, domainnum, copynum, spotnum, 0]
                     y = data['coordinates'][cellnum, domainnum, copynum, spotnum, 1]
                     z = data['coordinates'][cellnum, domainnum, copynum, spotnum, 2]
+                    lum = data['intensity'][cellnum, domainnum, copynum, spotnum]
                     if np.isnan(x) or np.isnan(y) or np.isnan(z):
                         raise ValueError('Coordinates must not be NaN.')
                     fofct_file.write('{},'.format(spotID))
                     fofct_file.write('{}_{}_{},'.format(cellnum, chrom, copynum))
                     fofct_file.write('{},{},{},'.format(x, y, z))
+                    fofct_file.write('{},'.format(lum))
                     fofct_file.write('{},{},{},'.format(chrom, chrom_start, chrom_end))
                     fofct_file.write('{},'.format(cellnum))
                     fofct_file.write('{},'.format(cellnum**2))  # useless
@@ -453,31 +455,28 @@ def createTestData():
         - ncopy (np.ndarray): ncell x ndomain
         - nspot (np.ndarray): ncell x ndomain x ncopy_max
         - coordinates (np.ndarray): ncell x ndomain x ncopy_max x nspot_max x 3
+        - intensity (np.ndarray): ncell x ndomain x ncopy_max x nspot_max
 
     Returns:
         data (dict): Dictionary with the data.
     """
     
-    # set seed for reproducibility
-    np.random.seed(0)
+    np.random.seed(0)  # for reproducibility
     # set attributes
     assembly, chroms, ncell, ndomain, ncopy_max, nspot_max = set_attributes()
-    # create the index
+    # create the data
     chromstr, start, end = create_index(chroms, ndomain)
-    # create cell_labels
     cell_labels = create_cell_labels(ncell)
-    # create ncopy
     ncopy = create_ncopy(ncell, ndomain, ncopy_max, chromstr)
-    # create nspot
     nspot = create_nspot(ncell, ndomain, ncopy_max, nspot_max, ncopy)
-    # create coordinates
     coordinates = create_coordinates(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot)
-    # compute total number of spots
+    intensity = create_intensity(ncell, ndomain, ncopy_max, nspot_max)
     nspot_tot = np.sum(nspot)
-    # compute total number of traces
     ntrace_tot = compute_ntrace_tot(chroms, chromstr, ncopy)
     # return everything as a dictionary
-    data = create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot, coordinates)
+    data = create_data_dicionary(assembly, chromstr, start, end,
+                                 ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot,
+                                 cell_labels, ncopy, nspot, coordinates, intensity)
     return data
 
 
@@ -554,9 +553,14 @@ def create_coordinates(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot):
                     coordinates[cellnum, domainnum, copynum, spotnum, :] = [x, y, z]
     return coordinates
 
+def create_intensity(ncell, ndomain, ncopy_max, nspot_max):
+    """Create the intensity array for testing."""
+    intensity = np.random.randint(0, 100, size=(ncell, ndomain, ncopy_max, nspot_max))
+    return intensity
+
 def create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max,
                           nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot,
-                          coordinates):
+                          coordinates, intensity):
     """Create the data dictionary for testing."""
     data = {
         'assembly': assembly,
@@ -572,7 +576,8 @@ def create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_
         'cell_labels': cell_labels,
         'ncopy': ncopy,
         'nspot': nspot,
-        'coordinates': coordinates
+        'coordinates': coordinates,
+        'intensity': intensity
     }
     return data
 
