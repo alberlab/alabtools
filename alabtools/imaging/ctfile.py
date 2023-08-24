@@ -412,7 +412,7 @@ class CtFile(h5py.File):
             self.nspot = self.nspot[:, :, :self.ncopy_max-1]
             self.coordinates = self.coordinates[:, :, :self.ncopy_max-1, :, :]
             if 'intensity' in self:
-                self.intensity = self.intensity[:, :, :self.ncopy_max-1, :, :]
+                self.intensity = self.intensity[:, :, :self.ncopy_max-1, :]
             self.ncopy_max = self.ncopy_max-1
             nan_map = np.isnan(self.coordinates)
         # Trim spots
