@@ -364,10 +364,8 @@ class CtFile(h5py.File):
         
         # Sort coordinates
         idx_srt = sort_coord_by_boolmask(nan_map, axis=2)
-        coord_srt = np.copy(self.coordinates)
         for i in range(3):
-            coord_srt[..., i] = self.coordinates[..., i][idx_srt]
-        self.coordinates = coord_srt
+            self.coordinates[..., i] = self.coordinates[..., i][idx_srt]
         
         # Sort intensity
         if 'intensity' in self:
@@ -381,10 +379,8 @@ class CtFile(h5py.File):
         nan_map = np.isnan(self.coordinates[..., 0])  # ncell, ndomain, ncopy_max, nspot_max
         # Sort coordinates
         idx = sort_coord_by_boolmask(nan_map, axis=3)
-        coord_srt = np.copy(self.coordinates)
         for i in range(3):
-            coord_srt[..., i] = self.coordinates[..., i][idx]
-        self.coordinates = coord_srt
+            self.coordinates[..., i] = self.coordinates[..., i][idx]
         # Sort intensity
         if 'intensity' in self:
             self.intensity = self.intensity[idx]
