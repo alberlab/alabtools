@@ -3,6 +3,7 @@ from functools import partial
 import sys
 import os
 import tempfile
+import pickle
 from alabtools.imaging import CtFile
 from alabtools.parallel import Controller
 
@@ -62,9 +63,9 @@ class Phaser(object):
         sys.stdout.write("Performing phasing...\n")
                 
         # Parallelize the phasing, and save the results in the temporary directory
-        coordinates_phsd = self.controller.map_reduce(self.parallel_task,
-                                                      self.reduce_task,
-                                                      args=self.ct.cell_labels)
+        coordinates_phsd, intensity_phsd = self.controller.map_reduce(self.parallel_task,
+                                                                      self.reduce_task,
+                                                                      args=self.ct.cell_labels)
         
         # Delete the temporary directory and its contents
         os.system('rm -r {}'.format(self.temp_dir))
@@ -78,7 +79,8 @@ class Phaser(object):
         ct_phased.set_manually(coordinates_phsd,  # set data manually
                                self.ct.genome,
                                self.ct.index,
-                               self.ct.cell_labels)
+                               self.ct.cell_labels,
+                               intensity=intensity_phsd)
         # sort and trim
         ct_phased.sort_copies()
         ct_phased.sort_spots()
@@ -98,11 +100,10 @@ class Phaser(object):
 
         Args:
             out_names (list): list of output file names from child nodes
-            cell_labels (np.array(ncell,)): list of cell labels
-            phase_shape (tuple): shape of the phase array
-
+            cfg (dict): configuration dictionary
         Returns:
-            phase (np.array(ncell, ndomains, nspot_max): phase array
+            coordinates_phsd (np.array(ncell, ndomain, ncopy_max, nspot_max, 3), np.float32)
+            intensity_phsd (np.array(ncell, ndomain, ncopy_max, nspot_max), np.float32) or None
         """
         
         # get ct_name from cfg
@@ -117,111 +118,110 @@ class Phaser(object):
         # check that the output size is correct
         assert len(out_names) == ct.ncell, "Number of output files does not match number of cells."
         
-        # list of coordinates, outputs from the child nodes
+        # list of coordinates/intensity, outputs from the child nodes
         crd_list = [None for _ in range(ct.ncell)]
+        if 'intensity' in ct:
+            lum_list = [None for _ in range(ct.ncell)]
         
         # Read the results from the temporary directory and store them in the phase array
         for out_name in out_names:
             
             # the files are stored in a temporary directory with a path:
-            #   /temp_dir/cellID.npy
+            #   /temp_dir/cellID.pickle
             cellID = os.path.basename(out_name).split('.')[0]  # get cellID from file name
             cellnum = ct.get_cellnum(cellID)  # get cell number from cellID
             
-            # read coordinates from temp file
-            try:
-                crd = np.load(out_name)  # np.array(ndomain, ncpoy_max, nspot_max, 3)
-            except IOError:
-                "File {} not found.".format(out_name)
+            # open the file
+            with open(out_name, 'rb') as f:
+                data = pickle.load(f)
+                crd = data['cell_coordinates_phased']
+                if 'intensity' in ct:
+                    lum = data['cell_intensity_phased']
             
             # store coordinates in the list
             crd_list[cellnum] = crd
+            if 'intensity' in ct:
+                lum_list[cellnum] = lum
         
         # stack the list of coordinates into a single array
         coordinates_phsd = np.stack(crd_list, axis=0)  # np.array(ncell, ndomain, ncopy_max, nspot_max, 3)
         for cellnum in range(ct.ncell):
             assert np.array_equal(coordinates_phsd[cellnum, :, :, :, :], crd_list[cellnum],
                                   equal_nan=True), "Coordinates do not match."
+        # stack the list of intensity into a single array
+        if 'intensity' in ct:
+            intensity_phsd = np.stack(lum_list, axis=0)  # np.array(ncell, ndomain, ncopy_max, nspot_max)
+            for cellnum in range(ct.ncell):
+                assert np.array_equal(intensity_phsd[cellnum, :, :, :], lum_list[cellnum],
+                                      equal_nan=True), "Intensity does not match."
+        else:
+            intensity_phsd = None
                 
-        return coordinates_phsd
+        return coordinates_phsd, intensity_phsd
 
 
 
 # Auxiliary functions
 
-def phase_cell_coordinates(crd, phs, ncopy_max):
-    """Phases the coordinates of a single cell, creating a new array with multiple copy labels.
+def phase_cell_data(arr, phs, ncopy_max):
+    """Phases the data (coordinates, intensity) of a single cell,creating a new array with multiple copy labels.
     
     This function is called the parallel task in the child classes.
 
     Args:
-        crd (np.array(ndomain, nspot_max, 3), np.float32)
+        arr (np.array(ndomain, nspot_max, (3)), the (3) is optional
         phs (np.array(ndomain, nspot_max), np.int32)
     Returns:
-        crd_phased (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)
+        arr_phased (np.array(ndomain, ncopy_max, nspot_max, (3)), np.float32)
     """
-    
-    # get attributes
-    ndomain, nspot_max, _ = crd.shape
-        
-    # initialize the phased coordinates array
-    crd_phsd = np.full((ndomain, ncopy_max, nspot_max, 3),
-                       np.nan)  # np.array(ndomain, ncopy_max, nspot_max, 3)
-    
+    # initialize the phased array
+    # add a dimension ncopy_max in the second position to the shape of arr
+    phsd_shape = arr.shape[:1] + (ncopy_max,) + arr.shape[1:]
+    arr_phsd = np.full(phsd_shape, np.nan)  # np.array(ndomain, ncopy_max, nspot_max, (3))
     # loop over the phase labels
     for cp in np.unique(phs):
-        
         # The spots with phase label 0, i.e. outliers, are ignored
         if cp == 0:
             continue
-        
         # create a mask for the current phase label
         cp_mask = phs == cp  # np.array(ndomain, nspot_max) of bool
-        
         # extend the mask to match the shape of the coordinates array
-        cp_mask_ext = np.expand_dims(cp_mask, axis=2)  # np.array(ndomain, nspot_max, 1)
-        cp_mask_ext = np.repeat(cp_mask_ext, repeats=3, axis=2)  # np.array(ndomain, nspot_max, 3)
-                
-        # check that the mask is correct
-        for i in range(3):
-            assert np.array_equal(cp_mask[:, :], cp_mask_ext[:, :, i]),\
-                "Mask for coordinates is not correct."
-        
-        # create copy of crd that is nan outside the mask
-        crd_cp = np.full(crd.shape, np.nan)  # np.array(ndomain, nspot_max, 3)
-        crd_cp[cp_mask_ext] = crd[cp_mask_ext]
-        
-        # create a copy of crd_phsd that is not-nan for the current copy
-        # this is required to avoid shape mismatch when updating crd_phsd
-        crd_phsd_cp = np.full(crd_phsd.shape, np.nan)  # np.array(ndomain, ncopy_max, nspot_max, 3)
-        crd_phsd_cp[:, cp-1, :, :] = crd_cp[:, :, :]
-        
-        # update the phased coordinates
-        crd_phsd[~np.isnan(crd_phsd_cp)] = crd_phsd_cp[~np.isnan(crd_phsd_cp)]
-        
-    return crd_phsd
+        if len(arr.shape) == 3:
+            cp_mask = np.expand_dims(cp_mask, axis=2)  # np.array(ndomain, nspot_max, 1)
+            cp_mask = np.repeat(cp_mask, repeats=3, axis=2)  # np.array(ndomain, nspot_max, 3) 
+        # create copy of arr that is nan for other copies (outside the mask)
+        arr_cp = np.copy(arr)
+        arr_cp[~cp_mask] = np.nan
+        # create a copy of arr_phsd that is nan for other copies
+        # this is required to avoid shape mismatch when updating arr_phsd
+        arr_phsd_cp = np.full(arr_phsd.shape, np.nan)  # np.array(ndomain, ncopy_max, nspot_max, (3))
+        if len(arr.shape) == 2:
+            arr_phsd_cp[:, cp-1, :] = arr_cp[:, :]
+        elif len(arr.shape) == 3:
+            arr_phsd_cp[:, cp-1, :, :] = arr_cp[:, :, :]
+        # update the phased data
+        arr_phsd[~np.isnan(arr_phsd_cp)] = arr_phsd_cp[~np.isnan(arr_phsd_cp)]
+    return arr_phsd
     
 
-def reorder_spots(crd):
-    """Reorders the coordinate spots of a single cell by putting the NaNs at the end.
+def reorder_spots(arr):
+    """Reorders the spots of a single cell data by putting the NaNs at the end.
     
     This function is called in the parallel task in the child classes.
     
     Args:
-        crd (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)
-    
+        arr (np.array(ndomain, ncopy_max, nspot_max, (3)), the (3) is optional
     Returns:
-        crd_reord (np.array(ndomain, ncopy_max, nspot_max, 3), np.float32)
+        arr_srt (np.array(ndomain, ncopy_max, nspot_max, (3))
     """
-    
-    ndomain, ncopy_max, nspot_max, _ = crd.shape
-    
-    crd_reord = np.copy(crd)
-    
+    ndomain, ncopy_max = arr.shape[0], arr.shape[1]
+    arr_srt = np.copy(arr)
     for d in range(ndomain):
         for c in range(ncopy_max):
-            crd_reord[d, c, :, :] = crd[d, c, np.argsort(np.isnan(crd[d, c, :, 0])), :]
-    
-    return crd_reord
+            if len(arr.shape) == 3:
+                arr_srt[d, c] = arr[d, c, np.argsort(np.isnan(arr[d, c, :]))]
+            elif len(arr.shape) == 4:
+                arr_srt[d, c] = arr[d, c, np.argsort(np.isnan(arr[d, c, :, 0])), :]
+    return arr_srt
     
     

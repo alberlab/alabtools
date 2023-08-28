@@ -10,7 +10,6 @@ from alabtools.imaging.ctenvelope import fit_alphashape
 
 class TestCtFile(unittest.TestCase):
     """Test class for CtFile.
-
     Args:
         unittest (unittest.TestCase): Test class for unittest.
     """
@@ -31,25 +30,20 @@ class TestCtFile(unittest.TestCase):
         os.remove(self.fofct_file)
     
     def test_set_from_fofct(self):
-        """Test the set_from_fofct method of CtFile.
-        """
+        """Test the set_from_fofct method of CtFile."""
         # create a CtFile object and set the data from fofct
         ct = CtFile('test_ct.ct', 'w')
         ct.set_from_fofct(self.fofct_file)
-        
         # sort the cells by int-casted cell labels (with str labels, the order is not correct)
         ct.sort_cells(order=np.argsort(ct.cell_labels.astype(int)))
-        
         # check the results
         self._assertCtFile(ct, self.data)
-        
         # close and delete the file
         ct.close()
         os.remove('test_ct.ct')
     
     def test_merge(self):
-        """Test the merge method of CtFile.
-        """
+        """Test the merge method of CtFile."""
         # modify the test data for merging
         mrgd_data = self.data.copy()
         mrgd_data['ncell'] = 2 * self.data['ncell']
@@ -64,7 +58,9 @@ class TestCtFile(unittest.TestCase):
         mrgd_data['coordinates'] = np.concatenate((self.data['coordinates'],
                                                    self.data['coordinates']),
                                                   axis=0)
-        
+        mrgd_data['intensity'] = np.concatenate((self.data['intensity'],
+                                                 self.data['intensity']),
+                                                axis=0)
         # create two CtFile objects and merge them
         ct1 = CtFile('test_ct1.ct', 'w')
         ct1.set_from_fofct(self.fofct_file)
@@ -73,10 +69,8 @@ class TestCtFile(unittest.TestCase):
         ct2.set_from_fofct(self.fofct_file)
         ct2.sort_cells(np.argsort(ct2.cell_labels.astype(int)))
         ct = ct1.merge(ct2, 'test_ct_merged.ct', tag1='1', tag2='2')
-        
         # check the results
         self._assertCtFile(ct, mrgd_data)
-        
         # close and delete the files
         ct1.close()
         ct2.close()
@@ -86,8 +80,7 @@ class TestCtFile(unittest.TestCase):
         os.remove('test_ct_merged.ct')
     
     def test_set_manually(self):
-        """Test the manual setting of CtFile.
-        """    
+        """Test the manual setting of CtFile."""    
         # open a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
@@ -95,11 +88,9 @@ class TestCtFile(unittest.TestCase):
                       start=self.data['start'],
                       end=self.data['end'],
                       genome=genome)
-        ct.set_manually(self.data['coordinates'], genome, index)
-        
+        ct.set_manually(self.data['coordinates'], genome, index, intensity=self.data['intensity'])
         # check the results
         self._assertCtFile(ct, self.data)
-        
         # close and delete the file
         ct.close()
         os.remove('test_ct.ct')
@@ -107,11 +98,9 @@ class TestCtFile(unittest.TestCase):
     def test_trimming(self):
         """Test the trim method of CtFile for trimming.
         First we inclulde a number of NaN columns in copies and spots of the coordinates.
-        Then we create a CtFile object and trim the spots.
-        """
+        Then we create a CtFile object and trim the spots."""
         ncopy_totrim = 2  # number of NaN columns to trim for copies
         nspot_totrim = 3  # number of NaN columns to trim for spots
-        
         # include NaN columns in copies
         coordinates_totrim = np.concatenate((self.data['coordinates'],
                                             np.full((self.data['ncell'],
@@ -119,6 +108,12 @@ class TestCtFile(unittest.TestCase):
                                                     ncopy_totrim,
                                                     self.data['nspot_max'], 3), np.nan)),
                                             axis=2)
+        intensity_totrim = np.concatenate((self.data['intensity'],
+                                           np.full((self.data['ncell'],
+                                                    self.data['ndomain'],
+                                                    ncopy_totrim,
+                                                    self.data['nspot_max']), np.nan)),
+                                           axis=2)
         # include NaN columns in spots
         coordinates_totrim = np.concatenate((coordinates_totrim,
                                             np.full((self.data['ncell'],
@@ -126,7 +121,12 @@ class TestCtFile(unittest.TestCase):
                                                     self.data['ncopy_max']+ncopy_totrim,
                                                     nspot_totrim, 3), np.nan)),
                                             axis=3)
-
+        intensity_totrim = np.concatenate((intensity_totrim,
+                                           np.full((self.data['ncell'],
+                                                    self.data['ndomain'],
+                                                    self.data['ncopy_max']+ncopy_totrim,
+                                                    nspot_totrim), np.nan)),
+                                             axis=3)
         # create CtFile object and set data manually
         ct = CtFile('test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
@@ -134,32 +134,31 @@ class TestCtFile(unittest.TestCase):
                       start=self.data['start'],
                       end=self.data['end'],
                       genome=genome)
-        ct.set_manually(coordinates_totrim, genome, index)  # use coordinates with NaN columns
-        
+        ct.set_manually(coordinates_totrim, genome, index, intensity=intensity_totrim)  # use data with NaN columns
         # trim the spots
         ct.trim()
-        
         # check the results
         self._assertCtFile(ct, self.data)
-        
         # close and remove the CtFile
         ct.close()
         os.remove('test_ct.ct')
     
     def test_sort_copies(self):
-        """Test the sort_copies method of CtFile.
-        """
+        """Test the sort_copies method of CtFile."""
         n_nan_copy = 2  # number of NaN columns to add for copies
-        
-        # include NaN columns in copies
-        # initialize the coordinates array as NaN
+        # create data with NaN columns for copies
         coordinates_tosort = np.full((self.data['ncell'],
                                       self.data['ndomain'],
                                       self.data['ncopy_max']+n_nan_copy,
                                       self.data['nspot_max'],
                                       3),
                                      np.nan)
-        # fill in the coordinates data
+        intensity_tosort = np.full((self.data['ncell'],
+                                    self.data['ndomain'],
+                                    self.data['ncopy_max']+n_nan_copy,
+                                    self.data['nspot_max']),
+                                   np.nan)
+        # fill in the data
         for cellnum in range(self.data['ncell']):
             for chrom in np.unique(self.data['chromstr']):
                 # map the copy index without NaNs to the copy index with NaNs
@@ -170,7 +169,8 @@ class TestCtFile(unittest.TestCase):
                 for cp in range(self.data['ncopy_max']):
                     coordinates_tosort[cellnum, self.data['chromstr']==chrom, cp_map[cp], :, :] = \
                         self.data['coordinates'][cellnum, self.data['chromstr']==chrom, cp, :, :]
-
+                    intensity_tosort[cellnum, self.data['chromstr']==chrom, cp_map[cp], :] = \
+                        self.data['intensity'][cellnum, self.data['chromstr']==chrom, cp, :]
         # create the coordinates/nspot arrays to test
         coordinates_test = np.full((self.data['ncell'],
                                     self.data['ndomain'],
@@ -179,12 +179,16 @@ class TestCtFile(unittest.TestCase):
                                     3),
                                    np.nan)
         coordinates_test[:, :, :self.data['ncopy_max'], :, :] = self.data['coordinates']
+        intensity_test = np.full((self.data['ncell'],
+                                  self.data['ndomain'],
+                                  self.data['ncopy_max']+n_nan_copy,
+                                  self.data['nspot_max']),
+                                 np.nan)
+        intensity_test[:, :, :self.data['ncopy_max'], :] = self.data['intensity']
         nspot_test = np.zeros((self.data['ncell'],
                                  self.data['ndomain'],
                                  self.data['ncopy_max']+n_nan_copy))
         nspot_test[:, :, :self.data['ncopy_max']] = self.data['nspot']
-        
-        
         # create a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
@@ -192,33 +196,32 @@ class TestCtFile(unittest.TestCase):
                       start=self.data['start'],
                       end=self.data['end'],
                       genome=genome)
-        ct.set_manually(coordinates_tosort, genome, index)  # use coordinates with NaN columns
-        
+        ct.set_manually(coordinates_tosort, genome, index, intensity=intensity_tosort)
         # sort the copies
         ct.sort_copies()
-        
         # check the results
         np.testing.assert_array_almost_equal(ct.coordinates, coordinates_test, decimal=3)
+        np.testing.assert_array_equal(ct.intensity, intensity_test)
         np.testing.assert_array_equal(ct.nspot, nspot_test)
-        
         # close and remove the CtFile
         ct.close()
         os.remove('test_ct.ct')
     
     def test_sort_spots(self):
-        """Test the sort_spots method of CtFile.
-        """
+        """Test the sort_spots method of CtFile."""
         n_nan_spot = 3  # number of NaNs to add for spots
-        
-        # write input coordinates for CtFile
-        # initialize the coordinates array as NaN
+        # extend the data with NaN columns for spots
         coordinates_tosort = np.full((self.data['ncell'],
                                       self.data['ndomain'],
                                       self.data['ncopy_max'],
                                       self.data['nspot_max']+n_nan_spot,
                                       3),
-                                     np.nan)    
-        # fill in the coordinates data
+                                     np.nan) 
+        intensity_tosort = np.full((self.data['ncell'],
+                                    self.data['ndomain'],
+                                    self.data['ncopy_max'],
+                                    self.data['nspot_max']+n_nan_spot),
+                                   np.nan)   
         for cellnum in range(self.data['ncell']):
             for domainnum in range(self.data['ndomain']):
                 for cp in range(self.data['ncopy_max']):
@@ -226,12 +229,12 @@ class TestCtFile(unittest.TestCase):
                     spt_map = np.sort(np.random.choice(np.arange(self.data['nspot_max'] + n_nan_spot),
                                                        self.data['nspot_max'],
                                                        replace=False))
-                    # fill in the coordinates data for each spot
                     for spt in range(self.data['nspot_max']):
                         coordinates_tosort[cellnum, domainnum, cp, spt_map[spt], :] = \
                             self.data['coordinates'][cellnum, domainnum, cp, spt, :]
-        
-        # write the test coordinates (with NaNs at the end of spots)
+                        intensity_tosort[cellnum, domainnum, cp, spt_map[spt]] = \
+                            self.data['intensity'][cellnum, domainnum, cp, spt]
+        # write the test data (with NaNs at the end of spots)
         coordinates_test = np.full((self.data['ncell'],
                                     self.data['ndomain'],
                                     self.data['ncopy_max'],
@@ -239,7 +242,12 @@ class TestCtFile(unittest.TestCase):
                                     3),
                                     np.nan)
         coordinates_test[:, :, :, :self.data['nspot_max'], :] = self.data['coordinates']
-        
+        intensity_test = np.full((self.data['ncell'],
+                                  self.data['ndomain'],
+                                  self.data['ncopy_max'],
+                                  self.data['nspot_max']+n_nan_spot),
+                                 np.nan)
+        intensity_test[:, :, :, :self.data['nspot_max']] = self.data['intensity']
         # create a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
         genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
@@ -247,14 +255,12 @@ class TestCtFile(unittest.TestCase):
                       start=self.data['start'],
                       end=self.data['end'],
                       genome=genome)
-        ct.set_manually(coordinates_tosort, genome, index)  # use coordinates with NaN columns
-        
+        ct.set_manually(coordinates_tosort, genome, index, intensity=intensity_tosort)
         # sort the spots
         ct.sort_spots()
-
         # check the results
         np.testing.assert_array_almost_equal(ct.coordinates, coordinates_test, decimal=3)
-        
+        np.testing.assert_array_equal(ct.intensity, intensity_test)
         # close and remove the CtFile
         ct.close()
         os.remove('test_ct.ct')
@@ -270,9 +276,17 @@ class TestCtFile(unittest.TestCase):
                                             1,
                                             self.data['ncopy_max'] * self.data['nspot_max'],
                                             3))
-        # check that the coordinates are collapsed correctly
+        intensity_collapsed = np.reshape(self.data['intensity'],
+                                         (self.data['ncell'],
+                                          self.data['ndomain'],
+                                          1,
+                                          self.data['ncopy_max'] * self.data['nspot_max']))
+        # check data are collapsed correctly
         for cellnum in range(self.data['ncell']):
             for domainnum in range(self.data['ndomain']):
+                assert np.array_equal(self.data['intensity'][cellnum, domainnum, :, :].flatten(),
+                                      intensity_collapsed[cellnum, domainnum, 0, :],
+                                      equal_nan=True), 'Intensity is not collapsed correctly.'
                 for i in range(3):
                     assert np.array_equal(self.data['coordinates'][cellnum, domainnum, :, :, i].flatten(),
                                           coordinates_collapsed[cellnum, domainnum, 0, :, i],
@@ -285,7 +299,7 @@ class TestCtFile(unittest.TestCase):
                       start=self.data['start'],
                       end=self.data['end'],
                       genome=genome)
-        ct.set_manually(coordinates_collapsed, genome, index)  # use collapsed coordinates
+        ct.set_manually(coordinates_collapsed, genome, index, intensity=intensity_collapsed)
         
         # configure the phaser and initialize it
         config = {'ct_name': 'test_ct.ct',
@@ -307,8 +321,7 @@ class TestCtFile(unittest.TestCase):
         os.remove('test_ct_phased.ct')
     
     def test_flatten_coordinates(self):
-        """Test the flatten_coordinates function in imaging utils.
-        """
+        """Test the flatten_coordinates function in imaging utils."""
         # test with different number of dimensions
         n_tests = [(3, 2),  # n1=3, n2=2 (np.array((3, 2, 3)))
                    (3, 2, 4),  # n1=3, n2=2, n3=4
@@ -325,7 +338,7 @@ class TestCtFile(unittest.TestCase):
                 np.testing.assert_allclose(crd[tuple(ijk)], crd_flat[w])
     
     def test_fit_alphashape(self):
-        
+        """Test the fit_alphashape function in imaging ctenvelope."""
         # create random coordinates within a unit sphere
         n_points = 5000  # enough points to fit a sphere
         theta = np.random.rand(n_points) * 2 * np.pi
@@ -334,10 +347,8 @@ class TestCtFile(unittest.TestCase):
         y = np.sin(phi) * np.sin(theta)
         z = np.cos(phi)
         pts = np.array([x, y, z]).T
-        
         # fit an alpha shape
         alpha, mesh = fit_alphashape(pts, alpha=0.0005, delta_alpha=0.0001)
-        
         # check that the alpha shape is a sphere
         # generate random points within a sphere of radius 2
         n_check = 1000
@@ -353,17 +364,10 @@ class TestCtFile(unittest.TestCase):
                 self.assertTrue(mesh.contains(pt))
             if r > 1.1:  # points outside the sphere should not be contained in the alpha shape
                 self.assertFalse(mesh.contains(pt))
-        return None
     
     
     def _assertCtFile(self, ct, test_data):
-        """Assert the CtFile object with the test data.
-
-        Args:
-            ct (CtFile)
-            test_data (dict)
-        """
-
+        """Assert the CtFile object with the test data."""
         self.assertEqual(ct.genome.assembly, test_data['assembly'])
         np.testing.assert_array_equal(ct.index.chromstr, test_data['chromstr'])
         np.testing.assert_array_equal(ct.index.start, test_data['start'])
@@ -377,6 +381,7 @@ class TestCtFile(unittest.TestCase):
         np.testing.assert_array_equal(ct.ncopy, test_data['ncopy'])
         np.testing.assert_array_equal(ct.nspot, test_data['nspot'])
         np.testing.assert_allclose(ct.coordinates, test_data['coordinates'], equal_nan=True)
+        np.testing.assert_array_equal(ct.intensity, test_data['intensity'])
 
 
 if __name__ == '__main__':
@@ -405,7 +410,7 @@ def writeFofctFile(filename, data):
     fofct_file.write('"#experimenter_name: Francesco Musella,,,\n')
     fofct_file.write('###lab_name: Frank Alber,\n')
     fofct_file.write('#""description: test FOFCT file for CtFile reading,\n')
-    fofct_file.write('##columns=(Spot_ID,Trace_ID,X,Y,Z,' +
+    fofct_file.write('##columns=(Spot_ID,Trace_ID,X,Y,Z,Intensity,' +
                         'Chrom,Chrom_Start,Chrom_End,Cell_ID,' +
                         'Extra_Cell_ROI_ID,Additional_Feature)\n')
     
@@ -421,11 +426,13 @@ def writeFofctFile(filename, data):
                     x = data['coordinates'][cellnum, domainnum, copynum, spotnum, 0]
                     y = data['coordinates'][cellnum, domainnum, copynum, spotnum, 1]
                     z = data['coordinates'][cellnum, domainnum, copynum, spotnum, 2]
+                    lum = data['intensity'][cellnum, domainnum, copynum, spotnum]
                     if np.isnan(x) or np.isnan(y) or np.isnan(z):
                         raise ValueError('Coordinates must not be NaN.')
                     fofct_file.write('{},'.format(spotID))
                     fofct_file.write('{}_{}_{},'.format(cellnum, chrom, copynum))
                     fofct_file.write('{},{},{},'.format(x, y, z))
+                    fofct_file.write('{},'.format(lum))
                     fofct_file.write('{},{},{},'.format(chrom, chrom_start, chrom_end))
                     fofct_file.write('{},'.format(cellnum))
                     fofct_file.write('{},'.format(cellnum**2))  # useless
@@ -453,31 +460,28 @@ def createTestData():
         - ncopy (np.ndarray): ncell x ndomain
         - nspot (np.ndarray): ncell x ndomain x ncopy_max
         - coordinates (np.ndarray): ncell x ndomain x ncopy_max x nspot_max x 3
+        - intensity (np.ndarray): ncell x ndomain x ncopy_max x nspot_max
 
     Returns:
         data (dict): Dictionary with the data.
     """
     
-    # set seed for reproducibility
-    np.random.seed(0)
+    np.random.seed(0)  # for reproducibility
     # set attributes
     assembly, chroms, ncell, ndomain, ncopy_max, nspot_max = set_attributes()
-    # create the index
+    # create the data
     chromstr, start, end = create_index(chroms, ndomain)
-    # create cell_labels
     cell_labels = create_cell_labels(ncell)
-    # create ncopy
     ncopy = create_ncopy(ncell, ndomain, ncopy_max, chromstr)
-    # create nspot
     nspot = create_nspot(ncell, ndomain, ncopy_max, nspot_max, ncopy)
-    # create coordinates
     coordinates = create_coordinates(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot)
-    # compute total number of spots
+    intensity = create_intensity(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot)
     nspot_tot = np.sum(nspot)
-    # compute total number of traces
     ntrace_tot = compute_ntrace_tot(chroms, chromstr, ncopy)
     # return everything as a dictionary
-    data = create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot, coordinates)
+    data = create_data_dicionary(assembly, chromstr, start, end,
+                                 ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot,
+                                 cell_labels, ncopy, nspot, coordinates, intensity)
     return data
 
 
@@ -554,9 +558,19 @@ def create_coordinates(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot):
                     coordinates[cellnum, domainnum, copynum, spotnum, :] = [x, y, z]
     return coordinates
 
+def create_intensity(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot):
+    """Create the intensity array for testing."""
+    intensity = np.full((ncell, ndomain, ncopy_max, nspot_max), np.nan)
+    for cellnum in range(ncell):
+        for domainnum in range(ndomain):
+            for copynum in range(ncopy[cellnum, domainnum]):
+                for spotnum in range(nspot[cellnum, domainnum, copynum]):
+                    intensity[cellnum, domainnum, copynum, spotnum] = np.random.randint(1, 100)
+    return intensity
+
 def create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max,
                           nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot,
-                          coordinates):
+                          coordinates, intensity):
     """Create the data dictionary for testing."""
     data = {
         'assembly': assembly,
@@ -572,7 +586,8 @@ def create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_
         'cell_labels': cell_labels,
         'ncopy': ncopy,
         'nspot': nspot,
-        'coordinates': coordinates
+        'coordinates': coordinates,
+        'intensity': intensity
     }
     return data
 

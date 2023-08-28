@@ -12,7 +12,7 @@ from .fofct import process as fofct_process
 from .utils_imaging import sort_coord_by_boolmask
 
 __author__ = "Francesco Musella"
-__ct_version__ = 0.1
+__ct_version__ = 1.1
 __email__ = "fmusella@g.ucla.edu"
 
 
@@ -50,7 +50,6 @@ class CtFile(h5py.File):
         
         self._genome = None
         self._index = None
-        self._data = None
         
         h5py.File.__init__(self, *args, **kwargs)  # inherits init from h5py.File
         
@@ -120,6 +119,7 @@ class CtFile(h5py.File):
         self._check_consistency()
     
     def _check_consistency(self):
+        """Check that the data are consistent with the attributes."""
         if 'cell_labels' in self:
             assert self['cell_labels'].shape[0] == self._ncell, 'cell_labels.shape[0] != ncell'
         if 'coordinates' in self:
@@ -148,9 +148,10 @@ class CtFile(h5py.File):
                 and self['nspot_max'] == other['nspot_max'] and self['ncopy_max'] == other['ncopy_max'] \
                     and np.array_equal(self['cell_labels'], other['cell_labels']) \
                         and np.array_equal(self['coordinates'], other['coordinates']) \
-                            and np.array_equal(self['intensity'], other['intensity']) \
-                                and np.array_equal(self['nspot'], other['nspot']) \
-                                    and np.array_equal(self['ncopy'], other['ncopy'])
+                            and np.array_equal(self['nspot'], other['nspot']) \
+                                and np.array_equal(self['ncopy'], other['ncopy'])
+        if 'intensity' in self and 'intensity' in other:
+            eq = eq and np.array_equal(self['intensity'], other['intensity'])
         return eq
     
     def get_ncell(self):
@@ -329,6 +330,9 @@ class CtFile(h5py.File):
         self.ncopy = self.ncopy[order]
         self.nspot = self.nspot[order]
         self.coordinates = self.coordinates[order]
+        if 'intensity' in self:
+            self.intensity = self.intensity[order]
+        self._check_consistency()
     
     def sort_copies(self):
         """Sorts copies of each chromosome in each cell.
@@ -340,98 +344,93 @@ class CtFile(h5py.File):
         nan_map_0 = np.isnan(self.coordinates[:, :, :, :, 0])  # ncell, ndomain, ncopy_max, nspot_max
         # LogicAND along the spot axis (True if all spots are NaN)
         nan_map_0 = np.all(nan_map_0, axis=-1)  # ncell, ndomain, ncopy_max
-        
         # The previous map gives different True/False for each domain
         # We want to have the same True/False for all domains of the same chromosome in each cell
         nan_map = np.zeros((self.ncell, self.ndomain, self.ncopy_max), dtype=bool)  # ncell, ndomain, ncopy_max
-        
         # Loop over chromosomes and fill the mask
         for chrom in self.genome.chroms:
             nan_chrom = np.all(nan_map_0[:, self.index.chromstr==chrom, :], axis=1)  # ncell, ncopy_max
             nan_map[:, self.index.chromstr==chrom, :] = np.repeat(nan_chrom[:, np.newaxis, :],
                                                                   np.sum(self.index.chromstr==chrom),
                                                                   axis=1)  # ncell, ndomain_chrom, ncopy_max
-        
         # Sort nspot
         idx_srt = sort_coord_by_boolmask(nan_map, axis=2)
         self.nspot = self.nspot[idx_srt]
-        
         # Expand the mask to include the spot axis
         nan_map = np.expand_dims(nan_map, axis=3)  # ncell, ndomain, ncopy_max, 1
         nan_map = np.repeat(nan_map, repeats=self.nspot_max, axis=3)  # ncell, ndomain, ncopy_max, nspot_max
-        
         # Sort coordinates
         idx_srt = sort_coord_by_boolmask(nan_map, axis=2)
         coord_srt = np.copy(self.coordinates)
         for i in range(3):
             coord_srt[..., i] = self.coordinates[..., i][idx_srt]
         self.coordinates = coord_srt
+        # Sort intensity
+        if 'intensity' in self:
+            self.intensity = self.intensity[idx_srt]
+        self._check_consistency()
     
     def sort_spots(self):
         """Sorts the spots in each domain/cell.
-        
         NaN spots are put at the end.
         """
-        
         # Initialize NaN map
         nan_map = np.isnan(self.coordinates[..., 0])  # ncell, ndomain, ncopy_max, nspot_max
-        
         # Sort coordinates
         idx = sort_coord_by_boolmask(nan_map, axis=3)
         coord_srt = np.copy(self.coordinates)
         for i in range(3):
             coord_srt[..., i] = self.coordinates[..., i][idx]
         self.coordinates = coord_srt
+        # Sort intensity
+        if 'intensity' in self:
+            self.intensity = self.intensity[idx]
+        self._check_consistency()
     
     def trim(self):
         """
         Trims the data to remove redundant copies and spots.
-        
         This operation might be required if the data have an excessive max-padding.
-        
         A copy label c is reduntant if:
             self.coordinates[:, :, c, :, :] is all NaN
         A spot label s is redundant if:
             self.coordinates[:, :, :, s, :] is all NaN
-        
         ATTENTION: this method works if the data data are organized so that
         the reduntant copies and spots are at the end of the array.
         Use sort_copies() and sort_spots() to ensure this.
         """
-        
         # Defines the map of NaN values from self.coordinates
         nan_map = np.isnan(self.coordinates)  # np.array(ncell, ndomain, ncopy_max, nspot_max, 3)
-        
         # Trim copies
-        # Loop over copies in reverse order
-        for cp in range(self.ncopy_max - 1, -1, -1):
-            if not np.all(nan_map[:, :, cp, :, :]):
+        while True:
+            if not np.all(nan_map[:, :, self.ncopy_max-1, :, :]):
                 # If the copy is not redundant, we can exit the loop
                 break
-            sys.stdout.write('Trimming copy {}...\n'.format(cp))
-            self.ncopy_max = self.ncopy_max - 1
-            self.coordinates = self.coordinates[:, :, :cp, :, :]
-            self.nspot = self.nspot[:, :, :self.ncopy_max]
-            # Update the map of NaN values
+            sys.stdout.write('Trimming copy {}...\n'.format(self.ncopy_max-1))
+            self.nspot = self.nspot[:, :, :self.ncopy_max-1]
+            self.coordinates = self.coordinates[:, :, :self.ncopy_max-1, :, :]
+            if 'intensity' in self:
+                self.intensity = self.intensity[:, :, :self.ncopy_max-1, :]
+            self.ncopy_max = self.ncopy_max-1
             nan_map = np.isnan(self.coordinates)
-        
         # Trim spots
-        for sp in range(self.nspot_max - 1, -1, -1):
-            if not np.all(nan_map[:, :, :, sp, :]):
+        while True:
+            if not np.all(nan_map[:, :, :, self.nspot_max-1, :]):
                 break
-            sys.stdout.write('Trimming spot {}...\n'.format(sp))
-            self.nspot_max = self.nspot_max - 1
-            self.coordinates = self.coordinates[:, :, :, :sp, :]
+            sys.stdout.write('Trimming spot {}...\n'.format(self.nspot_max-1))
+            self.coordinates = self.coordinates[:, :, :, :self.nspot_max-1, :]
+            if 'intensity' in self:
+                self.intensity = self.intensity[:, :, :, :self.nspot_max-1]
+            self.nspot_max = self.nspot_max-1
             nan_map = np.isnan(self.coordinates)
+        self._check_consistency()
     
     def pop_cells(self, indices):
         """Removes the cells with the input indices.
-        
         Args:
             indices (np.array(n, dtype=int)): Indices of the cells to remove.
                 Must be a subset of the numbers from 0 to ncell-1.
         """
-        
         # assert the input indices
         assert len(indices) <= self.ncell,\
             "The length of the input indices must be less than or equal to the number of cells."
@@ -443,10 +442,13 @@ class CtFile(h5py.File):
         self.ncopy = np.delete(self.ncopy, indices, axis=0)
         self.nspot = np.delete(self.nspot, indices, axis=0)
         self.coordinates = np.delete(self.coordinates, indices, axis=0)
+        if 'intensity' in self:
+            self.intensity = np.delete(self.intensity, indices, axis=0)
         # update attributes
         self.ncell -= len(indices)
         self.nspot_tot = np.sum(self.nspot)
         self.ntrace_tot = self._compute_ntrace_tot()
+        self._check_consistency()
 
     def merge(self, other, new_name, tag1=None, tag2=None):
         """
@@ -461,28 +463,24 @@ class CtFile(h5py.File):
         @param tag2: tag to distinguish cell labels from other
         @return new_ct: a CtFile instance
         """
-        
         if self.genome != other.genome:
             raise ValueError('Cannot merge CtFile instances with different genomes.')
         if self.index != other.index:
             raise ValueError('Cannot merge CtFile instances with different indexes.')
-        
         if len(np.intersect1d(self.cell_labels, other.cell_labels)) != 0 \
             and tag1 is None and tag2 is None:
             raise ValueError('There is an overlap in cell labels. Please provide tags to distinguish them.')
-        
         new_ct = CtFile(new_name, mode='w')
-        
+        # set the attributes
         new_ct.set_genome(self.genome)
         new_ct.set_index(self.index)
-        
         new_ct.set_ncell(self.ncell + other.ncell)
         new_ct.set_ndomain(self.ndomain)
         new_ct.set_nspot_tot(self.nspot_tot + other.nspot_tot)
         new_ct.set_ntrace_tot(self.ntrace_tot + other.ntrace_tot)
         new_ct.set_nspot_max(int(np.max([self.nspot_max, other.nspot_max])))
         new_ct.set_ncopy_max(int(np.max([self.ncopy_max, other.ncopy_max])))
-        
+        # set the cell labels
         new_cell_labels = []
         if tag1 is None:
             tag1 = ''
@@ -492,23 +490,30 @@ class CtFile(h5py.File):
         new_cell_labels.extend([cellID + tag2 for cellID in other.cell_labels])
         new_cell_labels = np.array(new_cell_labels)
         new_ct.set_cell_labels(new_cell_labels)
-        
+        # set the coordinates
         new_coord = np.nan * np.zeros((new_ct.ncell, new_ct.ndomain, new_ct.ncopy_max, new_ct.nspot_max, 3))
         new_coord[:self.ncell, :, :self.ncopy_max, :self.nspot_max, :] = self.coordinates
         new_coord[self.ncell:, :, :other.ncopy_max, :other.nspot_max, :] = other.coordinates
         new_ct.set_coordinates(new_coord)
-        
+        # set the intensity
+        if 'intensity' in self and 'intensity' in other:
+            new_intensity = np.nan * np.zeros((new_ct.ncell, new_ct.ndomain, new_ct.ncopy_max, new_ct.nspot_max))
+            new_intensity[:self.ncell, :, :self.ncopy_max, :self.nspot_max] = self.intensity
+            new_intensity[self.ncell:, :, :other.ncopy_max, :other.nspot_max] = other.intensity
+            new_ct.set_intensity(new_intensity)
+        # set the nspot
         new_nspot = np.nan * np.zeros((new_ct.ncell, new_ct.ndomain, new_ct.ncopy_max))
         new_nspot[:self.ncell, :, :self.ncopy_max] = self.nspot
         new_nspot[self.ncell:, :, :other.ncopy_max] = other.nspot
         new_ct.set_nspot(new_nspot)
-        
+        # set the ncopy
         new_ncopy = np.concatenate((self.ncopy, other.ncopy), axis=0)
         new_ct.set_ncopy(new_ncopy)
+        new_ct._check_consistency()
         
         return new_ct
     
-    def set_manually(self, coordinates, genome, index, cell_labels=None):
+    def set_manually(self, coordinates, genome, index, cell_labels=None, intensity=None):
         """Set the CtFile attributes by manually inputting the data.
            ncopy and nspot are inferred from the coordinates array.
 
@@ -524,24 +529,26 @@ class CtFile(h5py.File):
         """        
         # set the genome / index
         assert isinstance(genome, Genome), 'genome must be a Genome instance'
-        self.set_genome(genome)
         assert isinstance(index, Index), 'index must be a Index instance'
-        assert index.genome == self.genome, 'genome in index must match input genome'
+        assert index.genome == genome, 'genome in index must match input genome'
+        self.set_genome(genome)
         self.set_index(index)
         # set the coordinates
-        assert len(coordinates.shape) == 5, 'coordinates must be a 5D array'
-        assert coordinates.shape[1] == len(index),\
-            'coordinates must have the same number of domains as the index'
-        assert coordinates.shape[4] == 3, 'spatial coordinates must be 3D'
+        assert isinstance(coordinates, np.ndarray), 'coordinates must be a numpy array'
         try:
             self.set_coordinates(coordinates.astype(np.float32))
         except ValueError:
             "Coordinates must be numeric."
+        # set the intensity
+        if intensity is not None:
+            assert isinstance(intensity, np.ndarray), 'intensity must be a numpy array'
+            try:
+                self.set_intensity(intensity.astype(np.float32))
+            except ValueError:
+                "Intensity must be numeric."
         # set the cell labels
         if cell_labels is None:
             cell_labels = np.arange(coordinates.shape[0]).astype('U10')
-        assert len(cell_labels) == coordinates.shape[0],\
-            'cell_labels must have the same length as coordinates.shape[0]'
         assert cell_labels.dtype == 'U10', 'cell_labels must be of dtype U10'
         self.set_cell_labels(cell_labels)
         # set the attribues from coordinates.shape
@@ -549,13 +556,12 @@ class CtFile(h5py.File):
         self.set_ndomain(coordinates.shape[1])
         self.set_ncopy_max(coordinates.shape[2])
         self.set_nspot_max(coordinates.shape[3])
-        # set nspot and ncopy
         nspot, ncopy = self._compute_nspot_ncopy(coordinates)
         self.set_nspot(nspot)
         self.set_ncopy(ncopy)
-        # set nspot_tot and ntrace_tot
         self.set_nspot_tot(np.sum(nspot))
         self.set_ntrace_tot(self._compute_ntrace_tot())
+        self._check_consistency()
     
     
     def set_from_fofct(self, fofct_file, in_assembly=None):
@@ -587,3 +593,4 @@ class CtFile(h5py.File):
         self.set_ncopy(ncopy)
         self.set_nspot_tot(np.sum(self.nspot))
         self.set_ntrace_tot(self._compute_ntrace_tot())
+        self._check_consistency()

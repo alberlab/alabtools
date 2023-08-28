@@ -4,12 +4,13 @@ from functools import partialmethod
 import sys
 import os
 import warnings
+import pickle
 from scipy.spatial import distance
 from sklearn.cluster import SpectralClustering
 from sklearn.cluster import AgglomerativeClustering
 from alabtools.imaging import CtFile
 from alabtools.imaging.utils_imaging import flatten_coordinates
-from .phaser import Phaser, reorder_spots, phase_cell_coordinates
+from .phaser import Phaser, reorder_spots, phase_cell_data
 
 
 class WSPhaser(Phaser):
@@ -82,6 +83,10 @@ class WSPhaser(Phaser):
         # get coordinates for cell
         cell_coordinates = ct.coordinates[ct.get_cellnum(cellID),
                                           :, 0, :, :]  # np.array(ndomain, nspot_max, 3)
+        # get intensity for cell
+        if 'intensity' in ct:
+            cell_intensity = ct.intensity[ct.get_cellnum(cellID),
+                                          :, 0, :]  # np.array(ndomain, nspot_max)
 
         # loop over chromosomes
         for chrom in ct.genome.chroms:
@@ -144,16 +149,28 @@ class WSPhaser(Phaser):
             cell_phase[ct.index.chromstr == chrom, :] = phs
         
         # phase cell coordinates
-        cell_coordinates_phased = phase_cell_coordinates(cell_coordinates,
-                                                         cell_phase,
-                                                         ncopy_max=2)
+        cell_coordinates_phased = phase_cell_data(cell_coordinates,
+                                                  cell_phase,
+                                                  ncopy_max=2)
+        # phase cell intensity
+        if 'intensity' in ct:
+            cell_intensity_phased = phase_cell_data(cell_intensity,
+                                                    cell_phase,
+                                                    ncopy_max=2)
         
         # reorder spots
         cell_coordinates_phased = reorder_spots(cell_coordinates_phased)
+        if 'intensity' in ct:
+            cell_intensity_phased = reorder_spots(cell_intensity_phased)
         
-        # save cell_phase
-        out_name = os.path.join(temp_dir, f'{cellID}.npy')
-        np.save(out_name, cell_coordinates_phased)
+        # save cell_phase as pickle
+        out_name = os.path.join(temp_dir, '{}.pkl'.format(cellID))
+        with open(out_name, 'wb') as f:
+            data = {'cell_phase': cell_phase,
+                    'cell_coordinates_phased': cell_coordinates_phased}
+            if 'intensity' in ct:
+                data['cell_intensity_phased'] = cell_intensity_phased
+            pickle.dump(data, f)
         
         return out_name
 
