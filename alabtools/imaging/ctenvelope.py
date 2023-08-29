@@ -424,13 +424,12 @@ def remove_isolated(points, thresh, min_neigh):
         points_noout (numpy.ndarray([n_points_noout, dim])): coordinates of the points without outliers.
     """
     
-    # Compute the distance matrix
-    dmat = distance.cdist(points, points, 'euclidean')
-    # set the diagonal to nan
-    np.fill_diagonal(dmat, np.nan)
-    # Compute the proximity matrix
-    pmat = np.zeros(dmat.shape)
-    pmat[dmat <= thresh] = 1
+    # Compute the condensed distance matrix (n * (n-1) / 2)
+    dcmat = distance.pdist(points)
+    # Compute the condensed proximity matrix (boolean)
+    pcmat = dcmat <= thresh
+    # Expand the proximity matrix to a square matrix
+    pmat = distance.squareform(pcmat)
     # Compute the number of neighbors for each locus
     neighs = np.nansum(pmat, axis=0)  # np.array(n_points)
     # Take only the points with enough neighbors
