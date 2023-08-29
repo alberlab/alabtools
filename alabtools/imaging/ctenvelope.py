@@ -151,8 +151,10 @@ class CtEnvelope(object):
         except KeyError:
             "ct_name not found in cfg."
         
-        # open ct file
+        # open ct file and read the cell labels
         ct = CtFile(ct_name, 'r')
+        cell_labels = ct.cell_labels
+        ct.close()
         
         # create a temporary directory to store nodes' results
         temp_dir = tempfile.mkdtemp(dir=os.getcwd())
@@ -172,7 +174,7 @@ class CtEnvelope(object):
         # run the parallel and reduce tasks
         alpha, mesh, volume = controller.map_reduce(parallel_task,
                                                     reduce_task,
-                                                    args=ct.cell_labels)
+                                                    args=cell_labels)
         
         # Delete the temporary directory and its contents
         os.system('rm -r {}'.format(temp_dir))
@@ -185,11 +187,6 @@ class CtEnvelope(object):
         self.alpha = alpha
         self.mesh = mesh
         self.volume = volume
-        
-        # close the ct file
-        ct.close()
-                
-        return None
     
     @staticmethod
     def reduce_alphashape(out_names, cfg, temp_dir):
@@ -200,11 +197,14 @@ class CtEnvelope(object):
         except KeyError:
             "ct_name not found in cfg."
         
-        # open ct file
+        # open ct file and read the cell labels and the number of cells
         ct = CtFile(ct_name, 'r')
+        ncell = ct.ncell
+        cell_labels = ct.cell_labels
+        ct.close()
         
         # check that the output size is correct
-        assert len(out_names) == ct.ncell, "Number of output files does not match number of cells."
+        assert len(out_names) == ncell, "Number of output files does not match number of cells."
         
         # initialize the alpha, mesh and volume lists
         alpha = list()
@@ -212,7 +212,7 @@ class CtEnvelope(object):
         volume = list()
         
         # Loop over the cells (in the same order as in the ct file)
-        for cellID in ct.cell_labels:
+        for cellID in cell_labels:
             # try to open the output file associated to cellID
             try:
                 out_name = os.path.join(temp_dir, cellID + '.pkl')
@@ -229,9 +229,6 @@ class CtEnvelope(object):
         # convert the lists to numpy arrays
         alpha = np.array(alpha)
         volume = np.array(volume)
-        
-        # close the ct file
-        ct.close()
                 
         return alpha, mesh, volume
 
@@ -287,18 +284,18 @@ class CtEnvelope(object):
         except KeyError:
             raise KeyError("min_neigh not found in cfg['fit parameters'].")
         
-        # load the CtFile
+        # load the CtFile and get the coordinates of the cell
         ct = CtFile(ct_name, 'r')
+        # reading in this way does not load the whole coordinates in memory, but only the cell of interest
+        crd = ct['coordinates'][ct.get_cellnum(cellID), :, :, :, :]  # ndomain, ncopy_max, nspot_max, 3
+        ct.close()
         
-        # get the cell coordinates
-        crd = ct.coordinates[ct.get_cellnum(cellID),
-                            :, :, :, :]  # np.array(ndomain, ncopy_max, nspot_max, 3)
         # flatten the coordinates
         crd_flat, _ = flatten_coordinates(crd)
         # remove the nan coordinates
         crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
         # remove the isolated points
-        crd_flat_nonan_noiso= remove_isolated(crd_flat_nonan, thresh, min_neigh)
+        crd_flat_nonan_noiso = remove_isolated(crd_flat_nonan, thresh, min_neigh)
         
         # fit the alpha-shape
         alpha, mesh = fit_alphashape(crd_flat_nonan_noiso, alpha, delta_alpha, force)
@@ -307,9 +304,6 @@ class CtEnvelope(object):
         out_name = os.path.join(temp_dir, '{}.pkl'.format(cellID))
         with open(out_name, 'wb') as f:
             pickle.dump({'alpha': alpha, 'mesh': mesh}, f)
-        
-        # close the CtFile
-        ct.close()
         
         return out_name
     
