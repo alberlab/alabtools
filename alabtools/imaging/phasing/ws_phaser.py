@@ -84,7 +84,7 @@ class WSPhaser(Phaser):
         for chrom in ct.genome.chroms:
             # get coordinates for chromosome/cell
             crd = ct['coordinates'][ct.get_cellnum(cellID),
-                                    ct.index.chromstr==chrom,
+                                    np.where(ct.index.chromstr==chrom)[0],
                                     0, :, :]  # (ndomain_chrom, nspot_max, 3)
             # initialize phasing labels to 0
             phs = np.zeros((crd.shape[0], crd.shape[1]),
@@ -121,14 +121,7 @@ class WSPhaser(Phaser):
             del idx_flat_nonan
             # if the phase labels are skipping an integer (e.g. 0, 2 - missing 1),
             # map them to increasing integers (e.g. 0, 1)
-            if len(np.unique(phs_flat_nonan_noout)) != ncluster[chrom] + 1:
-                phs_flat_nonan_noout_cp = np.copy(phs_flat_nonan_noout)
-                for i, lbl in enumerate(np.unique(phs_flat_nonan_noout)):
-                    if lbl == 0:
-                        continue
-                    phs_flat_nonan_noout[phs_flat_nonan_noout_cp == lbl] = i + 1
-                del phs_flat_nonan_noout_cp
-            
+            phs_flat_nonan_noout = remap_labels(phs_flat_nonan_noout)
             # assign phasing labels to original coordinates
             for w, ij in enumerate(idx_flat_nonan_noout):
                 i, j = ij
@@ -145,7 +138,7 @@ class WSPhaser(Phaser):
         cell_coordinates_phased = phase_cell_data(cell_coordinates,
                                                   cell_phase,
                                                   ncopy_max=2)
-        del cell_coordinates_phased
+        del cell_coordinates
         cell_coordinates_phased = reorder_spots(cell_coordinates_phased)
         # phase cell intensity
         if 'intensity' in ct:
@@ -175,6 +168,20 @@ class WSPhaser(Phaser):
         return out_name
 
 
+def remap_labels(labels):
+    """
+    Remap the labels in a numpy array to be consecutive integers starting from 0 if 0 is present in the labels,
+    or starting from 1 otherwise.
+    Args:
+        labels (numpy.ndarray): A numpy array of labels.
+    Returns:
+        numpy.ndarray: A numpy array with the labels remapped to consecutive integers starting from 0.
+    """
+    unique_labels = np.unique(labels)
+    remapped_labels = np.zeros_like(labels)
+    for i, lbl in enumerate(unique_labels):
+        remapped_labels[labels == lbl] = i if 0 in unique_labels else i + 1
+    return remapped_labels
 
 def remove_outliers(pts, lbl, ot):
         """Removes outliers from the set of points.
