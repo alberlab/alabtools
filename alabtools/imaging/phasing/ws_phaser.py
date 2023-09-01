@@ -78,43 +78,31 @@ class WSPhaser(Phaser):
                         
         # initialize phasing labels of the cell to 0
         cell_phase = np.zeros((ct.ndomain, ct.nspot_max),
-                              dtype=np.int32)  # np.array(ndomain, nspot_max)
-        
-        # get coordinates for cell
-        cell_coordinates = ct.coordinates[ct.get_cellnum(cellID),
-                                          :, 0, :, :]  # np.array(ndomain, nspot_max, 3)
-        # get intensity for cell
-        if 'intensity' in ct:
-            cell_intensity = ct.intensity[ct.get_cellnum(cellID),
-                                          :, 0, :]  # np.array(ndomain, nspot_max)
+                              dtype=np.int32)  # (ndomain, nspot_max)
 
         # loop over chromosomes
         for chrom in ct.genome.chroms:
-            
             # get coordinates for chromosome/cell
-            crd = cell_coordinates[ct.index.chromstr==chrom,
-                                   :, :]  # np.array(ndomain_chrom, nspot_max, 3)
-            
+            crd = ct['coordinates'][ct.get_cellnum(cellID),
+                                    ct.index.chromstr==chrom,
+                                    0, :, :]  # (ndomain_chrom, nspot_max, 3)
             # initialize phasing labels to 0
             phs = np.zeros((crd.shape[0], crd.shape[1]),
-                           dtype=np.int32)  # np.array(ndomain_chrom, nspot_max)
-            
+                           dtype=np.int32)  # (ndomain_chrom, nspot_max)
             # flatten coordinates
-            # crd_flat: np.array(ndomain_chrom*nspot_max, 3)
-            crd_flat, idx_flat = flatten_coordinates(crd)
-            
+            crd_flat, idx_flat = flatten_coordinates(crd)  # (ndomain_chrom*nspot_max, 3)
+            del crd
             # remove nan coordinates
-            # crd_flat_nonan: np.array(nspot, 3)
-            crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
-            idx_flat_nonan = idx_flat[~np.isnan(crd_flat).any(axis=1)]
-            
+            crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]  # (nspot, 3)
+            idx_flat_nonan = idx_flat[~np.isnan(crd_flat).any(axis=1)]  # (nspot,)
+            del crd_flat
+            del idx_flat
             # if there are not enough spots to phase, skip
             nspot = crd_flat_nonan.shape[0]
             if nspot <= ncluster[chrom]:  # not enough spots to phase
                 warnings.warn(f"Cell # {cellID} has {nspot} spots on chromosome {chrom},\
                               too few to phase. Skipping.")
                 continue
-            
             # phase
             if ncluster[chrom] == 1:  # no need to cluster
                 phs_flat_nonan = np.ones(crd_flat_nonan.shape[0])
@@ -122,14 +110,15 @@ class WSPhaser(Phaser):
                 phs_flat_nonan = clustering('ward', crd_flat_nonan, ncluster[chrom])
                 if not are_separated(crd_flat_nonan, phs_flat_nonan, st):
                     phs_flat_nonan = clustering('spectral', crd_flat_nonan, ncluster[chrom])
-            
             # remove outliers
             phs_flat_nonan_noout = remove_outliers(crd_flat_nonan, phs_flat_nonan, ot)
+            del crd_flat_nonan
+            del phs_flat_nonan
             # the function remove_outliers doesn't change the shape of the input,
             # but rather sets the outliers to 0. So the index doesn't change.
             # I keep the same variable name for clarity.
             idx_flat_nonan_noout = idx_flat_nonan
-            
+            del idx_flat_nonan
             # if the phase labels are skipping an integer (e.g. 0, 2 - missing 1),
             # map them to increasing integers (e.g. 0, 1)
             if len(np.unique(phs_flat_nonan_noout)) != ncluster[chrom] + 1:
@@ -144,24 +133,30 @@ class WSPhaser(Phaser):
             for w, ij in enumerate(idx_flat_nonan_noout):
                 i, j = ij
                 phs[i,j] = phs_flat_nonan_noout[w]
-            
+            del phs_flat_nonan_noout
+            del idx_flat_nonan_noout
             # fill in the phasing labels in the global array
             cell_phase[ct.index.chromstr == chrom, :] = phs
+            del phs
         
         # phase cell coordinates
+        cell_coordinates = ct['coordinates'][ct.get_cellnum(cellID),
+                                             :, 0, :, :]  # np.array(ndomain, nspot_max, 3)
         cell_coordinates_phased = phase_cell_data(cell_coordinates,
                                                   cell_phase,
                                                   ncopy_max=2)
+        del cell_coordinates_phased
+        cell_coordinates_phased = reorder_spots(cell_coordinates_phased)
         # phase cell intensity
         if 'intensity' in ct:
+            cell_intensity = ct['intensity'][ct.get_cellnum(cellID),
+                                             :, 0, :]  # np.array(ndomain, nspot_max)
             cell_intensity_phased = phase_cell_data(cell_intensity,
                                                     cell_phase,
                                                     ncopy_max=2)
-        
-        # reorder spots
-        cell_coordinates_phased = reorder_spots(cell_coordinates_phased)
-        if 'intensity' in ct:
+            del cell_intensity
             cell_intensity_phased = reorder_spots(cell_intensity_phased)
+            
         
         # save cell_phase as pickle
         out_name = os.path.join(temp_dir, '{}.pkl'.format(cellID))
@@ -171,6 +166,11 @@ class WSPhaser(Phaser):
             if 'intensity' in ct:
                 data['cell_intensity_phased'] = cell_intensity_phased
             pickle.dump(data, f)
+        
+        del cell_phase
+        del cell_coordinates_phased
+        if 'intensity' in ct:
+            del cell_intensity_phased
         
         return out_name
 
