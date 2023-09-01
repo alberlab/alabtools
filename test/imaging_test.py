@@ -348,7 +348,7 @@ class TestCtFile(unittest.TestCase):
         z = np.cos(phi)
         pts = np.array([x, y, z]).T
         # fit an alpha shape
-        alpha, mesh = fit_alphashape(pts, alpha=0.0005, delta_alpha=0.0001)
+        alpha, mesh = fit_alphashape(0, pts, alpha=0.0005)
         # check that the alpha shape is a sphere
         # generate random points within a sphere of radius 2
         n_check = 1000
