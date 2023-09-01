@@ -310,3 +310,39 @@ def plot_by_chromosome(data, index, xscale=1e-6, ncols=4, subplot_width=2.5, sub
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     return f, plots
+
+def plot_mesh(mesh, points=None, **kwargs):
+    """Plot a 3D mesh with points."""
+    # Initialize the figure
+    figsize = (8, 8)
+    if 'figsize' in kwargs:
+        figsize = kwargs['figsize']
+    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    ax = fig.add_subplot(111, projection='3d')
+    # Remove ticks
+    plt.minorticks_off()
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    ax.set_zticklabels([])
+    # Plot the mesh
+    mcol = 'yellow'
+    if 'mesh_color' in kwargs:
+        mcol = kwargs['meshcolor']
+    malpha = 0.5
+    if 'mesh_alpha' in kwargs:
+        malpha = kwargs['meshalpha']
+    ax.plot_trisurf(*zip(*mesh.vertices), triangles=mesh.faces, color=mcol, alpha=malpha)
+    # Plot the points
+    if points is not None:
+        pcol = 'blue'
+        if 'points_color' in kwargs:
+            pcol = kwargs['points_color']
+        palpha = 0.3
+        if 'points_alpha' in kwargs:
+            palpha = kwargs['points_alpha']
+        ax.scatter(points[:, 0], points[:, 1], points[:, 2], color=pcol, alpha=palpha, s=1)
+    # Set the title
+    if 'title' in kwargs:
+        ax.set_title(kwargs['title'])
+    return fig, ax
+
