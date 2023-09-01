@@ -154,6 +154,7 @@ class CtEnvelope(object):
         # open ct file and read the cell labels
         ct = CtFile(ct_name, 'r')
         cell_labels = ct.cell_labels
+        ncell = ct.ncell
         ct.close()
         
         # create a temporary directory to store nodes' results
@@ -182,8 +183,8 @@ class CtEnvelope(object):
         # Update the attributes of the current object
         self.fitted = True
         self.ct_fit = ct_name
-        self.ncell = ct.ncell
-        self.cell_labels = ct.cell_labels
+        self.ncell = ncell
+        self.cell_labels = cell_labels
         self.alpha = alpha
         self.mesh = mesh
         self.volume = volume
@@ -266,24 +267,16 @@ class CtEnvelope(object):
             raise KeyError("force not found in cfg['fit parameters'].")
         assert isinstance(force, bool), "force must be a bool."
         
-        if not force:
-            try:
-                delta_alpha = cfg['fit parameters']['delta_alpha']
-            except KeyError:
-                raise KeyError("delta_alpha not found in cfg['fit parameters'] (required: force is False).")
-            assert isinstance(delta_alpha, float), "delta alpha must be a float."
-            assert delta_alpha > 0, "delta alpha must be > 0."
-        
-        try:
-            thresh = cfg['fit parameters']['thresh']  # threshold for outlier detection
-        except KeyError:
-            raise KeyError("thresh not found in cfg['fit parameters'].")
-        
-        try:
-            min_neigh = cfg['fit parameters']['min_neigh']  # min neigh for outlier detection
-        except KeyError:
-            raise KeyError("min_neigh not found in cfg['fit parameters'].")
-        
+        do_remove_isolated = False
+        if 'thresh' in cfg['fit parameters'] and 'min_neigh' in cfg['fit parameters']:
+            do_remove_isolated = True
+            thresh = cfg['fit parameters']['thresh']
+            min_neigh = cfg['fit parameters']['min_neigh']
+            assert isinstance(thresh, float), "thresh must be a float."
+            assert thresh > 0, "thresh must be > 0."
+            assert isinstance(min_neigh, int), "min_neigh must be an int."
+            assert min_neigh > 0, "min_neigh must be > 0."
+           
         # load the CtFile and get the coordinates of the cell
         ct = CtFile(ct_name, 'r')
         # reading in this way does not load the whole coordinates in memory, but only the cell of interest
@@ -291,19 +284,24 @@ class CtEnvelope(object):
         ct.close()
         
         # flatten the coordinates
-        crd_flat, _ = flatten_coordinates(crd)
+        crd_flat, idx = flatten_coordinates(crd)
         # remove the nan coordinates
-        crd_flat_nonan = crd_flat[~np.isnan(crd_flat).any(axis=1)]
+        points = crd_flat[~np.isnan(crd_flat).any(axis=1)]
+        del crd_flat
+        del idx
         # remove the isolated points
-        crd_flat_nonan_noiso = remove_isolated(crd_flat_nonan, thresh, min_neigh)
+        if do_remove_isolated:
+            points = remove_isolated(points, thresh, min_neigh)
         
         # fit the alpha-shape
-        alpha, mesh = fit_alphashape(crd_flat_nonan_noiso, alpha, delta_alpha, force)
+        alpha, mesh = fit_alphashape(cellID, points, alpha, force)
+        del points
         
         # save the alpha-shape as a pickle file in the temporary directory
         out_name = os.path.join(temp_dir, '{}.pkl'.format(cellID))
         with open(out_name, 'wb') as f:
             pickle.dump({'alpha': alpha, 'mesh': mesh}, f)
+        del mesh
         
         return out_name
     
@@ -363,7 +361,7 @@ class CtEnvelope(object):
         return ct_clean
             
 
-def fit_alphashape(points, alpha, delta_alpha, force=False):
+def fit_alphashape(cellID, points, alpha, force=False):
     """
     Fits an alpha-shape to contain all the input points.
     If force is True, the alpha-shape is fitted with the input alpha value.
@@ -374,7 +372,6 @@ def fit_alphashape(points, alpha, delta_alpha, force=False):
     Args:
         points (numpy.ndarray([n_points, dim])): coordinates of the points to fit the alpha-shape.
         alpha (float): alpha value to be use (force=True) or initial alpha value (force=False).
-        delta_alpha (float): alpha value decrease amount (if force=False).
         force (bool): if True, the alpha-shape is fitted with the input alpha value.
                     if False, the alpha value is found by a search algorithm starting from the input one.
     
@@ -382,24 +379,28 @@ def fit_alphashape(points, alpha, delta_alpha, force=False):
         alpha (float): alpha value used to fit the alpha-shape.
         mesh (trimesh.Trimesh): alpha-shape fitted to the input points.
     """
-    
-    # If the input alpha value is provided, use it.
+    # The alphashape code doesn't give closed shapes if the input points are not float64
+    points = points.astype(np.float64)
+    # If force, we only use the input alpha value
     if force:
         alpha_shape = alphashape.alphashape(points, alpha)
         mesh = trimesh.Trimesh(vertices=alpha_shape.vertices, faces=alpha_shape.faces, process=True)
         if not mesh.is_watertight:
-            raise ValueError('The alpha-shape is not closed. Try increasing the alpha value or change force to False.')
+            raise ValueError('Cell {}: The alpha-shape is not closed.\
+                Try increasing the alpha value or change force to False.'.format(cellID))
         return alpha, mesh
-    
-    # Otherwise, find the alpha value by a search algorithm.
+    # If not force, we find the alpha value by a search algorithm,
+    # where we start with the input alpha and - if the shape is not closed - we halve it.
+    max_iter, counter = 20, 0
     while True:
+        counter += 1
+        if counter > max_iter:
+            raise ValueError('Cell {}: Alpha-shape not closed, could not find a suitable alpha value after {} iterations.'.format(cellID, max_iter))
         alpha_shape = alphashape.alphashape(points, alpha)
         mesh = trimesh.Trimesh(vertices=alpha_shape.vertices, faces=alpha_shape.faces, process=True)
-        if mesh.is_watertight:  # check if the mesh is closed
+        if mesh.is_watertight:
             break
-        alpha = alpha - delta_alpha
-        if alpha <= 0:
-            raise ValueError('alpha <= 0 reached but the alpha-shape is not closed.')
+        alpha = alpha / 2
     return alpha, mesh
 
 def remove_isolated(points, thresh, min_neigh):
@@ -417,15 +418,20 @@ def remove_isolated(points, thresh, min_neigh):
     Returns:
         points_noout (numpy.ndarray([n_points_noout, dim])): coordinates of the points without outliers.
     """
-    
     # Compute the condensed distance matrix (n * (n-1) / 2)
+    # By default, scipy casts the input array to float64,
+    # so this might require a lot of memory for large arrays.
     dcmat = distance.pdist(points)
     # Compute the condensed proximity matrix (boolean)
     pcmat = dcmat <= thresh
+    del dcmat
     # Expand the proximity matrix to a square matrix
     pmat = distance.squareform(pcmat)
+    del pcmat
     # Compute the number of neighbors for each locus
     neighs = np.nansum(pmat, axis=0)  # np.array(n_points)
+    del pmat
     # Take only the points with enough neighbors
     points_noout = points[neighs >= min_neigh]
+    del neighs
     return points_noout
