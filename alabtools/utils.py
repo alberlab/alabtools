@@ -910,9 +910,7 @@ class Index(object):
             1) the index is haploid,
             2) the index has a regular resolution (i.e. all the regions have the same size),
             3) the input resolution is larger than the index resolution,
-            4) the input resolution is a multiple of the index resolution,
-            5) the origins of the chromosomes are multiple of both resolutions,
-            6) the lengths of the chromosomes are multiple of both resolutions.
+            4) the input resolution is a multiple of the index resolution.
         Returns a new Index object."""
         # Check if the index is haploid
         is_haploid = len(self.get_haploid()) == len(self)
@@ -928,12 +926,6 @@ class Index(object):
         # Check if the input resolution is a multiple of the index resolution
         if resolution % index_resolution != 0:
             raise ValueError("The input resolution is not a multiple of the index resolution.")
-        # Check if the origins are multiple of both resolutions
-        if np.any(self.genome.origins % resolution != 0):
-            raise ValueError("The origins are not multiple of both resolutions.")
-        # Check if the lengths are multiple of both resolutions
-        if np.any(self.genome.lengths % resolution != 0):
-            raise ValueError("The lengths are not multiple of both resolutions.")
         # Create coarse index
         genome = copy.deepcopy(self.genome)
         index_coarse = genome.bininfo(resolution).get_haploid()

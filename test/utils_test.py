@@ -185,6 +185,7 @@ def shuffle_in_place(arrays):
     return arrays_shuffled
 
 def generate_domains(ploidy='haploid', resolution=100):
+    # TODO: only works if origins and lengths are multiples of resolution. Fix this.
     assert ploidy in ['haploid', 'diploid'], 'ploidy must be haploid or diploid'
     chroms = np.array(['chr1', 'chr2', 'chr7', 'chrX'])
     chroms_int = np.array([1, 2, 7, 100])
