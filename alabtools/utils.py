@@ -37,6 +37,7 @@ import sys
 import collections
 import pandas as pd
 import scipy.sparse.linalg
+import copy
 from six import string_types
 
 if sys.version_info > (3, 0):
@@ -870,8 +871,13 @@ class Index(object):
     def sort_by_chromosome(self):
         """Sort the index by chromosome,
         and within each chromosome by start position.
+        Works only if the index is haploid.
         Returns a new Index object.
         """
+        # Check if the index is haploid
+        is_haploid = len(self.get_haploid()) == len(self)
+        if not is_haploid:
+            raise ValueError("The index is not haploid.")
         # Order by chromosome
         chromint = self.get_chromint()
         order = np.argsort(chromint)
@@ -897,6 +903,55 @@ class Index(object):
         for k in range(len(self.custom_tracks)):
             index_sorted.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
         return index_sorted
+    
+    def coarsegrain(self, resolution):
+        """Coarse-grain the index by resolution.
+        Only works if:
+            1) the index is haploid,
+            2) the index has a regular resolution (i.e. all the regions have the same size),
+            3) the input resolution is larger than the index resolution,
+            4) the input resolution is a multiple of the index resolution,
+            5) the origins of the chromosomes are multiple of both resolutions,
+            6) the lengths of the chromosomes are multiple of both resolutions.
+        Returns a new Index object."""
+        # Check if the index is haploid
+        is_haploid = len(self.get_haploid()) == len(self)
+        if not is_haploid:
+            raise ValueError("The index is not haploid.")
+        # Check if the index has a regular resolution
+        index_resolution = self.resolution()
+        if index_resolution is None:
+            raise ValueError("The index does not have a regular resolution.")
+        # Check if the input resolution is larger than the index resolution
+        if resolution < index_resolution:
+            raise ValueError("The input resolution is smaller than the index resolution.")
+        # Check if the input resolution is a multiple of the index resolution
+        if resolution % index_resolution != 0:
+            raise ValueError("The input resolution is not a multiple of the index resolution.")
+        # Check if the origins are multiple of both resolutions
+        if np.any(self.genome.origins % resolution != 0):
+            raise ValueError("The origins are not multiple of both resolutions.")
+        # Check if the lengths are multiple of both resolutions
+        if np.any(self.genome.lengths % resolution != 0):
+            raise ValueError("The lengths are not multiple of both resolutions.")
+        # Create coarse index
+        genome = copy.deepcopy(self.genome)
+        index_coarse = genome.bininfo(resolution).get_haploid()
+        # Get mappings
+        cmap, fmap, bmap = get_index_mappings(self, index_coarse)
+        # Loop over custom tracks and coarse-grain them
+        for k in self.custom_tracks:
+            x0 = self.get_custom_track(k)
+            x1 = list()
+            for i in range(len(index_coarse)):
+                indices = bmap[i]
+                x0_avg = np.nanmean(x0[indices])
+                if np.isnan(x0_avg):
+                    x0_avg = np.nan
+                x1.append(x0_avg)
+            x1 = np.array(x1)
+            index_coarse.add_custom_track(k, x1)
+        return index_coarse
 
     def _compute_copy_vec(self):
         '''
