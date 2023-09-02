@@ -866,6 +866,37 @@ class Index(object):
 
     def get_haploid(self):
         return self.get_sub_index(self.copy == 0)
+    
+    def sort_by_chromosome(self):
+        """Sort the index by chromosome,
+        and within each chromosome by start position.
+        Returns a new Index object.
+        """
+        # Order by chromosome
+        chromint = self.get_chromint()
+        order = np.argsort(chromint)
+        chromstr = self.chromstr[order]
+        start = self.start[order]
+        end = self.end[order]
+        label = self.label[order]
+        copy = self.copy[order]
+        custom_track_arrays = [self.get_custom_track(k)[order] for k in self.custom_tracks]
+        # Within each chromosome, order by start position
+        start_copy = np.copy(start)
+        for c in np.unique(chromstr):
+            idx = chromstr == c
+            chromstr[idx] = chromstr[idx][np.argsort(start_copy[idx])]
+            start[idx] = start[idx][np.argsort(start_copy[idx])]
+            end[idx] = end[idx][np.argsort(start_copy[idx])]
+            label[idx] = label[idx][np.argsort(start_copy[idx])]
+            copy[idx] = copy[idx][np.argsort(start_copy[idx])]
+            for k in range(len(self.custom_tracks)):
+                custom_track_arrays[k][idx] = custom_track_arrays[k][idx][np.argsort(start_copy[idx])]
+        # Create a new index
+        index_sorted = Index(chromstr, start, end, label, copy, genome=self.genome)
+        for k in range(len(self.custom_tracks)):
+            index_sorted.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
+        return index_sorted
 
     def _compute_copy_vec(self):
         '''

@@ -115,12 +115,43 @@ class TestIndex(unittest.TestCase):
         hashmap = index.get_index_hashmap()
         for i, dom in enumerate(zip(chromstr, start, end)):
             self.assertEqual(hashmap[dom], [i])
+    
+    def test_sort_by_chromosome(self):
+        """Test sort_by_chromosome method in Index."""
+        # Generate sorted domains
+        chromstr_srt, start_srt, end_srt, _ = generate_domains()
+        x_srt = np.random.rand(len(chromstr_srt))
+        y_srt = np.random.rand(len(chromstr_srt))
+        # Shuffle the domains
+        chromstr, start, end, x, y = shuffle_in_place([chromstr_srt, start_srt, end_srt, x_srt, y_srt])
+        # Create the index with unsorted domains
+        index = Index(chrom=chromstr, start=start, end=end)
+        index.add_custom_track('x', x)
+        index.add_custom_track('y', y)
+        # Create sorted index
+        index_sorted = index.sort_by_chromosome()
+        # Test the results
+        np.testing.assert_array_equal(index_sorted.chromstr, chromstr_srt)
+        np.testing.assert_array_equal(index_sorted.start, start_srt)
+        np.testing.assert_array_equal(index_sorted.end, end_srt)
+        np.testing.assert_array_equal(index_sorted.get_custom_track('x'), x_srt)
+        np.testing.assert_array_equal(index_sorted.get_custom_track('y'), y_srt)
+
+def shuffle_in_place(arrays):
+    """Shuffle a list of arrays in place."""
+    for array in arrays:
+        assert len(array) == len(arrays[0])
+    order = np.random.permutation(len(arrays[0]))
+    arrays_shuffled = []
+    for array in arrays:
+        arrays_shuffled.append(array[order])
+    return arrays_shuffled
 
 def generate_domains():
-    chromstr = ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX']
-    chromint = [1, 1, 1, 2, 2, 7, 100, 100]
-    start = [0, 100, 200, 0, 100, 0, 0, 100]
-    end = [100, 200, 300, 100, 200, 100, 100, 200]
+    chromstr = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX'])
+    chromint = np.array([1, 1, 1, 2, 2, 7, 100, 100])
+    start = np.array([0, 100, 200, 0, 100, 0, 0, 100])
+    end = np.array([100, 200, 300, 100, 200, 100, 100, 200])
     return chromstr, start, end, chromint
     
 
