@@ -891,59 +891,64 @@ class Index(object):
         start_copy = np.copy(start)
         for c in np.unique(chromstr):
             idx = chromstr == c
-            chromstr[idx] = chromstr[idx][np.argsort(start_copy[idx])]
-            start[idx] = start[idx][np.argsort(start_copy[idx])]
-            end[idx] = end[idx][np.argsort(start_copy[idx])]
-            label[idx] = label[idx][np.argsort(start_copy[idx])]
-            copy[idx] = copy[idx][np.argsort(start_copy[idx])]
+            order = np.argsort(start_copy[idx])
+            chromstr[idx] = chromstr[idx][order]
+            start[idx] = start[idx][order]
+            end[idx] = end[idx][order]
+            label[idx] = label[idx][order]
+            copy[idx] = copy[idx][order]
             for k in range(len(self.custom_tracks)):
-                custom_track_arrays[k][idx] = custom_track_arrays[k][idx][np.argsort(start_copy[idx])]
+                custom_track_arrays[k][idx] = custom_track_arrays[k][idx][order]
         # Create a new index
         index_sorted = Index(chromstr, start, end, label, copy, genome=self.genome)
         for k in range(len(self.custom_tracks)):
             index_sorted.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
         return index_sorted
     
-    def coarsegrain(self, resolution):
+    def coarsegrain(self, out_res):
         """Coarse-grain the index by resolution.
         Only works if:
             1) the index is haploid,
             2) the index has a regular resolution (i.e. all the regions have the same size),
             3) the input resolution is larger than the index resolution,
             4) the input resolution is a multiple of the index resolution.
-        Returns a new Index object."""
+        Args:
+            out_res (int or Index): the output resolution, either as an integer number or as an Index object.
+        Returns:
+            Index: the coarse-grained index."""
         # Check if the index is haploid
-        is_haploid = len(self.get_haploid()) == len(self)
-        if not is_haploid:
-            raise ValueError("The index is not haploid.")
+        assert len(self.get_haploid()) == len(self), "The index is not haploid."
         # Check if the index has a regular resolution
-        index_resolution = self.resolution()
-        if index_resolution is None:
-            raise ValueError("The index does not have a regular resolution.")
-        # Check if the input resolution is larger than the index resolution
-        if resolution < index_resolution:
-            raise ValueError("The input resolution is smaller than the index resolution.")
-        # Check if the input resolution is a multiple of the index resolution
-        if resolution % index_resolution != 0:
-            raise ValueError("The input resolution is not a multiple of the index resolution.")
-        # Create coarse index
-        genome = copy.deepcopy(self.genome)
-        index_coarse = genome.bininfo(resolution).get_haploid()
-        # Get mappings
-        cmap, fmap, bmap = get_index_mappings(self, index_coarse)
+        in_res = self.resolution()
+        assert in_res is not None, "The index does not have a regular resolution."
+        # Check if out_res is an integer number or an Index object
+        if isinstance(out_res, Index):
+            out_idx = copy.deepcopy(out_res)
+            out_res = out_idx.resolution()
+            assert out_res is not None, "The input index does not have a regular resolution."
+        elif isinstance(out_res, int):
+            out_idx = self.genome.bininfo(out_res).get_haploid()  # create an out index
+        else:
+            raise ValueError("out_res must be an integer number or an Index object.")
+        # Check if the final resolution is larger than the initial one
+        assert out_res > in_res, "The input resolution is larger than the index resolution."
+        # Check if the final resolution is a multiple of the initial one
+        assert out_res % in_res == 0, "The input resolution is not a multiple of the index resolution."
+        # Get mappings to coarse-grain the signals in the index
+        cmap, fmap, bmap = get_index_mappings(self, out_idx)
         # Loop over custom tracks and coarse-grain them
         for k in self.custom_tracks:
             x0 = self.get_custom_track(k)
             x1 = list()
-            for i in range(len(index_coarse)):
+            for i in range(len(out_idx)):
                 indices = bmap[i]
                 x0_avg = np.nanmean(x0[indices])
                 if np.isnan(x0_avg):
                     x0_avg = np.nan
                 x1.append(x0_avg)
             x1 = np.array(x1)
-            index_coarse.add_custom_track(k, x1)
-        return index_coarse
+            out_idx.add_custom_track(k, x1)
+        return out_idx
 
     def _compute_copy_vec(self):
         '''
