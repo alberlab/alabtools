@@ -37,6 +37,7 @@ import sys
 import collections
 import pandas as pd
 import scipy.sparse.linalg
+import copy
 from six import string_types
 
 if sys.version_info > (3, 0):
@@ -282,6 +283,16 @@ class Genome(object):
 
         """
 
+        # WARNING: this function gives imprecise results when the origins or the lengths
+        # of the genome are not multiples of the resolution.
+        # For example, if origin=0, length=1000, res=222, we get:
+        #   start = [  0, 222, 444, 666, 888]
+        #   end =  [222, 444, 666, 888, 1100] <-- overflows the chromosome length!
+        
+        # It has been fixed in the bininfo_optimized function below.
+        # However, for backward compatibility, we keep this function for now, but
+        # it should be removed in the future and replaced with bininfo_optimized.
+        
         binSize = [int(math.ceil(float(x) / resolution)) for x in self.lengths]
 
         chromList = []
@@ -295,6 +306,27 @@ class Genome(object):
 
         binInfo = Index(chromList, startList, endList, chrom_sizes=binSize, genome=self)
         return binInfo
+    
+    def bininfo_optimized(self, resolution):
+        """Bin the genome by resolution.
+        Returns a haploid index."""        
+        # Initialize as lists and loop through chromosomes
+        chromstr, start, end = [], [], []
+        for chrom, origin, length in zip(self.chroms, self.origins, self.lengths):
+            # Compute the start and end positions for the current chromosome
+            start_chrom = np.arange(origin, origin + length, resolution)
+            end_chrom = start_chrom + resolution
+            # Adjust the end position of the last bin
+            end_chrom[-1] = origin + length
+            # Append to the lists
+            chromstr.extend(np.repeat(chrom, len(start_chrom)))
+            start.extend(start_chrom)
+            end.extend(end_chrom)
+        # Convert to numpy arrays
+        chromstr = np.array(chromstr, dtype=CHROMS_DTYPE)
+        start = np.array(start, dtype=START_DTYPE)
+        end = np.array(end, dtype=END_DTYPE)
+        return Index(chromstr, start, end, genome=self)
 
     def getchrnum(self, chrom):
 
@@ -322,6 +354,15 @@ class Genome(object):
             represent += (self.chroms[i].astype(str) + '\t' + str(self.origins[i]) + '-' + str(
                 self.origins[i] + self.lengths[i]) + '\n')
         return represent
+    
+    def pop(self, chrom):
+        """Remove a chromosome from the genome."""
+        # Find the index of the chromosome in the chroms/lengths/origins arrays
+        idx = np.flatnonzero(self.chroms == chrom)[0]
+        chroms_new = np.delete(self.chroms, idx)
+        lengths_new = np.delete(self.lengths, idx)
+        origins_new = np.delete(self.origins, idx)
+        return Genome(self.assembly, chroms_new, origins_new, lengths_new)
     
     def save(self, h5f, compression="gzip", compression_opts=6):
 
@@ -866,6 +907,107 @@ class Index(object):
 
     def get_haploid(self):
         return self.get_sub_index(self.copy == 0)
+    
+    def sort_by_chromosome(self):
+        """Sort the index by chromosome,
+        and within each chromosome by start position.
+        Works only if the index is haploid.
+        Returns a new Index object.
+        """
+        # Check if the index is haploid
+        is_haploid = len(self.get_haploid()) == len(self)
+        if not is_haploid:
+            raise ValueError("The index is not haploid.")
+        # Order by chromosome
+        chromint = self.get_chromint()
+        order = np.argsort(chromint)
+        chromstr = self.chromstr[order]
+        start = self.start[order]
+        end = self.end[order]
+        label = self.label[order]
+        copy = self.copy[order]
+        custom_track_arrays = [self.get_custom_track(k)[order] for k in self.custom_tracks]
+        # Within each chromosome, order by start position
+        start_copy = np.copy(start)
+        for c in np.unique(chromstr):
+            idx = chromstr == c
+            order = np.argsort(start_copy[idx])
+            chromstr[idx] = chromstr[idx][order]
+            start[idx] = start[idx][order]
+            end[idx] = end[idx][order]
+            label[idx] = label[idx][order]
+            copy[idx] = copy[idx][order]
+            for k in range(len(self.custom_tracks)):
+                custom_track_arrays[k][idx] = custom_track_arrays[k][idx][order]
+        # Create a new index
+        index_sorted = Index(chromstr, start, end, label, copy, genome=self.genome)
+        for k in range(len(self.custom_tracks)):
+            index_sorted.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
+        return index_sorted
+    
+    def coarsegrain(self, out_res, method='mean'):
+        """Coarse-grain the index by resolution.
+        Only works if:
+            1) the index is haploid,
+            2) the index has a regular resolution (i.e. all the regions have the same size),
+            3) the input resolution is larger than the index resolution,
+            4) the input resolution is a multiple of the index resolution.
+        Args:
+            out_res (int or Index): the output resolution, either as an integer number or as an Index object.
+            method (str): the method to use for coarse-graining. Default: 'mean'.
+        Returns:
+            Index: the coarse-grained index."""
+        # Assert input method is implemented
+        assert method in ['mean', 'median'], "The input method is not implemented."
+        # Check input index is haploid and regular
+        assert len(self.get_haploid()) == len(self), "The input index is not haploid."
+        in_res = self.resolution()
+        assert in_res is not None, "The input index does not have a regular resolution."
+        # Read the output index
+        if isinstance(out_res, Index):
+            out_idx = copy.deepcopy(out_res)
+            out_res = out_idx.resolution()
+        elif isinstance(out_res, int):
+            out_idx = self.genome.bininfo_optimized(out_res)  # create an out index
+        else:
+            raise ValueError("out_res must be an integer number or an Index object.")
+        # Check output index is haploid and regular
+        assert len(out_idx.get_haploid()) == len(out_idx), "The output index is not haploid."
+        assert out_res is not None, "The output index does not have a regular resolution."
+        # Check if the final resolution is larger than the initial one
+        assert out_res > in_res, "The input resolution is larger than the index resolution."
+        # Check if the final resolution is a multiple of the initial one
+        assert out_res % in_res == 0, "The input resolution is not a multiple of the index resolution."
+        # Get mappings to coarse-grain the signals in the index
+        _, _, bmap = get_index_mappings(self, out_idx)
+        # Loop over custom tracks and coarse-grain them
+        for k in self.custom_tracks:
+            x0 = self.get_custom_track(k)
+            x1 = list()
+            for i in range(len(out_idx)):  # loop over the bins of the output index
+                indices = bmap[i]
+                if method == 'mean':
+                    x0_coarse = np.nanmean(x0[indices])
+                elif method == 'median':
+                    x0_coarse = np.nanmedian(x0[indices])
+                x1.append(x0_coarse)
+            x1 = np.array(x1)
+            out_idx.add_custom_track(k, x1)
+        return out_idx
+    
+    def pop_chromosome(self, chrom):
+        """Remove a chromosome from the index."""
+        genome_new = self.genome.pop(chrom)
+        chromstr_new = self.chromstr[self.chromstr != chrom]
+        start_new = self.start[self.chromstr != chrom]
+        end_new = self.end[self.chromstr != chrom]
+        label_new = self.label[self.chromstr != chrom]
+        copy_new = self.copy[self.chromstr != chrom]
+        custom_track_arrays = [self.get_custom_track(k)[self.chromstr != chrom] for k in self.custom_tracks]
+        index_new = Index(chromstr_new, start_new, end_new, label_new, copy_new, genome=genome_new)
+        for k in range(len(self.custom_tracks)):
+            index_new.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
+        return index_new
 
     def _compute_copy_vec(self):
         '''

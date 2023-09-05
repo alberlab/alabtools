@@ -91,6 +91,23 @@ class TestGenome(unittest.TestCase):
                         lengths=lengths, origins=origins)
         # Check the results
         self.assertFalse(genome.check_sorted())
+    
+    def test_pop(self):
+        """Test pop method in Genome.
+        """
+        # Define the input
+        chroms = ['chr1', 'chr2', 'chr3', 'chr5', 'chr6', 'chr10', 'chr12', 'chr18', 'chrX']
+        lengths = [2000 - 100 * i for i in range(len(chroms))]
+        origins = [0 for _ in range(len(chroms))]
+        # Initialize the Genome object
+        genome = Genome(assembly='mm10', chroms=chroms,
+                        lengths=lengths, origins=origins)
+        # Pop a chromosome
+        genome_new = genome.pop('chrX')
+        # Check the results
+        np.testing.assert_array_equal(genome_new.chroms, chroms[:-1])
+        np.testing.assert_array_equal(genome_new.lengths, lengths[:-1])
+        np.testing.assert_array_equal(genome_new.origins, origins[:-1])
         
 
 class TestIndex(unittest.TestCase):
@@ -102,26 +119,155 @@ class TestIndex(unittest.TestCase):
     def tearDown(self) -> None:
         return super().tearDown()
     
+    def test_bininfo(self):
+        res = 22
+        genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+        bininfo = genome.bininfo(resolution=res)
+        np.testing.assert_array_equal(index.chromstr, bininfo.chromstr)
+        np.testing.assert_array_equal(index.start, bininfo.start)
+        np.testing.assert_array_equal(index.end, bininfo.end)
+    
+    def test_bininfo_optimized(self):
+        res = 22
+        genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+        bininfo = genome.bininfo_optimized(resolution=res)
+        np.testing.assert_array_equal(index.chromstr, bininfo.chromstr)
+        np.testing.assert_array_equal(index.start, bininfo.start)
+        np.testing.assert_array_equal(index.end, bininfo.end)
+    
     def test_get_chromint(self):
         """Test initialization of Genome from binary chromosomes."""
-        chromstr, start, end, chromint = generate_domains()
-        index = Index(chrom=chromstr, start=start, end=end)
+        res = 22
+        genome, chromstr, start, end, chromint, _, _ = generate_domains(resolution=res)
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
         np.testing.assert_array_equal(index.get_chromint(), chromint)
     
     def test_get_index_hashmap(self):
         """Test get_index_hashmap method in Index."""
-        chromstr, start, end, _ = generate_domains()
-        index = Index(chrom=chromstr, start=start, end=end)
+        res = 22
+        genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
         hashmap = index.get_index_hashmap()
         for i, dom in enumerate(zip(chromstr, start, end)):
             self.assertEqual(hashmap[dom], [i])
+    
+    def test_sort_by_chromosome(self):
+        """Test sort_by_chromosome method in Index."""
+        res = 22
+        # Generate sorted domains
+        genome, chromstr_srt, start_srt, end_srt, _, x_srt, y_srt = generate_domains(resolution=res)
+        # Shuffle the domains
+        chromstr, start, end, x, y = shuffle_in_place([chromstr_srt, start_srt, end_srt, x_srt, y_srt])
+        # Create the index with unsorted domains
+        # I need to specify the copy, because if I don't, the Index will assume the copy
+        # index is all messed up, since I am shuffling everything
+        copy = np.zeros(len(chromstr))
+        index = Index(chrom=chromstr, start=start, end=end, copy=copy, genome=genome)
+        index.add_custom_track('x', x)
+        index.add_custom_track('y', y)
+        # Create sorted index
+        index_sorted = index.sort_by_chromosome()
+        # Test the results
+        np.testing.assert_array_equal(index_sorted.chromstr, chromstr_srt)
+        np.testing.assert_array_equal(index_sorted.start, start_srt)
+        np.testing.assert_array_equal(index_sorted.end, end_srt)
+        np.testing.assert_array_equal(index_sorted.get_custom_track('x'), x_srt)
+        np.testing.assert_array_equal(index_sorted.get_custom_track('y'), y_srt)
+    
+    def test_coarsegrain(self):
+        """Test coarsegrain method in Index."""
+        in_res, out_res = 22, 44
+        # Generate domains
+        genome, chromstr, start, end, _, x, y = generate_domains(resolution=in_res)
+        # Create the index
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+        index.add_custom_track('x', x)
+        index.add_custom_track('y', y)
+        # Coarsegrain the index
+        index_coarse = index.coarsegrain(out_res)
+        # Test the results
+        _, chromstr_test, start_test, end_test, _, _, _ = generate_domains(resolution=out_res)
+        index_test = Index(chrom=chromstr_test, start=start_test, end=end_test, genome=genome)
+        x_test, y_test = [], []
+        for c, s, e in zip(chromstr_test, start_test, end_test):
+            idx = np.where((chromstr == c) & (start >= s) & (end <= e))[0]
+            x_test.append(np.mean(x[idx]))
+            y_test.append(np.mean(y[idx]))
+        x_test = np.array(x_test)
+        y_test = np.array(y_test)
+        # Test the results
+        np.testing.assert_array_equal(index_coarse.chromstr, index_test.chromstr)
+        np.testing.assert_array_equal(index_coarse.start, index_test.start)
+        np.testing.assert_array_equal(index_coarse.end, index_test.end)
+        np.testing.assert_array_equal(index_coarse.get_custom_track('x'), x_test)
+        np.testing.assert_array_equal(index_coarse.get_custom_track('y'), y_test)
+    
+    def test_pop_chromosome(self):
+        """Test pop_chromosome method in Index."""
+        res = 22
+        # Generate domains
+        genome, chromstr, start, end, _, x, y = generate_domains(resolution=res)
+        # Create the index
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+        index.add_custom_track('x', x)
+        index.add_custom_track('y', y)
+        # Pop a chromosome
+        chrom = 'chr2'
+        index_new = index.pop_chromosome(chrom)
+        # Test the results
+        np.testing.assert_array_equal(index_new.chromstr, chromstr[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.start, start[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.end, end[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.get_custom_track('x'), x[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.get_custom_track('y'), y[chromstr != chrom])
 
-def generate_domains():
-    chromstr = ['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX', 'chrX']
-    chromint = [1, 1, 1, 2, 2, 7, 100, 100]
-    start = [0, 100, 200, 0, 100, 0, 0, 100]
-    end = [100, 200, 300, 100, 200, 100, 100, 200]
-    return chromstr, start, end, chromint
+
+def shuffle_in_place(arrays):
+    """Shuffle a list of arrays in place."""
+    for array in arrays:
+        assert len(array) == len(arrays[0])
+    order = np.random.permutation(len(arrays[0]))
+    arrays_shuffled = []
+    for array in arrays:
+        arrays_shuffled.append(array[order])
+    return arrays_shuffled
+
+def generate_domains(ploidy='haploid', resolution=100):
+    assert ploidy in ['haploid', 'diploid'], 'ploidy must be haploid or diploid'
+    # Generate the Genome
+    chroms = np.array(['chr1', 'chr2', 'chr7', 'chrX'])
+    chroms_int = np.array([1, 2, 7, 100])
+    lengths = np.array([400, 400, 200, 600])
+    origins = np.array([0, 200, 0, 200])
+    genome = Genome(assembly='mm10', chroms=chroms, lengths=lengths, origins=origins)
+    # Generate the Index
+    # Generate chromstr and chromint
+    bin_sizes = np.ceil(lengths / resolution).astype(int)  # Number of bins per chromosome
+    chromstr = np.repeat(chroms, bin_sizes)
+    chromint = np.repeat(chroms_int, bin_sizes)
+    # Generate start and end
+    start, end = [], []
+    for length, origin in zip(lengths, origins):
+        start.extend(np.arange(origin, origin + length, resolution))
+        end.extend(np.arange(origin + resolution, origin + length + resolution, resolution))
+        end[-1] = origin + length
+    start = np.array(start)
+    end = np.array(end)
+    # Generate custom tracks
+    x = np.random.rand(len(chromstr))
+    y = np.random.rand(len(chromstr))
+    # If diploid, duplicate the data for autosomes
+    if ploidy == 'diploid':
+        chromstr_hap = chromstr.copy()
+        chromstr = np.concatenate([chromstr, chromstr[chromstr_hap != 'chrX']])
+        chromint = np.concatenate([chromint, chromint[chromstr_hap != 'chrX']])
+        start = np.concatenate([start, start[chromstr_hap != 'chrX']])
+        end = np.concatenate([end, end[chromstr_hap != 'chrX']])
+        x = np.concatenate([x, x[chromstr_hap != 'chrX']])
+        y = np.concatenate([y, y[chromstr_hap != 'chrX']])
+    return genome, chromstr, start, end, chromint, x, y
     
 
 if __name__ == '__main__':
