@@ -324,6 +324,15 @@ class Genome(object):
                 self.origins[i] + self.lengths[i]) + '\n')
         return represent
     
+    def pop(self, chrom):
+        """Remove a chromosome from the genome."""
+        # Find the index of the chromosome in the chroms/lengths/origins arrays
+        idx = np.flatnonzero(self.chroms == chrom)[0]
+        chroms_new = np.delete(self.chroms, idx)
+        lengths_new = np.delete(self.lengths, idx)
+        origins_new = np.delete(self.origins, idx)
+        return Genome(self.assembly, chroms_new, origins_new, lengths_new)
+    
     def save(self, h5f, compression="gzip", compression_opts=6):
 
         """
@@ -935,7 +944,7 @@ class Index(object):
         # Check if the final resolution is a multiple of the initial one
         assert out_res % in_res == 0, "The input resolution is not a multiple of the index resolution."
         # Get mappings to coarse-grain the signals in the index
-        cmap, fmap, bmap = get_index_mappings(self, out_idx)
+        _, _, bmap = get_index_mappings(self, out_idx)
         # Loop over custom tracks and coarse-grain them
         for k in self.custom_tracks:
             x0 = self.get_custom_track(k)
@@ -949,6 +958,20 @@ class Index(object):
             x1 = np.array(x1)
             out_idx.add_custom_track(k, x1)
         return out_idx
+    
+    def pop_chromosome(self, chrom):
+        """Remove a chromosome from the index."""
+        genome_new = self.genome.pop(chrom)
+        chromstr_new = self.chromstr[self.chromstr != chrom]
+        start_new = self.start[self.chromstr != chrom]
+        end_new = self.end[self.chromstr != chrom]
+        label_new = self.label[self.chromstr != chrom]
+        copy_new = self.copy[self.chromstr != chrom]
+        custom_track_arrays = [self.get_custom_track(k)[self.chromstr != chrom] for k in self.custom_tracks]
+        index_new = Index(chromstr_new, start_new, end_new, label_new, copy_new, genome=genome_new)
+        for k in range(len(self.custom_tracks)):
+            index_new.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
+        return index_new
 
     def _compute_copy_vec(self):
         '''

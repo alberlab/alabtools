@@ -91,6 +91,23 @@ class TestGenome(unittest.TestCase):
                         lengths=lengths, origins=origins)
         # Check the results
         self.assertFalse(genome.check_sorted())
+    
+    def test_pop(self):
+        """Test pop method in Genome.
+        """
+        # Define the input
+        chroms = ['chr1', 'chr2', 'chr3', 'chr5', 'chr6', 'chr10', 'chr12', 'chr18', 'chrX']
+        lengths = [2000 - 100 * i for i in range(len(chroms))]
+        origins = [0 for _ in range(len(chroms))]
+        # Initialize the Genome object
+        genome = Genome(assembly='mm10', chroms=chroms,
+                        lengths=lengths, origins=origins)
+        # Pop a chromosome
+        genome_new = genome.pop('chrX')
+        # Check the results
+        np.testing.assert_array_equal(genome_new.chroms, chroms[:-1])
+        np.testing.assert_array_equal(genome_new.lengths, lengths[:-1])
+        np.testing.assert_array_equal(genome_new.origins, origins[:-1])
         
 
 class TestIndex(unittest.TestCase):
@@ -173,6 +190,25 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index_coarse.end, index_test.end)
         np.testing.assert_array_equal(index_coarse.get_custom_track('x'), x_test)
         np.testing.assert_array_equal(index_coarse.get_custom_track('y'), y_test)
+    
+    def test_pop_chromosome(self):
+        """Test pop_chromosome method in Index."""
+        # Generate domains
+        genome, chromstr, start, end, _, x, y = generate_domains()
+        # Create the index
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+        index.add_custom_track('x', x)
+        index.add_custom_track('y', y)
+        # Pop a chromosome
+        chrom = 'chr2'
+        index_new = index.pop_chromosome(chrom)
+        # Test the results
+        np.testing.assert_array_equal(index_new.chromstr, chromstr[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.start, start[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.end, end[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.get_custom_track('x'), x[chromstr != chrom])
+        np.testing.assert_array_equal(index_new.get_custom_track('y'), y[chromstr != chrom])
+
 
 def shuffle_in_place(arrays):
     """Shuffle a list of arrays in place."""
