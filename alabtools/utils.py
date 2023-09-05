@@ -914,7 +914,7 @@ class Index(object):
             index_sorted.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
         return index_sorted
     
-    def coarsegrain(self, out_res):
+    def coarsegrain(self, out_res, method='mean'):
         """Coarse-grain the index by resolution.
         Only works if:
             1) the index is haploid,
@@ -923,22 +923,26 @@ class Index(object):
             4) the input resolution is a multiple of the index resolution.
         Args:
             out_res (int or Index): the output resolution, either as an integer number or as an Index object.
+            method (str): the method to use for coarse-graining. Default: 'mean'.
         Returns:
             Index: the coarse-grained index."""
-        # Check if the index is haploid
-        assert len(self.get_haploid()) == len(self), "The index is not haploid."
-        # Check if the index has a regular resolution
+        # Assert input method is implemented
+        assert method in ['mean', 'median'], "The input method is not implemented."
+        # Check input index is haploid and regular
+        assert len(self.get_haploid()) == len(self), "The input index is not haploid."
         in_res = self.resolution()
-        assert in_res is not None, "The index does not have a regular resolution."
-        # Check if out_res is an integer number or an Index object
+        assert in_res is not None, "The input index does not have a regular resolution."
+        # Read the output index
         if isinstance(out_res, Index):
             out_idx = copy.deepcopy(out_res)
             out_res = out_idx.resolution()
-            assert out_res is not None, "The input index does not have a regular resolution."
         elif isinstance(out_res, int):
-            out_idx = self.genome.bininfo(out_res).get_haploid()  # create an out index
+            out_idx = self.genome.bininfo(out_res)  # create an out index
         else:
             raise ValueError("out_res must be an integer number or an Index object.")
+        # Check output index is haploid and regular
+        assert len(out_idx.get_haploid()) == len(out_idx), "The output index is not haploid."
+        assert out_res is not None, "The output index does not have a regular resolution."
         # Check if the final resolution is larger than the initial one
         assert out_res > in_res, "The input resolution is larger than the index resolution."
         # Check if the final resolution is a multiple of the initial one
@@ -949,12 +953,13 @@ class Index(object):
         for k in self.custom_tracks:
             x0 = self.get_custom_track(k)
             x1 = list()
-            for i in range(len(out_idx)):
+            for i in range(len(out_idx)):  # loop over the bins of the output index
                 indices = bmap[i]
-                x0_avg = np.nanmean(x0[indices])
-                if np.isnan(x0_avg):
-                    x0_avg = np.nan
-                x1.append(x0_avg)
+                if method == 'mean':
+                    x0_coarse = np.nanmean(x0[indices])
+                elif method == 'median':
+                    x0_coarse = np.nanmedian(x0[indices])
+                x1.append(x0_coarse)
             x1 = np.array(x1)
             out_idx.add_custom_track(k, x1)
         return out_idx
