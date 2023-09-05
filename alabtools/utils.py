@@ -283,6 +283,16 @@ class Genome(object):
 
         """
 
+        # WARNING: this function gives imprecise results when the origins or the lengths
+        # of the genome are not multiples of the resolution.
+        # For example, if origin=0, length=1000, res=222, we get:
+        #   start = [  0, 222, 444, 666, 888]
+        #   end =  [222, 444, 666, 888, 1100] <-- overflows the chromosome length!
+        
+        # It has been fixed in the bininfo_optimized function below.
+        # However, for backward compatibility, we keep this function for now, but
+        # it should be removed in the future and replaced with bininfo_optimized.
+        
         binSize = [int(math.ceil(float(x) / resolution)) for x in self.lengths]
 
         chromList = []
@@ -296,6 +306,27 @@ class Genome(object):
 
         binInfo = Index(chromList, startList, endList, chrom_sizes=binSize, genome=self)
         return binInfo
+    
+    def bininfo_optimized(self, resolution):
+        """Bin the genome by resolution.
+        Returns a haploid index."""        
+        # Initialize as lists and loop through chromosomes
+        chromstr, start, end = [], [], []
+        for chrom, origin, length in zip(self.chroms, self.origins, self.lengths):
+            # Compute the start and end positions for the current chromosome
+            start_chrom = np.arange(origin, origin + length, resolution)
+            end_chrom = start_chrom + resolution
+            # Adjust the end position of the last bin
+            end_chrom[-1] = origin + length
+            # Append to the lists
+            chromstr.extend(np.repeat(chrom, len(start_chrom)))
+            start.extend(start_chrom)
+            end.extend(end_chrom)
+        # Convert to numpy arrays
+        chromstr = np.array(chromstr, dtype=CHROMS_DTYPE)
+        start = np.array(start, dtype=START_DTYPE)
+        end = np.array(end, dtype=END_DTYPE)
+        return Index(chromstr, start, end, genome=self)
 
     def getchrnum(self, chrom):
 
@@ -937,7 +968,7 @@ class Index(object):
             out_idx = copy.deepcopy(out_res)
             out_res = out_idx.resolution()
         elif isinstance(out_res, int):
-            out_idx = self.genome.bininfo(out_res)  # create an out index
+            out_idx = self.genome.bininfo_optimized(out_res)  # create an out index
         else:
             raise ValueError("out_res must be an integer number or an Index object.")
         # Check output index is haploid and regular
