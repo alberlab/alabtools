@@ -338,7 +338,52 @@ class CtRep(object):
         
         return f, np.arange(nu_max + 1)
     
-    def impute_efficiency(self, method):
+    def impute_efficiency_new(self):
+        pr = self.replication_probability()
+        efficiency, fpr = [], []
+        for cell in range(self.ncell):
+            print('cell {}'.format(cell))
+            sex_chroms = np.logical_or(self.index.chromstr == 'chrX', self.index.chromstr == 'chrY')
+            rho_cell = self.rho[cell, ~sex_chroms, :].flatten()
+            e, l = bernoulli.param_mle(rho_cell, pr[cell])
+            efficiency.append(e)
+            fpr.append(l)
+        self.efficiency = np.array(efficiency)
+        self.fpr = np.array(fpr)
+    
+    def plot_efficiency_likelihood(self, cell, n, bounds):
+        pr = self.replication_probability()[cell]
+        sex_chroms = np.logical_or(self.index.chromstr == 'chrX', self.index.chromstr == 'chrY')
+        rho_cell = self.rho[cell, ~sex_chroms, :].flatten()
+        nu_cell = np.round(rho_cell).astype(int)
+        eps_arr = np.linspace(bounds[0], bounds[1], n)
+        lkl_arr = []
+        for e in eps_arr:
+            lkl = bernoulli.compute_pi_prime(nu_cell, e, 1., pr, phased=True, only_eff=True)
+            lkl[lkl == 0] = np.nan
+            lkl = np.nansum(np.log(lkl))
+            lkl_arr.append(lkl)
+        lkl_arr = np.array(lkl_arr)
+        return eps_arr, lkl_arr
+    
+    def plot_log_lkl(self, cell, n=100, bounds=((0, 1), (0, 1)), only_eff=False):
+        pr = self.replication_probability()
+        sex_chroms = np.logical_or(self.index.chromstr == 'chrX', self.index.chromstr == 'chrY')
+        rho_cell = self.rho[cell, ~sex_chroms, :].flatten()
+        nu_cell = np.round(rho_cell).astype(int)
+        eps = np.linspace(bounds[0][0], bounds[0][1], n)
+        lam = np.linspace(bounds[1][0], bounds[1][1], n)
+        lkl_mat = np.zeros((len(eps), len(lam)))
+        for i, e in enumerate(eps):
+            for j, l in enumerate(lam):
+                log_lkl = bernoulli.compute_pi_prime(nu_cell, e, l, pr[cell], phased=True, only_eff=only_eff)
+                log_lkl[log_lkl == 0] = np.nan
+                log_lkl = np.nansum(np.log(log_lkl))
+                lkl_mat[i, j] = log_lkl
+        return eps, lam, lkl_mat
+        
+    
+    def impute_efficiency(self, method='bernoulli'):
         """Imputes the efficiency of replication in each cell.
         
         Uses the method specified in the input.

@@ -1,6 +1,6 @@
 import numpy as np
-from scipy.special import binom
-from scipy.optimize import minimize
+from scipy.special import binom, factorial
+from scipy.optimize import minimize, basinhopping, shgo
 
 def binomial(nu, n, eps):
     """Computes the binomial probability of observing nu given n.
@@ -35,8 +35,7 @@ def poisson(z, lam):
         (float or np.array(dtype=float)):
                 Poisson probability of having z false positives.
     """
-    
-    return lam ** z * np.exp(-lam) / np.math.factorial(z)
+    return lam ** z * np.exp(-lam) / factorial(z)
 
 def gaussian(rho, mu, sigma):
     """Computes the Gaussian probability of having a
@@ -85,16 +84,63 @@ def compute_pi(nu, n, eps, lam, only_eff = False):
         pi = binomial(nu, n, eps).astype(float)
         return pi
     
-    # Loop over all possible values of z
-    for z in range(np.max(nu) + 1):
-        # If nu is an array, the maximum in the loop is different for each element
-        # If we loop z up to np.max(nu), some nu - z will be negative
-        # In the compute_pi function, binom(n, nu) will be 0
-        # So we don't have to worry about the case where nu - z is negative,
-        # as these will give a 0 contribution to the sum
-        pi += binom(nu, z).astype(float) * poisson(z, lam).astype(float) * binomial(nu - z, n, eps).astype(float)
+    # Loop over all possible values of x1
+    for x1 in range(n + 1):
+        pi_x1 = binomial(x1, n, eps).astype(float) * poisson(nu - x1, lam).astype(float)
+        pi_x1[np.logical_or(np.isnan(pi_x1), np.isinf(pi_x1))] = 0
+        pi_x1[nu < x1] = 0
+        pi += pi_x1
         
     return pi
+
+def compute_pi_prime(nu, eps, lam, pr, phased, only_eff=False):
+    """Computes the probability of observing nu by conditioning
+    on all replication events (given by the probability pr).
+    
+    Args:
+        nu (int):
+                Number of observed spots.
+        eps (float):
+                Detection efficiency.
+        lam (float):
+                False positive rate.
+        pr (float):
+                Probability of replication.
+        phased (bool):
+                Whether the data is phased or not.
+    Returns:
+        pi_p (float):
+                Probability of observing nu. """
+    if phased:
+        pi_prime = (1 - pr) * compute_pi(nu, 1, eps, lam, only_eff) + pr * compute_pi(nu, 2, eps, lam, only_eff)
+    else:
+        pi_prime = (1 - pr) ** 2 * compute_pi(nu, 2, eps, lam, only_eff) +\
+            2 * pr * (1 - pr) * compute_pi(nu, 3, eps, lam, only_eff) +\
+                pr ** 2 * compute_pi(nu, 4, eps, lam, only_eff)
+    # pi_prime[pi_prime == 0] = np.nan
+    return pi_prime
+
+def reparam(x):
+    """Reparametrization of a variable x in the interval (0, 1) to the real line."""
+    return np.exp(x) / (1 + np.exp(x))
+
+def inv_reparam(x):
+    """Inverse of the reparametrization function."""
+    return np.log(x / (1 - x))
+
+def param_mle(rho, pr):
+    """Computes the maximum likelihood estimates of the efficiency and the FPR
+    in a single cell."""
+    nu = np.round(rho).astype(int)
+    # log_lkl = lambda x: - np.nansum(np.log(compute_pi_prime(nu, reparam(x[0]), reparam(x[1]), pr, True)))
+    log_lkl = lambda x: - np.nansum(np.log(compute_pi_prime(nu, x[0], x[1], pr, True)))
+    res = minimize(log_lkl, x0=[0.5, 0.05], bounds=[(0.0001, 0.9999), (0.0001, 0.9999)])
+    eps = res.x[0]
+    lam = res.x[1]
+    # res = basinhopping(log_lkl, x0=[0.5, 0.05])
+    # eps = inv_reparam(res.x[0])
+    # lam = inv_reparam(res.x[1])
+    return eps, lam
 
 def compute_phi(eps, lam, pr, nu_list, phased):
     """Computes the theoretical fractions of events with
