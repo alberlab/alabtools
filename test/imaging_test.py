@@ -83,7 +83,7 @@ class TestCtFile(unittest.TestCase):
         """Test the manual setting of CtFile."""    
         # open a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
-        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        genome = Genome(self.data['assembly'], chroms=self.data['chroms'], origins=self.data['origins'], lengths=self.data['lengths'])
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
                       end=self.data['end'],
@@ -129,7 +129,7 @@ class TestCtFile(unittest.TestCase):
                                              axis=3)
         # create CtFile object and set data manually
         ct = CtFile('test_ct.ct', 'w')
-        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        genome = Genome(self.data['assembly'], chroms=self.data['chroms'], origins=self.data['origins'], lengths=self.data['lengths'])
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
                       end=self.data['end'],
@@ -191,7 +191,7 @@ class TestCtFile(unittest.TestCase):
         nspot_test[:, :, :self.data['ncopy_max']] = self.data['nspot']
         # create a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
-        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        genome = Genome(self.data['assembly'], chroms=self.data['chroms'], origins=self.data['origins'], lengths=self.data['lengths'])
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
                       end=self.data['end'],
@@ -250,7 +250,7 @@ class TestCtFile(unittest.TestCase):
         intensity_test[:, :, :, :self.data['nspot_max']] = self.data['intensity']
         # create a CtFile object and set the data manually
         ct = CtFile('test_ct.ct', 'w')
-        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        genome = Genome(self.data['assembly'], chroms=self.data['chroms'], origins=self.data['origins'], lengths=self.data['lengths'])
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
                       end=self.data['end'],
@@ -294,7 +294,7 @@ class TestCtFile(unittest.TestCase):
         
         # create CtFile object and set data manually
         ct = CtFile('test_ct.ct', 'w')
-        genome = Genome(self.data['assembly'], usechr=np.unique(self.data['chromstr']))
+        genome = Genome(self.data['assembly'], chroms=self.data['chroms'], origins=self.data['origins'], lengths=self.data['lengths'])
         index = Index(chrom=self.data['chromstr'],
                       start=self.data['start'],
                       end=self.data['end'],
@@ -369,6 +369,9 @@ class TestCtFile(unittest.TestCase):
     def _assertCtFile(self, ct, test_data):
         """Assert the CtFile object with the test data."""
         self.assertEqual(ct.genome.assembly, test_data['assembly'])
+        np.testing.assert_array_equal(ct.genome.chroms, test_data['chroms'])
+        np.testing.assert_array_equal(ct.genome.origins, test_data['origins'])
+        np.testing.assert_array_equal(ct.genome.lengths, test_data['lengths'])
         np.testing.assert_array_equal(ct.index.chromstr, test_data['chromstr'])
         np.testing.assert_array_equal(ct.index.start, test_data['start'])
         np.testing.assert_array_equal(ct.index.end, test_data['end'])
@@ -468,9 +471,10 @@ def createTestData():
     
     np.random.seed(0)  # for reproducibility
     # set attributes
-    assembly, chroms, ncell, ndomain, ncopy_max, nspot_max = set_attributes()
+    assembly, chroms, origins, lengths, resolution, ncell, ncopy_max, nspot_max = set_attributes()
     # create the data
-    chromstr, start, end = create_index(chroms, ndomain)
+    chromstr, start, end = create_index(chroms, origins, lengths, resolution)
+    ndomain = len(chromstr)
     cell_labels = create_cell_labels(ncell)
     ncopy = create_ncopy(ncell, ndomain, ncopy_max, chromstr)
     nspot = create_nspot(ncell, ndomain, ncopy_max, nspot_max, ncopy)
@@ -479,9 +483,10 @@ def createTestData():
     nspot_tot = np.sum(nspot)
     ntrace_tot = compute_ntrace_tot(chroms, chromstr, ncopy)
     # return everything as a dictionary
-    data = create_data_dicionary(assembly, chromstr, start, end,
-                                 ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot,
-                                 cell_labels, ncopy, nspot, coordinates, intensity)
+    data = create_data_dicionary(assembly, chroms, origins, lengths,  # genome properties
+                                 chromstr, start, end,  # index properties
+                                 ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot,  # attributes
+                                 cell_labels, ncopy, nspot, coordinates, intensity)  # data
     return data
 
 
@@ -489,33 +494,52 @@ def set_attributes():
     """Set the attributes of the CtFile object for testing."""
     assembly = 'hg38'
     chroms = ['chr1', 'chr2', 'chrX']
+    origins = [0, 4000, 1000]
+    lengths = [100000, 76000, 59000]
+    resolution = 1000
     ncell = 5
-    ndomain = 205
     ncopy_max = 2
     nspot_max = 7
-    return assembly, chroms, ncell, ndomain, ncopy_max, nspot_max
+    return assembly, chroms, origins, lengths, resolution, ncell, ncopy_max, nspot_max
 
-def create_index(chroms, ndomain):
+def create_chromosome_index(chrom, origin, length, resolution):
+    # generate the start array with fixed resolution
+    start = np.arange(origin, origin + length, resolution).astype(int)
+    chromstr = np.repeat(chrom, len(start)).astype('U10')
+    # add random noise (positive or negative) to the start array
+    sign = np.random.choice([-1, 1], len(start))
+    noise = sign * np.random.randint(0, int(np.ceil(0.05 * resolution))+1, len(start))
+    noise[0] = 0  # the first start must be the origin
+    start += noise
+    # Generate the end array
+    end = []
+    for i in range(len(start)-1):
+        end.append(np.random.randint(start[i], start[i+1]))
+    end.append(origin + length)
+    end = np.array(end).astype(int)
+    # Assert everything is correct
+    assert start[0] >= origin, 'The first start is smaller than the origin.'
+    assert end[-1] <= origin + length, 'The last end is larger than the origin + length.'
+    for i in range(len(start)-1):
+        assert start[i+1] > start[i], 'start[{}] is not > start[{}] for {}'.format(i+1, i, chrom)
+        assert end[i+1] > end[i], 'end[{}] is not > end[{}] for {}'.format(i+1, i, chrom)
+        assert end[i+1] > start[i], 'end[{}] is not > start[{}] for {}'.format(i+1, i, chrom)
+        assert start[i+1] > end[i], 'start[{}] is not > end[{}] for {}'.format(i+1, i, chrom)
+    return start, end, chromstr
+
+def create_index(chroms, origins, lengths, resolution):
     """Create the index for testing, i.e. the chromosome, start and end arrays."""
-    # Size (in number of domains) of each chromosome
-    sizes = np.random.rand(len(chroms))  # between 0 and 1
-    sizes = ndomain * sizes / np.sum(sizes)  # normalize to ndomain (float)
-    sizes = np.round(sizes).astype(int)  # round to integer
-    sizes[0] += ndomain - np.sum(sizes)  # normalize to ndomain (integer)
-    if np.any(sizes <= 0):
-        raise ValueError('One of the sizes is <= 0. Try again.')
     chromstr = []
     start = []
     end = []
-    for size, chrom in zip(sizes, chroms):
-        for i in range(size):
-            chromstr.append(chrom)
-            # generate start[i] between end[-1]+1000 and end[i-1]+10000
-            if i == 0:  # there is no end[-1]
-                start.append(np.random.randint(0, 10000))
-            else:
-                start.append(end[-1] + np.random.randint(1000, 10000))
-            end.append(start[-1] + np.random.randint(100, 1000))
+    for chrom, origin, length in zip(chroms, origins, lengths):
+        start_chrom, end_chrom, chromstr_chrom = create_chromosome_index(chrom, origin, length, resolution)
+        chromstr = np.concatenate((chromstr, chromstr_chrom))
+        start = np.concatenate((start, start_chrom))
+        end = np.concatenate((end, end_chrom))
+    chromstr = np.array(chromstr).astype('U10')
+    start = np.array(start).astype(int)
+    end = np.array(end).astype(int)
     return np.array(chromstr), np.array(start), np.array(end)
 
 def create_cell_labels(ncell):
@@ -568,12 +592,16 @@ def create_intensity(ncell, ndomain, ncopy_max, nspot_max, ncopy, nspot):
                     intensity[cellnum, domainnum, copynum, spotnum] = np.random.randint(1, 100)
     return intensity
 
-def create_data_dicionary(assembly, chromstr, start, end, ncell, ndomain, ncopy_max,
-                          nspot_max, nspot_tot, ntrace_tot, cell_labels, ncopy, nspot,
-                          coordinates, intensity):
+def create_data_dicionary(assembly, chroms, origins, lengths,
+                          chromstr, start, end,
+                          ncell, ndomain, ncopy_max, nspot_max, nspot_tot, ntrace_tot,
+                          cell_labels, ncopy, nspot, coordinates, intensity):
     """Create the data dictionary for testing."""
     data = {
         'assembly': assembly,
+        'chroms': chroms,
+        'origins': origins,
+        'lengths': lengths,
         'chromstr': chromstr,
         'start': start,
         'end': end,
