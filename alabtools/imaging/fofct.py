@@ -273,9 +273,19 @@ def extract_genome_index(assembly, chromstr, start, end):
         # Create the Genome object
         # Note: if some chromosomes in np.unique(chrstr) are not in the assembly file, they will be ignored.
         genome = Genome(ass, usechr=np.unique(chromstr))
-        break            
+        break  
     if genome is None:
         raise ValueError('Assembly {} not found in alabtools/genomes. Need to include it.'.format(ass))
+    
+    # Identify lengths and origins of the chromosomes
+    origins, lengths = [], []
+    for chrom in genome.chroms:
+        chrom_start = np.min(start[chromstr == chrom])
+        chrom_end = np.max(end[chromstr == chrom])
+        chrom_length = chrom_end - chrom_start
+        origins.append(chrom_start)
+        lengths.append(chrom_length)
+    genome = Genome(genome, origins=origins, lengths=lengths)
             
     # Create the Index object
     index = Index(chrom=chromstr, start=start, end=end, genome=genome)
