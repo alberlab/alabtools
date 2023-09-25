@@ -1,16 +1,20 @@
 import os
 import sys
+import time
 import tempfile
 import warnings
 from functools import partial
 import numpy as np
 import pickle
+import h5py
 from alabtools.utils import Genome, Index
 from alabtools.imaging import CtFile, CtEnvelope
 from alabtools.parallel import Controller
 from . import cellcycle
 from . import bernoulli
 from . import simulated_annealing
+from . import model_estimation
+from . import replication_estimation
 
 class CtRep(object):
     """
@@ -223,24 +227,25 @@ class CtRep(object):
         rt = Index(rt_bedfile, genome=Genome(assembly))
         assert assembly == self.genome.assembly,\
             "Assembly provided in configuration file doesn't match the one in the CtRep."
-        assert rt == self.index,\
-            "Index from RT BedGraph doesn't match the one in the CtRep."
+        #assert rt == self.index,\
+        #    "Index from RT BedGraph doesn't match the one in the CtRep."
         
         # compute all the possible G1/G2 segmentations
         segmentation = []
         # (assuming that G1 (and G2, separately) can have at most half of the cells)
-        for ncell_g1 in range(1, int(self.ncell / 2) + 1):
-            for ncell_g2 in range(1, int(self.ncell / 2) + 1):
+        for ncell_g1 in range(50, 200):
+            for ncell_g2 in range(50, 300):
                 segmentation.append([ncell_g1, ncell_g2])
         segmentation = np.array(segmentation)
         nsegment = segmentation.shape[0]
-        # save the segmentation to a temporary file
-        np.save(os.path.join(temp_dir, 'segmentation.npy'), segmentation)
         
-        # Save the data needed for the parallel and reduce tasks to temporary files
-        np.save(os.path.join(temp_dir, 'nraw.npy'), self.nraw)
-        np.save(os.path.join(temp_dir, 'volume.npy'), self.volume)
-        
+        # Save segmentation, chromstr, nraw and volume to a temporary HDF5 file
+        with h5py.File(os.path.join(temp_dir, 'data_for_nodes.hdf5'), 'w') as hdf5:
+            hdf5.create_dataset('segmentation', data=segmentation)
+            hdf5.create_dataset('chromstr', data=self.index.chromstr.astype('S10'), dtype=np.dtype('S10'))
+            hdf5.create_dataset('nraw', data=self.nraw)
+            hdf5.create_dataset('volume', data=self.volume)
+
         # set the parallel and reduce tasks
         parallel_task = partial(cellcycle.parallel_function,
                                 cfg=cfg,
@@ -271,6 +276,97 @@ class CtRep(object):
         self.nu = nu
 
         return r
+    
+    def impute_efficiency_final(self, cfg):
+        
+        # create a temporary directory to store nodes' results
+        temp_dir = tempfile.mkdtemp(dir=os.getcwd())
+        sys.stdout.write("Temporary directory for nodes' results: {}\n".format(temp_dir))
+        
+        # create a Controller
+        controller = Controller(cfg)
+        
+        # Save segmentation, chromstr, nraw and volume to a temporary HDF5 file
+        with h5py.File(os.path.join(temp_dir, 'data_for_nodes.hdf5'), 'w') as hdf5:
+            hdf5.create_dataset('rho', data=self.rho)
+            hdf5.create_dataset('cell_labels', data=self.cell_labels.astype('S10'), dtype=np.dtype('S10'))
+            hdf5.create_dataset('pr', data=self.replication_probability())
+        
+        # set the parallel and reduce tasks
+        parallel_task = partial(model_estimation.parallel_function, temp_dir=temp_dir)
+        reduce_task = partial(model_estimation.reduce_function, cell_labels=self.cell_labels)
+        
+        # run the parallel and reduce tasks
+        efficiency = controller.map_reduce(parallel_task,
+                                           reduce_task,
+                                           args=self.cell_labels)
+        
+        # Delete the temporary directory and its contents
+        os.system('rm -r {}'.format(temp_dir))
+        
+        self.efficiency = np.array(efficiency)
+        
+    
+    def run_cellcycle_simple(self, g1_ptg, g2_ptg, rt_exp):
+        # Take G1 cells as the lowest g1_ptg% of cells by volume
+        # and G2 cells as the highest g2_ptg% of cells by volume
+        ncell_g1 = int(np.round(g1_ptg * self.ncell))
+        ncell_g2 = int(np.round(g2_ptg * self.ncell))
+        cycle = np.ones(self.ncell, dtype=int)
+        cycle[:ncell_g1] = 0
+        cycle[(self.ncell - ncell_g2):] = 2
+        # The cell cycle array is sorted by volume (low to high)
+        # Sort the cell cycle array back to the original order
+        cycle = cycle[np.argsort(np.argsort(self.volume))]
+        # Normalize the spot counts by the bias
+        rho = cellcycle.normalize_bias(self.nraw, cycle)
+        # Compute the simulated RT
+        rho_s = rho[cycle == 1, :, :]        
+        # Compute the simulated RT signal
+        rt_sim = np.nansum(rho_s, axis=(0, 2))
+        # Compute the Pearson correlation between the simulated and experimental RT
+        r = cellcycle.clean_pearsonr(rt_exp, rt_sim[self.index.chromstr != 'chrX'])
+        # Compare it to the correlation with unnormalized data
+        rt_sim_0 = np.nansum(self.nraw, axis=(0, 2)).astype(float)
+        r0 = cellcycle.clean_pearsonr(rt_exp, rt_sim_0[self.index.chromstr != 'chrX'])
+        return r, r0
+    
+    def impute_replication_final(self, cfg):
+        
+        # create a temporary directory to store nodes' results
+        temp_dir = tempfile.mkdtemp(dir=os.getcwd())
+        sys.stdout.write("Temporary directory for nodes' results: {}\n".format(temp_dir))
+        
+        # create a Controller
+        controller = Controller(cfg)
+        
+        # Assert that the required parameters in cfg are present
+        required_param = ['window_size_1', 'window_size_2']
+        for param in required_param:
+            assert param in cfg.keys(), "Configuration file must have the key '{}'.".format(param)
+        
+        # Save segmentation, chromstr, nraw and volume to a temporary HDF5 file
+        with h5py.File(os.path.join(temp_dir, 'data_for_nodes.hdf5'), 'w') as hdf5:
+            hdf5.create_dataset('rho', data=self.rho)
+            hdf5.create_dataset('cell_labels', data=self.cell_labels.astype('S10'), dtype=np.dtype('S10'))
+            hdf5.create_dataset('efficiency', data=self.efficiency)
+            hdf5.create_dataset('pr', data=self.replication_probability())
+        
+        # set the parallel and reduce tasks
+        parallel_task = partial(replication_estimation.parallel_function, cfg=cfg, temp_dir=temp_dir)
+        reduce_task = partial(replication_estimation.reduce_function, cell_labels=self.cell_labels, rho_shape=self.rho.shape, temp_dir=temp_dir)
+        
+        # run the parallel and reduce tasks
+        n, eff, prob_rep = controller.map_reduce(parallel_task,
+                                                 reduce_task,
+                                                 args=self.cell_labels)
+        
+        # Delete the temporary directory and its contents
+        os.system('rm -r {}'.format(temp_dir))
+        
+        self.n = n
+        self.eff = eff
+        self.prob_rep = prob_rep
 
     def replication_probability(self):
         """Imputes the probability of replication in each cell.
@@ -551,7 +647,7 @@ class CtRep(object):
         
         return rt
     
-    def sort_by_volume(self, mat, isolate_s=True):
+    def sort_by_row(self, mat, isolate_s=True, array=None):
         """Sorts the matrix by increasing volume,
         and transforms it into a haploid matrix where copies
         of the same cell are concatenated contiguously.
@@ -568,11 +664,12 @@ class CtRep(object):
         """
         
         # Assert the input
-        assert mat.shape == (self.ncell, self.ndomain, self.ncopy_max),\
-            "The input matrix has the wrong shape."
+        ncell, ndomain, ncopy_max = mat.shape
+        assert ncell == self.ncell, "The input matrix has the wrong shape."
         # Assert that the volume has been computed
-        assert self.volume is not None,\
-            "The volume of each cell is not available."
+        if array is None:
+            array = self.volume
+            assert self.volume is not None, "The volume of each cell is not available."
         if isolate_s:
             # Assert that cycle has been computed
             assert self.cycle is not None,\
@@ -580,25 +677,25 @@ class CtRep(object):
         
         # Isolate S cells
         if isolate_s:
-            volume_srt = self.volume[self.cycle == 1]
+            array_srt = array[self.cycle == 1]
             mat_srt = mat[self.cycle == 1, :, :]
         else:
-            volume_srt = np.copy(self.volume)
+            array_srt = np.copy(array)
             mat_srt = np.copy(mat)
         
         # Sort the cells by increasing volume
-        mat_srt = mat_srt[np.argsort(volume_srt), :, :]
-        volume_srt = volume_srt[np.argsort(volume_srt)]
+        mat_srt = mat_srt[np.argsort(array_srt), :, :]
+        array_srt = array_srt[np.argsort(array_srt)]
         
         # Reshape the matrix to a 2D array (ncell_s * ncopy_max, ndomain)
         if isolate_s:
             ncell = int(np.sum(self.cycle == 1))
         else:
             ncell = self.ncell
-        mat_srt_hap = np.zeros((ncell * self.ncopy_max, self.ndomain))
+        mat_srt_hap = np.zeros((ncell * ncopy_max, ndomain))
         for cell in range(ncell):
-            for copy in range(self.ncopy_max):
-                mat_srt_hap[cell * self.ncopy_max + copy, :] = mat_srt[cell, :, copy]
+            for copy in range(ncopy_max):
+                mat_srt_hap[cell * ncopy_max + copy, :] = mat_srt[cell, :, copy]
         
-        return mat_srt_hap, volume_srt
+        return mat_srt_hap, array_srt
         

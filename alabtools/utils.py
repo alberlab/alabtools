@@ -295,6 +295,27 @@ class Genome(object):
 
         binInfo = Index(chromList, startList, endList, chrom_sizes=binSize, genome=self)
         return binInfo
+    
+    def bininfo_optimized(self, resolution):
+        """Bin the genome by resolution.
+        Returns a haploid index."""        
+        # Initialize as lists and loop through chromosomes
+        chromstr, start, end = [], [], []
+        for chrom, origin, length in zip(self.chroms, self.origins, self.lengths):
+            # Compute the start and end positions for the current chromosome
+            start_chrom = np.arange(origin, origin + length, resolution)
+            end_chrom = start_chrom + resolution
+            # Adjust the end position of the last bin
+            end_chrom[-1] = origin + length
+            # Append to the lists
+            chromstr.extend(np.repeat(chrom, len(start_chrom)))
+            start.extend(start_chrom)
+            end.extend(end_chrom)
+        # Convert to numpy arrays
+        chromstr = np.array(chromstr, dtype=CHROMS_DTYPE)
+        start = np.array(start, dtype=START_DTYPE)
+        end = np.array(end, dtype=END_DTYPE)
+        return Index(chromstr, start, end, genome=self)
 
     def getchrnum(self, chrom):
 

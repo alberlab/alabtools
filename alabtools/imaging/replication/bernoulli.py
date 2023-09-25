@@ -85,10 +85,11 @@ def compute_pi(nu, n, eps, lam, only_eff = False):
         return pi
     
     # Loop over all possible values of x1
-    for x1 in range(n + 1):
+    # for x1 in range(n + 1):
+    for x1 in range(min(nu, n) + 1):
         pi_x1 = binomial(x1, n, eps).astype(float) * poisson(nu - x1, lam).astype(float)
-        pi_x1[np.logical_or(np.isnan(pi_x1), np.isinf(pi_x1))] = 0
-        pi_x1[nu < x1] = 0
+        # pi_x1[np.logical_or(np.isnan(pi_x1), np.isinf(pi_x1))] = 0
+        # pi_x1[nu < x1] = 0
         pi += pi_x1
         
     return pi
@@ -120,21 +121,16 @@ def compute_pi_prime(nu, eps, lam, pr, phased, only_eff=False):
     # pi_prime[pi_prime == 0] = np.nan
     return pi_prime
 
-def reparam(x):
-    """Reparametrization of a variable x in the interval (0, 1) to the real line."""
-    return np.exp(x) / (1 + np.exp(x))
-
-def inv_reparam(x):
-    """Inverse of the reparametrization function."""
-    return np.log(x / (1 - x))
-
 def param_mle(rho, pr):
     """Computes the maximum likelihood estimates of the efficiency and the FPR
     in a single cell."""
     nu = np.round(rho).astype(int)
-    # log_lkl = lambda x: - np.nansum(np.log(compute_pi_prime(nu, reparam(x[0]), reparam(x[1]), pr, True)))
-    log_lkl = lambda x: - np.nansum(np.log(compute_pi_prime(nu, x[0], x[1], pr, True)))
-    res = minimize(log_lkl, x0=[0.5, 0.05], bounds=[(0.0001, 0.9999), (0.0001, 0.9999)])
+    def log_likelihood(x):
+        log_lkl = np.zeros(nu.shape)
+        for nu_val in np.unique(nu):
+            log_lkl[nu == nu_val] = np.log(compute_pi_prime(nu_val, x[0], x[1], pr, phased=True))
+        return - np.nansum(log_lkl)
+    res = minimize(log_likelihood, x0=[0.5, 0.05], bounds=[(0.0001, 0.9999), (0.0001, 0.9999)])
     eps = res.x[0]
     lam = res.x[1]
     # res = basinhopping(log_lkl, x0=[0.5, 0.05])

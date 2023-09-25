@@ -1,8 +1,50 @@
 import os
+import sys
+import time
 import numpy as np
-import pickle
+import h5py
 from scipy.stats import pearsonr
 from alabtools.utils import Genome, Index
+
+def safe_h5py_read(hdf5, log_file):
+    """Safe h5py read.
+    
+    Reads the data from the temporary files with h5py.
+    
+    If the reading fails, it waits 10 seconds and tries again.
+    If it fails again, it raises an error.
+
+    Args:
+        hdf5 (h5py.File): h5py file object.
+        log_file (str): Path to the log file.
+
+    Returns:
+        segmentation (np.array(nsegment, 2), dtype=int): segmentation array.
+        chromstr (np.array(nspot), dtype='U10'): chromosome array.
+        nraw (np.array(nspot, ndomain, ncopy_max), dtype=int): raw single-cell spot counts.
+        volume (np.array(nspot), dtype=float): cell volume array.
+    """
+    
+    # Read the data from the temporary files with h5py
+    try:
+        segmentation = hdf5['segmentation'][:]
+        chromstr = hdf5['chromstr'][:].astype('U10')
+        nraw = hdf5['nraw'][:]
+        volume = hdf5['volume'][:]
+    except:
+        # If the reading fails, wait 10 seconds and try again
+        time.sleep(10)
+        try:
+            segmentation = hdf5['segmentation'][:]
+            chromstr = hdf5['chromstr'][:].astype('U10')
+            nraw = hdf5['nraw'][:]
+            volume = hdf5['volume'][:]
+        except:
+            # If it fails again, raise an error
+            log_file.write('Error reading the temporary files with h5py\n')
+            raise ValueError("Error reading the temporary files with h5py")
+    
+    return segmentation, chromstr, nraw, volume
 
 def parallel_function(segmentID, cfg, temp_dir):
     """Parallel function for cell cycle imputation.
@@ -25,17 +67,21 @@ def parallel_function(segmentID, cfg, temp_dir):
     Returns:
         out_name (str): Name of the output file.
     """
+
+    # Create a log file to write progress
+    log_file = os.path.join(temp_dir, '{}_log.txt'.format(segmentID))
+    f = open(log_file, 'w')
+    f.write('Starting parallel function\n')
     
-    # Read the data from the temporary files
+    # Read the data from the temporary files with h5py
+    with h5py.File(os.path.join(temp_dir, 'data_for_nodes.hdf5'), 'r') as hdf5:
+        segmentation, chromstr, nraw, volume = safe_h5py_read(hdf5, log_file)
+    f.write('Files read\n')
+    
     # Number of cells in G1 and G2
-    segmentation = np.load(os.path.join(temp_dir, 'segmentation.npy'))
     ncell_g1, ncell_g2 = segmentation[segmentID]
     ncell_g1, ncell_g2 = int(ncell_g1), int(ncell_g2)
-    # Raw number of spots
-    nraw = np.load(os.path.join(temp_dir, 'nraw.npy'))
     ncell = nraw.shape[0]
-    # Cell nuclei volumes
-    volume = np.load(os.path.join(temp_dir, 'volume.npy'))
     
     # Define the cell cycle array:
     #   0: G1 (first ncells_g1 cells with the smallest volume)
@@ -47,40 +93,54 @@ def parallel_function(segmentID, cfg, temp_dir):
     # The cell cycle array is sorted by volume (low to high)
     # Sort the cell cycle array back to the original order
     cycle = cycle[np.argsort(np.argsort(volume))]
+    f.write('cycle defined\n')
     
     # Normalize the spots matrix (rho matrix)
     rho = normalize_bias(nraw, cycle)
+    f.write('bias normalized\n')
     
     # Isolate the S phase submatrix
     rho_s = rho[cycle == 1, :, :]
     
     # Compute the simulated RT signal
     rt_sim = np.nansum(rho_s, axis=(0, 2))
+    f.write('rt_sim computed\n')
     
     # Read the experimental RT signal
     rt_bedfile = cfg['rt_bedfile']
     assembly = cfg['assembly']
     rt_exp_idx = Index(rt_bedfile, genome=Genome(assembly))
+    f.write('rt_exp loaded\n')
     try:
         rt_exp = rt_exp_idx.track0
     except:
         raise ValueError("{} must be a BedGraph, \
             with a single track and no header".format(rt_bedfile))
     
-    # Compute the Pearson correlation coefficient
-    r = clean_pearsonr(rt_sim, rt_exp)
+    # Remove chrX and chrY
+    rt_sim_nosex = rt_sim[np.logical_and(chromstr != 'chrX', chromstr != 'chrY')]
+    # rt_exp.pop_chromosome('chrX')  TODO: remove comment when version is updated
+    # rt_exp.pop_chromosome('chrY')
+    f.write('rt_sim_nosex computed\n')
     
-    # Save the data in a dictionary
-    out_name = os.path.join(temp_dir, '{}.pkl'.format(segmentID))
-    with open(out_name, 'wb') as f:
-        pickle.dump({'cycle': cycle, 'r': r}, f)
+    # Compute the Pearson correlation coefficient
+    r = clean_pearsonr(rt_sim_nosex, rt_exp)
+    f.write('r computed\n')
+    
+    # Save the cycle as a compressed numpy array
+    out_name = os.path.join(temp_dir, '{}.npz'.format(segmentID))
+    np.savez_compressed(out_name, cycle=cycle)
+    f.write('cycle saved\n')
+    
+    # Close the log file
+    f.close()
     
     # Free memory
     del segmentation, nraw, volume, cycle, rho, rho_s, rt_sim, rt_exp, rt_exp_idx
     
-    return out_name
+    return r, out_name
 
-def reduce_function(out_names):
+def reduce_function(parallel_returns):
     """Reduce function for cell cycle imputation.
     
     Determines the best segmentation based on largest
@@ -89,30 +149,33 @@ def reduce_function(out_names):
     Returns the best cycle and Pearson correlation.
 
     Args:
-        out_names (list): List of the output files.
+        parallel_returns (list): List of the parallel returns.
 
     Returns:
         r_best (float): Pearson correlation coefficient.
         cycle_best (np.array(ncell), dtype=int): Cell cycle array.
     """
     
+    sys.stdout.write('Starting reduce function\n')
+    
     r_best = 0
     cycle_best = None
     
-    for out_name in out_names:
-        # Load the data from the dictionary
-        with open(out_name, 'rb') as f:
-            data = pickle.load(f)
-        
-        # If the Pearson correlation is larger than the current best,
-        # update the current best
-        if data['r'] > r_best:
-            r_best = data['r']
-            cycle_best = data['cycle']
+    # Read the segment IDs and Pearson correlation coefficients
+    r_values, out_names = [], []
+    for parallel_return in parallel_returns:
+        r, out_name = parallel_return
+        r_values.append(r)
+        out_names.append(out_name)
+    r_values = np.array(r_values)
+    out_names = np.array(out_names)
     
-    # If cycle_best is None, raise an error
-    if cycle_best is None:
-        raise ValueError("Something went wrong (cycle_best is None")
+    # Find the best r and its corresponding segmentation
+    r_best = np.max(r_values)
+    out_name_best = out_names[np.argmax(r_values)]
+    
+    # Read the cell cycle array of the best segmentation
+    cycle_best = np.load(out_name_best)['cycle']
     
     return r_best, cycle_best
 
