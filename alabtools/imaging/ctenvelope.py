@@ -127,7 +127,7 @@ class CtEnvelope(object):
         self.volume = np.delete(self.volume, indices)
         self.ncell -= len(indices)
     
-    def run(self, cfg):
+    def run_alphashape(self, cfg):
         """Runs the alpha-shape algorithm.
         
         Updates the attributes of the current object.
