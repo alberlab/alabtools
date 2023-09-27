@@ -32,23 +32,15 @@ class CtEnvelope(object):
         volume = np.array(ncell, dtype=float)
     """
     
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename=None):
         
-        # assert the input filename
-        assert isinstance(filename, str), "The input filename must be a string."
-        assert filename.endswith('.ctenv'), "The input filename must end with .ctenv."
+        if filename is not None:
+            assert isinstance(filename, str), "filename must be a string."
+            assert filename.endswith('.ctenv'), "filename must end with .ctenv."
+            assert os.path.isfile(filename), "File {} not found.".format(filename)
+            self.load(filename)
         
-        # assert the input mode
-        assert mode in ['r', 'w'], "The input mode must be 'r' or 'w'."
-        
-        # set the filename and mode attributes
-        self.filename = filename
-        self.mode = mode
-        
-        if mode == 'r':
-            self.load()
-        
-        if mode == 'w':
+        else:
             self.fitted = False
             self.ct_fit = None
             self.ncell = None
@@ -57,12 +49,15 @@ class CtEnvelope(object):
             self.mesh = None
             self.volume = None
     
-    def load(self):
+    def load(self, filename):
         """Loads a CtEnvelope from a pickle file.
         """
         
-        with open(self.filename, 'rb') as f:
-            loaded_ctenv = pickle.load(f)
+        try:
+            with open(filename, 'rb') as f:
+                loaded_ctenv = pickle.load(f)
+        except:
+            raise IOError("File {} could not be opened with pickle.".format(filename))
         
         assert hasattr(loaded_ctenv, 'fitted'), "Loaded CtEnvelope has no attribute 'fitted'."
         assert isinstance(loaded_ctenv.fitted, bool), "Loaded CtEnvelope.fitted must be a boolean."
@@ -82,10 +77,12 @@ class CtEnvelope(object):
         # of the loaded object)
         self.__dict__.update(loaded_ctenv.__dict__)
     
-    def save(self):
+    def save(self, filename):
         """Saves a CtEnvelope to a pickle file.
         """
-        with open(self.filename, 'wb') as f:
+        assert isinstance(filename, str), "filename must be a string."
+        assert filename.endswith('.ctenv'), "filename must end with .ctenv."
+        with open(filename, 'wb') as f:
             pickle.dump(self, f)
     
     def sort_cells(self, order):
