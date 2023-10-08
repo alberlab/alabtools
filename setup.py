@@ -29,7 +29,8 @@ install_requires = [
     'six',
     'alphashape>=1.3.1',
     'trimesh>=3.21.5',
-    'cooler>=0.8.11'
+    'cooler>=0.8.11',
+    'mrcfile>=1.4.3'
 ]
 tests_require = [
     'mock'
