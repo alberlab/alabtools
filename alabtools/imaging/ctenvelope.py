@@ -8,6 +8,7 @@ from scipy.spatial import distance
 import pickle
 import alphashape
 import trimesh
+import mrcfile
 from .ctfile import CtFile
 from .utils_imaging import flatten_coordinates
 from alabtools.parallel import Controller
@@ -32,23 +33,15 @@ class CtEnvelope(object):
         volume = np.array(ncell, dtype=float)
     """
     
-    def __init__(self, filename, mode='r'):
+    def __init__(self, filename=None):
         
-        # assert the input filename
-        assert isinstance(filename, str), "The input filename must be a string."
-        assert filename.endswith('.ctenv'), "The input filename must end with .ctenv."
+        if filename is not None:
+            assert isinstance(filename, str), "filename must be a string."
+            assert filename.endswith('.ctenv'), "filename must end with .ctenv."
+            assert os.path.isfile(filename), "File {} not found.".format(filename)
+            self.load(filename)
         
-        # assert the input mode
-        assert mode in ['r', 'w'], "The input mode must be 'r' or 'w'."
-        
-        # set the filename and mode attributes
-        self.filename = filename
-        self.mode = mode
-        
-        if mode == 'r':
-            self.load()
-        
-        if mode == 'w':
+        else:
             self.fitted = False
             self.ct_fit = None
             self.ncell = None
@@ -57,12 +50,15 @@ class CtEnvelope(object):
             self.mesh = None
             self.volume = None
     
-    def load(self):
+    def load(self, filename):
         """Loads a CtEnvelope from a pickle file.
         """
         
-        with open(self.filename, 'rb') as f:
-            loaded_ctenv = pickle.load(f)
+        try:
+            with open(filename, 'rb') as f:
+                loaded_ctenv = pickle.load(f)
+        except:
+            raise IOError("File {} could not be opened with pickle.".format(filename))
         
         assert hasattr(loaded_ctenv, 'fitted'), "Loaded CtEnvelope has no attribute 'fitted'."
         assert isinstance(loaded_ctenv.fitted, bool), "Loaded CtEnvelope.fitted must be a boolean."
@@ -82,10 +78,12 @@ class CtEnvelope(object):
         # of the loaded object)
         self.__dict__.update(loaded_ctenv.__dict__)
     
-    def save(self):
+    def save(self, filename):
         """Saves a CtEnvelope to a pickle file.
         """
-        with open(self.filename, 'wb') as f:
+        assert isinstance(filename, str), "filename must be a string."
+        assert filename.endswith('.ctenv'), "filename must end with .ctenv."
+        with open(filename, 'wb') as f:
             pickle.dump(self, f)
     
     def sort_cells(self, order):
@@ -130,7 +128,7 @@ class CtEnvelope(object):
         self.volume = np.delete(self.volume, indices)
         self.ncell -= len(indices)
     
-    def run(self, cfg):
+    def run_alphashape(self, cfg):
         """Runs the alpha-shape algorithm.
         
         Updates the attributes of the current object.
@@ -359,6 +357,102 @@ class CtEnvelope(object):
         ct_clean.trim()
         
         return ct_clean
+    
+    def run_mrc(self, cfg):
+        """Compures the MRC files for each cell."""
+        
+        # Check that the required keys are in the configuration
+        required_keys = ['ct_name', 'mrc parameters', 'parallel']
+        for key in required_keys:
+            assert key in cfg, "Key {} not found in the cfg.".format(key)
+        required_mrc_keys = ['resolution', 'border', 'surface_thickness']
+        for key in required_mrc_keys:
+            assert key in cfg['mrc parameters'], "Key {} not found in the cfg['mrc parameters'].".format(key)
+
+        # open ct file and read the cell labels
+        with CtFile(cfg['ct_name'], 'r') as ct:
+            cell_labels = ct.cell_labels
+        
+        # create a directory to store mrc files
+        mrc_dir = os.path.join(os.getcwd(), 'mrc')
+        os.makedirs(mrc_dir, exist_ok=True)
+        sys.stdout.write("Directory for MRC files: {}\n".format(mrc_dir))
+        
+        # Save the mesh list as a pickle file in the mrc directory
+        with open(os.path.join(mrc_dir, 'mesh.pkl'), 'wb') as f:
+            pickle.dump(self.mesh, f)
+        
+        # create a Controller
+        controller = Controller(cfg)
+        
+        # set the parallel and reduce tasks
+        parallel_task = partial(self.parallel_mrc, cfg=cfg, mrc_dir=mrc_dir)
+        reduce_task = self.reduce_mrc
+
+        # run the parallel and reduce tasks
+        origins, low_edges = controller.map_reduce(parallel_task, reduce_task, args=cell_labels)
+        
+        # Delete the mesh pickle file
+        os.system('rm -r {}'.format(os.path.join(mrc_dir, 'mesh.pkl')))
+        
+        # Write a MRC metadata file as a pickled dictionary
+        mrc_meta = {'resolution': cfg['mrc parameters']['resolution'],
+                    'cell_labels': cell_labels,
+                    'origins': origins,
+                    'low_edges': low_edges}
+        with open(os.path.join(mrc_dir, 'mrc_meta.pkl'), 'wb') as f:
+            pickle.dump(mrc_meta, f)
+        del origins, low_edges, mrc_meta
+    
+    @staticmethod
+    def reduce_mrc(parallel_outs):
+        # Get the cell IDs, cell numbers and origins from the parallel outputs
+        cellnums, origins, lower_edges = zip(*parallel_outs)
+        cellnums = np.array(cellnums).astype(int)
+        origins = np.array(origins).astype(int)
+        lower_edges = np.array(lower_edges).astype(float)
+        # Sort origins according to the cell numbers
+        sort_idx = np.argsort(cellnums)
+        origins = origins[sort_idx]
+        lower_edges = lower_edges[sort_idx]
+        return origins, lower_edges
+    
+    @staticmethod
+    def parallel_mrc(cellID, cfg, mrc_dir):
+        # Read the cell number and the XYZ range from the CtFile
+        with CtFile(cfg['ct_name'], 'r') as ct:
+            cellnum = ct.get_cellnum(cellID)
+            xyz_range = get_xyz_range(ct, cellnum)
+        # Read the mesh from the pickle file
+        with open(os.path.join(mrc_dir, 'mesh.pkl'), 'rb') as f:
+            mesh = pickle.load(f)[cellnum]
+        # Read the MRC parameters from the configuration
+        resolution = cfg['mrc parameters']['resolution']  # in same physical units as data (e.g. nm)
+        border = cfg['mrc parameters']['border']  # in voxels (white space around the cell)
+        surface_thickness = cfg['mrc parameters']['surface_thickness']  # in same physical units as data (e.g. nm)
+        # If resolution is a number, we use the same resolution for all the axes
+        if isinstance(resolution, (int, float)):
+            resolution = np.array([resolution, resolution, resolution])
+        # Create the grid edges (physical units)
+        grid_edg = create_grid_edges(xyz_range, resolution, border)
+        # Set the origin of the MRC file (in voxels)
+        origin = - np.round(grid_edg[:, 0] / resolution).astype(int)
+        # Create the XYZ grid of points
+        xyz_grid, grid_shape = create_xyz_grid(grid_edg, resolution)
+        # Use mesh to compute containment matrix
+        contained = mesh.contains(xyz_grid)
+        contained = np.reshape(contained, grid_shape).astype(int)
+        # Write the MRC file
+        write_mrc(os.path.join(mrc_dir, '{}.mrc'.format(cellnum)), contained, tuple(origin), tuple(resolution))
+        del contained
+        # Use mesh to compute the surface of the cell
+        dists = trimesh.proximity.signed_distance(mesh, xyz_grid)
+        dists = np.reshape(dists, grid_shape)
+        on_surface = (np.abs(dists) < surface_thickness).astype(int)
+        write_mrc(os.path.join(mrc_dir, '{}.surface.mrc'.format(cellnum)), on_surface, tuple(origin), tuple(resolution))
+        del on_surface, dists, xyz_grid
+        # Return the origin of the MRC file and the lower left corner of the grid
+        return cellnum, origin, grid_edg[:, 0]
             
 
 def fit_alphashape(cellID, points, alpha, force=False):
@@ -435,3 +529,53 @@ def remove_isolated(points, thresh, min_neigh):
     points_noout = points[neighs >= min_neigh]
     del neighs
     return points_noout
+
+def get_xyz_range(ct, cellnum):
+    """Get the range of the X, Y and Z coordinates of a cell
+    from the CtFile object."""
+    xyz_range = np.zeros((3, 2)).astype(float)
+    for i in range(3):
+        x_i = ct['coordinates'][cellnum, :, :, :, i]
+        xyz_range[i, 0] = np.nanmin(x_i)
+        xyz_range[i, 1] = np.nanmax(x_i)
+        del x_i
+    return xyz_range
+
+def create_grid_edges(xyz_range, res, border):
+    """Create the edges of the grid that will be used to compute the MRC."""
+    grid_edg = np.zeros((3, 2)).astype(float)
+    for i in range(3):
+        grid_edg[i, 0] = res[i] * xyz_range[i, 0] // res[i] - border * res[i]
+        grid_edg[i, 1] = res[i] * xyz_range[i, 1] // res[i] + border * res[i]
+    return grid_edg
+
+def create_xyz_grid(grid_edg, res):
+    """Create the 3D grid of points that will be used to compute the MRC."""
+    x_grid = np.arange(grid_edg[0, 0], grid_edg[0, 1], res[0])
+    y_grid = np.arange(grid_edg[1, 0], grid_edg[1, 1], res[1])
+    z_grid = np.arange(grid_edg[2, 0], grid_edg[2, 1], res[2])
+    xyz_grid = list()
+    for x in x_grid:
+        for y in y_grid:
+            for z in z_grid:
+                xyz_grid.append(np.array([x, y, z]))
+    xyz_grid = np.array(xyz_grid)
+    shape = (len(x_grid), len(y_grid), len(z_grid))
+    return xyz_grid, shape
+
+def write_mrc(filename, data, origin=(0, 0, 0), voxel_size=(1, 1, 1)):
+    """Write a MRC file from a numpy array.
+    
+    Args:
+        filename (str): name of the file to be written.
+        data (np.array(shape=(n_x_grid, n_y_grid, n_z_grid))): grid of values (0 or 1)
+    """
+    # Swap the axes to match the MRC format
+    data = np.swapaxes(data, 0, 2)
+    # Ensure the data is in int8 format as we'll use MODE 0
+    data = data.astype(np.int8)
+    # Create a new MRC file and save the data
+    with mrcfile.new(filename, overwrite=True) as mrc:
+        mrc.set_data(data)
+        mrc.nstart = origin
+        mrc.voxel_size = voxel_size
