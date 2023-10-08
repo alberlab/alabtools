@@ -30,7 +30,8 @@ install_requires = [
     'alphashape>=1.3.1',
     'trimesh>=3.21.5',
     'cooler>=0.8.11',
-    'mrcfile>=1.4.3'
+    'mrcfile>=1.4.3',
+    'pyBigWig>=0.3.22',
 ]
 tests_require = [
     'mock'
