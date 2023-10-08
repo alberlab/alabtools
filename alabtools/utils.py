@@ -1414,15 +1414,11 @@ def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
     # Check that index is haploid
     assert len(idx.get_haploid()) == len(idx), "The input index is not haploid."
     # Get the signal from the BigWig file
-    x = np.array([]).astype(float)
-    for chrom in genome.chroms:
-        nbins_chrom = np.sum(idx.chromstr == chrom)
-        x_chrom = bw.stats(chrom, 0, bw.chroms()[chrom], type='mean', nBins=nbins_chrom)
-        x_chrom = np.array(x_chrom).astype(float)
-        x_chrom[x_chrom is None] = np.nan
-        x = np.concatenate((x, x_chrom))
-    # Make sure that the signal has the same length as the index
-    assert len(x) == len(idx), "The signal has a different length than the index ({} vs {}).".format(len(x), len(idx))
+    x = []
+    for c, s, e in zip(idx.chromstr, idx.start, idx.end):
+        x.append(bw.stats(c, s, e, type='mean'))
+    x = np.array(x).astype(float).flatten()
+    x[x is None] = np.nan
     # Add the signal to the index
     idx.add_custom_track('signal', x)
     return idx
