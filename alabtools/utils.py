@@ -39,6 +39,7 @@ import pandas as pd
 import scipy.sparse.linalg
 import copy
 from six import string_types
+import pyBigWig
 
 if sys.version_info > (3, 0):
     # python 3.x
@@ -1384,6 +1385,61 @@ def get_index_from_bed(
         usecols=None,
 ):
     return Index(file, genome, usecols)
+
+
+def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
+    # Check that bw is a valid BigWig file
+    assert bw.isBigWig(), "The input file is not a valid BigWig file."
+    # Get the genome (either a string or a Genome object)
+    assert genome is None or isinstance(genome, (str, Genome)), "The input genome must be a either None, a string or a Genome object."
+    if isinstance(genome, str):
+        genome = Genome(genome, usechr=usechr)
+    elif genome is None:
+        genome = get_genome_from_bigwig(bw, usechr=usechr)
+    # Make sure that the genome is compatible with the BigWig file
+    # (bw.chroms() gives a dictionary with the chromosome names and respective lengths)
+    for chrom, length in zip(genome.chroms, genome.lengths):
+        assert chrom in bw.chroms(), "{} is not present in the BigWig file.".format(chrom)
+        assert length == bw.chroms()[chrom],\
+            "The length of {} in the genome ({}) does not match the length in the BigWig file ({}).".format(chrom, genome.lengths[chrom], bw.chroms()[chrom])
+    # Get the Index object
+    assert isinstance(res, (int, Index)), "The input resolution must be an integer number or an Index object."
+    if isinstance(res, Index):
+        idx = res
+        res = idx.resolution()
+    elif isinstance(res, int):
+        idx = genome.bininfo_optimized(res)  # create an index from the genome at the given resolution
+    # Make sure that the index is compatible with the genome
+    assert idx.genome == genome, "Index and genome are not compatible."
+    # Check that index is haploid
+    assert len(idx.get_haploid()) == len(idx), "The input index is not haploid."
+    # Get the signal from the BigWig file
+    x = np.array([]).astype(float)
+    for chrom in genome.chroms:
+        nbins_chrom = np.sum(idx.chromstr == chrom)
+        x_chrom = bw.stats(chrom, 0, bw.chroms()[chrom], type='mean', nBins=nbins_chrom)
+        x_chrom = np.array(x_chrom).astype(float)
+        x_chrom[x_chrom is None] = np.nan
+        x = np.concatenate((x, x_chrom))
+    # Make sure that the signal has the same length as the index
+    assert len(x) == len(idx), "The signal has a different length than the index ({} vs {}).".format(len(x), len(idx))
+    # Add the signal to the index
+    idx.add_custom_track('signal', x)
+    return idx
+
+
+def get_genome_from_bigwig(bw, usechr):
+    # Check that bw is a valid BigWig file
+    assert bw.isBigWig(), "The input file is not a valid BigWig file."
+    # Get chromosome names and lengths
+    chroms = list(bw.chroms().keys())
+    lengths = list(bw.chroms().values())
+    # Create a Genome object
+    genome = Genome(assembly='custom', chroms=chroms, lengths=lengths, usechr=usechr)
+    # Sort the genome
+    if not genome.check_sorted():
+        genome.sort()
+    return genome
 
 
 _ftpi = 4. / 3. * np.pi
