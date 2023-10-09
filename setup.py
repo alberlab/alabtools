@@ -30,7 +30,8 @@ install_requires = [
     'alphashape>=1.3.1',
     'trimesh>=3.21.5',
     'cooler>=0.8.11',
-    'mrcfile>=1.4.3'
+    'mrcfile>=1.4.3',
+    'pyBigWig>=0.3.22',
 ]
 tests_require = [
     'mock'
@@ -75,7 +76,7 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.1.10',
+    version='1.1.11',
     author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',

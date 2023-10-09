@@ -39,6 +39,7 @@ import pandas as pd
 import scipy.sparse.linalg
 import copy
 from six import string_types
+import pyBigWig
 
 if sys.version_info > (3, 0):
     # python 3.x
@@ -263,9 +264,9 @@ class Genome(object):
         """
         
         order = self.get_chromosome_sorting()
-        self.chroms = [chrom for (_, chrom) in sorted(zip(order, self.chroms))]
-        self.lengths = [length for (_, length) in sorted(zip(order, self.lengths))]
-        self.origins = [origin for (_, origin) in sorted(zip(order, self.origins))]
+        self.chroms = np.array([chrom for (_, chrom) in sorted(zip(order, self.chroms))]).astype(CHROMS_DTYPE)
+        self.lengths = np.array([length for (_, length) in sorted(zip(order, self.lengths))]).astype(LENGTHS_DTYPE)
+        self.origins = np.array([origin for (_, origin) in sorted(zip(order, self.origins))]).astype(ORIGINS_DTYPE)
 
     def bininfo(self, resolution):
 
@@ -1204,7 +1205,7 @@ class Index(object):
         h5f.flush()
 
     def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";",
-                 cut_chrom_ends=False):
+                 cut_chrom_ends=False, nan_value=np.nan):
 
         if isinstance(file, str):
             file = open(file, 'w')
@@ -1228,17 +1229,22 @@ class Index(object):
             if cut_chrom_ends:
                 save_end = self.end[i]
                 if self.end[i] > self.genome.lengths[self.chrom[i]]:
-                    self.end[i] = self.genome.lengths[self.chrom[i]]
-            file.write(
-                sep.join([
-                    str(self.__getattribute__(col)[i]) if col != 'chrom' else self.chromstr[i] for col in include
-                ]) + '\n'
-            )
+                    self.end[i] = self.genome.lengths[self.chrom[i]]   
+            output_values = []
+            for col in include:
+                if col != 'chrom':
+                    value = self.__getattribute__(col)[i]
+                    if np.isnan(value):
+                        value = nan_value
+                    output_values.append(str(value))
+                else:
+                    output_values.append(self.chromstr[i])
+            file.write(sep.join(output_values) + '\n')
             if cut_chrom_ends:
                 self.end[i] = save_end
 
-    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True, cut_chrom_ends=False):
-        self.dump_csv(file, include, exclude, header, sep='\t', cut_chrom_ends=cut_chrom_ends)
+    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True, cut_chrom_ends=False, nan_value=np.nan):
+        self.dump_csv(file, include, exclude, header, sep='\t', cut_chrom_ends=cut_chrom_ends, nan_value=nan_value)
 
     def loc(self, chrom, start, end=None, copy=None):
         '''
@@ -1384,6 +1390,72 @@ def get_index_from_bed(
         usecols=None,
 ):
     return Index(file, genome, usecols)
+
+
+def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
+    """ Create an Index object from a BigWig file.
+    Args:
+        bw (pyBigWig.BigWigFile): BigWig file.
+        genome (str or Genome or None): genome assembly or Genome object. If None, the genome is inferred from the BigWig file.
+        res (int or Index): resolution of the index, either as an integer number or as an Index object.
+        usechr (list): list of chromosomes to use.
+    Returns:
+        idx (Index): Index object with the signal from the BigWig file added as a custom track at the given resolution. """
+    # Check that bw is a valid BigWig file
+    assert bw.isBigWig(), "The input file is not a valid BigWig file."
+    # Get the genome (either a string or a Genome object)
+    assert genome is None or isinstance(genome, (str, Genome)), "The input genome must be a either None, a string or a Genome object."
+    if isinstance(genome, str):
+        genome = Genome(genome, usechr=usechr)
+    elif genome is None:
+        genome = get_genome_from_bigwig(bw, usechr=usechr)
+    # Make sure that the genome is compatible with the BigWig file
+    # (bw.chroms() gives a dictionary with the chromosome names and respective lengths)
+    for chrom, length in zip(genome.chroms, genome.lengths):
+        assert chrom in bw.chroms(), "{} is not present in the BigWig file.".format(chrom)
+        assert length == bw.chroms()[chrom],\
+            "The length of {} in the genome ({}) does not match the length in the BigWig file ({}).".format(chrom, genome.lengths[chrom], bw.chroms()[chrom])
+    # Get the Index object
+    assert isinstance(res, (int, Index)), "The input resolution must be an integer number or an Index object."
+    if isinstance(res, Index):
+        idx = res
+        res = idx.resolution()
+    elif isinstance(res, int):
+        idx = genome.bininfo_optimized(res)  # create an index from the genome at the given resolution
+    # Make sure that the index is compatible with the genome
+    assert idx.genome == genome, "Index and genome are not compatible."
+    # Check that index is haploid
+    assert len(idx.get_haploid()) == len(idx), "The input index is not haploid."
+    # Get the signal from the BigWig file
+    x = []
+    for c, s, e in zip(idx.chromstr, idx.start, idx.end):
+        x.append(bw.stats(c, s, e, type='mean'))
+    x = np.array(x).astype(float).flatten()
+    x[x is None] = np.nan
+    # Add the signal to the index
+    idx.add_custom_track('signal', x)
+    return idx
+
+
+def get_genome_from_bigwig(bw, usechr):
+    """ Create a Genome object from a BigWig file.
+    The assembly string is set to 'custom', since in general BigWig files don't have an assembly string.
+    Args:
+        bw (pyBigWig.BigWigFile): BigWig file.
+        usechr (list): list of chromosomes to use.
+    Returns:
+        genome (Genome): Genome object with the chromosomes and lengths from the BigWig file."""
+    # Check that bw is a valid BigWig file
+    assert bw.isBigWig(), "The input file is not a valid BigWig file."
+    # Get chromosome names and lengths
+    chroms = list(bw.chroms().keys())
+    lengths = list(bw.chroms().values())
+    # Create a Genome object
+    genome = Genome(assembly='custom', chroms=chroms, lengths=lengths, usechr=usechr)
+    # Sort the genome
+    if not genome.check_sorted():
+        genome.sort()
+    return genome
 
 
 _ftpi = 4. / 3. * np.pi

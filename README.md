@@ -39,7 +39,7 @@ pip install --upgrade jupyter-core
 
 Then perform the following installations:
 ```bash
-pip install cython matplotlib scikit-learn cooler alphashape mrcfile
+pip install cython matplotlib scikit-learn cooler alphashape mrcfile pyBigWig
 ```
 
 Finally, install the alabtools package:
