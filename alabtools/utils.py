@@ -264,9 +264,9 @@ class Genome(object):
         """
         
         order = self.get_chromosome_sorting()
-        self.chroms = [chrom for (_, chrom) in sorted(zip(order, self.chroms))]
-        self.lengths = [length for (_, length) in sorted(zip(order, self.lengths))]
-        self.origins = [origin for (_, origin) in sorted(zip(order, self.origins))]
+        self.chroms = np.array([chrom for (_, chrom) in sorted(zip(order, self.chroms))]).astype(CHROMS_DTYPE)
+        self.lengths = np.array([length for (_, length) in sorted(zip(order, self.lengths))]).astype(LENGTHS_DTYPE)
+        self.origins = np.array([origin for (_, origin) in sorted(zip(order, self.origins))]).astype(ORIGINS_DTYPE)
 
     def bininfo(self, resolution):
 
