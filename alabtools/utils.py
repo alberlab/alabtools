@@ -1205,7 +1205,7 @@ class Index(object):
         h5f.flush()
 
     def dump_csv(self, file=sys.stdout, include=None, exclude=None, header=True, header_style='comment', sep=";",
-                 cut_chrom_ends=False):
+                 cut_chrom_ends=False, nan_value=np.nan):
 
         if isinstance(file, str):
             file = open(file, 'w')
@@ -1229,17 +1229,22 @@ class Index(object):
             if cut_chrom_ends:
                 save_end = self.end[i]
                 if self.end[i] > self.genome.lengths[self.chrom[i]]:
-                    self.end[i] = self.genome.lengths[self.chrom[i]]
-            file.write(
-                sep.join([
-                    str(self.__getattribute__(col)[i]) if col != 'chrom' else self.chromstr[i] for col in include
-                ]) + '\n'
-            )
+                    self.end[i] = self.genome.lengths[self.chrom[i]]   
+            output_values = []
+            for col in include:
+                if col != 'chrom':
+                    value = self.__getattribute__(col)[i]
+                    if np.isnan(value):
+                        value = nan_value
+                    output_values.append(str(value))
+                else:
+                    output_values.append(self.chromstr[i])
+            file.write(sep.join(output_values) + '\n')
             if cut_chrom_ends:
                 self.end[i] = save_end
 
-    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True, cut_chrom_ends=False):
-        self.dump_csv(file, include, exclude, header, sep='\t', cut_chrom_ends=cut_chrom_ends)
+    def dump_bed(self, file=sys.stdout, include=None, exclude=None, header=True, cut_chrom_ends=False, nan_value=np.nan):
+        self.dump_csv(file, include, exclude, header, sep='\t', cut_chrom_ends=cut_chrom_ends, nan_value=nan_value)
 
     def loc(self, chrom, start, end=None, copy=None):
         '''
