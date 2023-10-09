@@ -1393,6 +1393,14 @@ def get_index_from_bed(
 
 
 def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
+    """ Create an Index object from a BigWig file.
+    Args:
+        bw (pyBigWig.BigWigFile): BigWig file.
+        genome (str or Genome or None): genome assembly or Genome object. If None, the genome is inferred from the BigWig file.
+        res (int or Index): resolution of the index, either as an integer number or as an Index object.
+        usechr (list): list of chromosomes to use.
+    Returns:
+        idx (Index): Index object with the signal from the BigWig file added as a custom track at the given resolution. """
     # Check that bw is a valid BigWig file
     assert bw.isBigWig(), "The input file is not a valid BigWig file."
     # Get the genome (either a string or a Genome object)
@@ -1430,6 +1438,13 @@ def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
 
 
 def get_genome_from_bigwig(bw, usechr):
+    """ Create a Genome object from a BigWig file.
+    The assembly string is set to 'custom', since in general BigWig files don't have an assembly string.
+    Args:
+        bw (pyBigWig.BigWigFile): BigWig file.
+        usechr (list): list of chromosomes to use.
+    Returns:
+        genome (Genome): Genome object with the chromosomes and lengths from the BigWig file."""
     # Check that bw is a valid BigWig file
     assert bw.isBigWig(), "The input file is not a valid BigWig file."
     # Get chromosome names and lengths
