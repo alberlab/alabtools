@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from .api import Contactmatrix
 from .utils import isiterable
+import os
 
 
 def make_colormap(seq,cmapname='CustomMap'):
@@ -345,4 +346,153 @@ def plot_mesh(mesh, points=None, **kwargs):
     if 'title' in kwargs:
         ax.set_title(kwargs['title'])
     return fig, ax
+
+def write_pdb(filename, data):
+    """Create a PDB file from a data dictionary.
+
+    Args:
+        filename (str): Name of the file to create.
+        data (dict): Dictionary with the data of the beads, in the following format:
+                     data['x']: x coordinates of the beads, list of floats with 8 digits and 3 decimal places. required
+                     data['y']: y coordinates of the beads, list of floats with 8 digits and 3 decimal places. required
+                     data['z']: z coordinates of the beads, list of floats with 8 digits and 3 decimal places. required
+                     data['atom_name']: Name of the beads. list of strings of length 4. optional
+                     data['alternate_location_indicator']: Alternate location indicator. list of strings of length 1. optional
+                     data['residue_name']: Name of the residue (suggested: chromosome). list of strings of length 3. optional
+                     data['chain_id']: Chain identifier (suggested: homologues). list of strings of length 1. optional
+                     data['residue_number']: Residue sequence number. list of integers with 4 digits. optional
+                     data['insertion_code']: Code for insertion of residues. list of strings of length 1. optional
+                     data['occupancy']: Occupancy. list of floats with 6 digits and 2 decimal places. optional
+                     data['beta']: Temperature/Beta. list of floats with 6 digits and 2 decimal places. optional
+                     data['element_symbol']: Element symbol. list of strings of length 2. optional
+                     data['charge']: Charge. list of strings of length 2. optional
+
+    Returns:
+        pdb (file): PDB file.
+    """
+    assert isinstance(filename, str), 'Filename must be a string'
+    assert os.path.dirname(filename), 'Directory {} does not exist'.format(os.path.dirname(filename))
+    pdb = open(filename, 'w')  # Create the file
+    
+    required_keys = ['x', 'y', 'z']
+    optional_keys = ['atom_name', 'alternate_location_indicator', 'residue_name', 'chain_id', 'residue_number', 'insertion_code', 'occupancy', 'beta', 'element_symbol', 'charge']
+    
+    assert isinstance(data, dict), 'Data must be a dictionary'
+    
+    for k in required_keys:
+        assert k in data, 'Data must contain the key {}'.format(k)
+    
+    npoints = len(data['x'])
+    for k in data:
+        assert k in required_keys + optional_keys, 'Data contains an invalid key: {}'.format(k)
+        assert len(data[k]) == npoints, 'Data key {} has the wrong length'.format(k)
+    
+    for i in range(npoints):
+        
+        x, y, z, atom_name, alternate_location_indicator, residue_name, chain_id, residue_number, insertion_code, occupancy, beta, element_symbol, charge = unpack_pdb(data, i)
+        
+        print('{:6s}{:5d} {:^4s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:2s}{:2s}'.format('ATOM',  # ATOM identifier
+                                                                                                                             i+1,  # Atom serial number (int, 5 digits)
+                                                                                                                             atom_name,
+                                                                                                                             alternate_location_indicator,
+                                                                                                                             residue_name,
+                                                                                                                             chain_id,
+                                                                                                                             residue_number,
+                                                                                                                             insertion_code,
+                                                                                                                             x, y, z,
+                                                                                                                             occupancy,
+                                                                                                                             beta,
+                                                                                                                             element_symbol,
+                                                                                                                             charge),
+              file=pdb)
+    return pdb
+
+def unpack_pdb(data, i):
+    """Get the information of a bead for PDB writing.
+
+    Args:
+        data (dict): Dictionary with the data of the beads.
+        i (int): Index of the bead to get the information.
+
+    Returns:
+        x (float): X coordinate of the bead. Float with 8 digits and 3 decimal places.
+        y (float): Y coordinate of the bead. Float with 8 digits and 3 decimal places.
+        z (float): Z coordinate of the bead. Float with 8 digits and 3 decimal places.
+        atom_name (str): Name of the atom. String of length 4.
+        alternate_location_indicator (str): Alternate location indicator. String of length 1.
+        residue_name (str): Name of the residue. String of length 3.
+        chain_id (str): Chain identifier. String of length 1.
+        residue_number (int): Residue sequence number. Integer with 4 digits.
+        insertion_code (str): Code for insertion of residues. String of length 1.
+        occupancy (float): Occupancy. Float with 6 digits and 2 decimal places.
+        beta (float): Temperature/Beta. Float with 6 digits and 2 decimal places.
+        element_symbol (str): Element symbol. String of length 2.
+        charge (str): Charge. String of length 2.
+    """
+    
+    x, y, z = data['x'][i], data['y'][i], data['z'][i]
+    assert isinstance(x, float) and isinstance(y, float) and isinstance(z, float), 'Coordinates must be floats'
+    assert x < 1e8 and y < 1e8 and z < 1e8, 'Coordinates must have less than 8 digits above the decimal point'
+
+    if 'atom_name' in data:
+        atom_name = data['atom_name'][i]
+    else:
+        atom_name = '    '
+    assert isinstance(atom_name, str) and len(atom_name) <= 4, 'Atom {} name must be a string of length 4'.format(i)
+
+    if 'alternate_location_indicator' in data:
+        alternate_location_indicator = data['alternate_location_indicator'][i]
+    else:
+        alternate_location_indicator = ' '
+    assert isinstance(alternate_location_indicator, str) and len(alternate_location_indicator) <= 1, 'Alternate location indicator {} must be a string of length 1'.format(i)
+
+    if 'residue_name' in data:
+        residue_name = data['residue_name'][i]
+    else:
+        residue_name = '   '
+    assert isinstance(residue_name, str) and len(residue_name) <= 3, 'Residue name {} must be a string of length 3'.format(i)
+
+    if 'chain_id' in data:
+        chain_id = data['chain_id'][i]
+    else:
+        chain_id = ' '
+    assert isinstance(chain_id, str) and len(chain_id) <= 1, 'Chain ID {} must be a string of length 1'.format(i)
+
+    if 'residue_number' in data:
+        residue_number = data['residue_number'][i]
+    else:
+        residue_number = 0
+    assert isinstance(residue_number, int) and residue_number < 1e4, 'Residue number {} must be an integer with less than 4 digits'.format(i)
+
+    if 'insertion_code' in data:
+        insertion_code = data['insertion_code'][i]
+    else:
+        insertion_code = ' '
+    assert isinstance(insertion_code, str) and len(insertion_code) <= 1, 'Insertion code {} must be a string of length 1'.format(i)
+
+    if 'occupancy' in data:
+        occupancy = data['occupancy'][i]
+    else:
+        occupancy = 0.
+    assert isinstance(occupancy, float) and occupancy < 1e6, 'Occupancy {} must be a float with less than 6 digits'.format(i)
+
+    if 'beta' in data:
+        beta = data['beta'][i]
+    else:
+        beta = 0.
+    assert isinstance(beta, float) and beta < 1e6, 'Beta {} must be a float with less than 6 digits'.format(i)
+
+    if 'element_symbol' in data:
+        element_symbol = data['element_symbol'][i]
+    else:
+        element_symbol = '  '
+    assert isinstance(element_symbol, str) and len(element_symbol) <= 2, 'Element symbol {} must be a string of length 2'.format(i)
+
+    if 'charge' in data:
+        charge = data['charge'][i]
+    else:
+        charge = '  '
+    assert isinstance(charge, str) and len(charge) <= 2, 'Charge {} must be a string of length 2'.format(i)
+    
+    return x, y, z, atom_name, alternate_location_indicator, residue_name, chain_id, residue_number, insertion_code, occupancy, beta, element_symbol, charge
 
