@@ -224,10 +224,11 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index_new.get_custom_track('y'), y[chromstr != chrom])
     
     def test_get_index_from_set(self):
+        """Test get_index_from_set function."""
         
         # Generate domains
         res = 22
-        genome, chromstr, start, end, _, x, y = generate_domains(resolution=res)
+        genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
         # Create a domain set from chromstr, start, end
         domain_set = set()
         for c, s, e in zip(chromstr, start, end):

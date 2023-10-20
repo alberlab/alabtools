@@ -1273,7 +1273,7 @@ def chromstr_to_chromint(chromstr):
     
     Mitocondrial chrM is converted to 102, i.e. after X and Y.
     
-    Any special chromosomes (e.g. 'chr1_random') are converted to 103.
+    Special chromosomes (e.g. 'chr1_random') are converted to 103.
 
     Args:
         chromstr (np.array of CHROMS_DTYPE): array of chromosome strings
