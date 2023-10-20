@@ -1,7 +1,7 @@
 import unittest
 import random
 import numpy as np
-from alabtools.utils import Genome, Index, standardize_chromosomes
+from alabtools.utils import *
 
 class TestUtils(unittest.TestCase):
     """Test functions in utils.py
@@ -137,12 +137,12 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index.start, bininfo.start)
         np.testing.assert_array_equal(index.end, bininfo.end)
     
-    def test_get_chromint(self):
-        """Test initialization of Genome from binary chromosomes."""
+    def test_chromstr_to_chromint(self):
+        """Test chromstr_to_chromint function."""
         res = 22
         genome, chromstr, start, end, chromint, _, _ = generate_domains(resolution=res)
         index = Index(chrom=chromstr, start=start, end=end, genome=genome)
-        np.testing.assert_array_equal(index.get_chromint(), chromint)
+        np.testing.assert_array_equal(chromstr_to_chromint(index.chromstr), chromint)
     
     def test_get_index_hashmap(self):
         """Test get_index_hashmap method in Index."""
@@ -222,6 +222,27 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index_new.end, end[chromstr != chrom])
         np.testing.assert_array_equal(index_new.get_custom_track('x'), x[chromstr != chrom])
         np.testing.assert_array_equal(index_new.get_custom_track('y'), y[chromstr != chrom])
+    
+    def test_get_index_from_set(self):
+        """Test get_index_from_set function."""
+        
+        # Generate domains
+        res = 22
+        genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
+        # Create a domain set from chromstr, start, end
+        domain_set = set()
+        for c, s, e in zip(chromstr, start, end):
+            domain_set.add((c, s, e))
+        # Randomly shuffle the domain set
+        domain_set = list(domain_set)
+        random.shuffle(domain_set)
+        domain_set = set(domain_set)
+        # Create the index
+        index = get_index_from_set(domain_set, assembly=genome.assembly)
+        # Test the results
+        np.testing.assert_array_equal(index.chromstr, chromstr)
+        np.testing.assert_array_equal(index.start, start)
+        np.testing.assert_array_equal(index.end, end)
 
 
 def shuffle_in_place(arrays):

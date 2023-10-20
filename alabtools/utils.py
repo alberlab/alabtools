@@ -808,29 +808,6 @@ class Index(object):
         '''
         return pd.unique(self.chromstr)
     
-    def get_chromint(self):
-        """Returns the chromosomes in integer format.
-        """
-        # Sort the matrix
-        # convert the chromosome string to an integer (e.g. 'chr1' -> 1)
-        chromint = []
-        for c in self.chromstr:
-            c = c.split('chr')[1]  # remove the 'chr' part
-            if c.isdigit():  # if it's a number
-                c = int(c)
-            elif c == 'X':
-                c = 100  # make X after the autosomes
-            elif c == 'Y':
-                c = 101
-            elif c == 'M':
-                c = 102
-            else:
-                c = 103  # This is to deal with other chr labels (e.g. 'chr1_random')
-            c = int(c)
-            chromint.append(c)
-        chromint = np.array(chromint)
-        return chromint
-    
     def get_index_hashmap(self):
         """Creates a dictionary that maps a domain
         (chr, start, end) to its position in the index.
@@ -920,7 +897,7 @@ class Index(object):
         if not is_haploid:
             raise ValueError("The index is not haploid.")
         # Order by chromosome
-        chromint = self.get_chromint()
+        chromint = chromstr_to_chromint(self.chromstr)
         order = np.argsort(chromint)
         chromstr = self.chromstr[order]
         start = self.start[order]
@@ -1285,6 +1262,48 @@ class Index(object):
 
 # --------------------
 
+def chromstr_to_chromint(chromstr):
+    """Converts a chromosome string array to an integer array.
+    
+    Autosomes are converted to their number (e.g. 'chr1' -> 1).
+    
+    Sexual chromosomes X and Y are converted to 100 and 101, respectively.
+    This is because the number of autosomes changes between species, so
+    we want to make sure that X and Y are always after the autosomes.
+    
+    Mitocondrial chrM is converted to 102, i.e. after X and Y.
+    
+    Special chromosomes (e.g. 'chr1_random') are converted to 103.
+
+    Args:
+        chromstr (np.array of CHROMS_DTYPE): array of chromosome strings
+
+    Returns:
+        chromint (np.array of int): array of chromosome integers
+    """
+    
+    chromint = []
+    
+    for c in chromstr:
+        
+        c = c.split('chr')[1]  # remove the 'chr' part
+        if c.isdigit():  # if it's a number
+            c = int(c)
+        elif c == 'X':
+            c = 100  # make X after the autosomes
+        elif c == 'Y':
+            c = 101
+        elif c == 'M':
+            c = 102
+        else:
+            c = 103  # This is to deal with other chr labels (e.g. 'chr1_random')
+            
+        c = int(c)
+        chromint.append(c)
+        
+    chromint = np.array(chromint).astype(int)
+    
+    return chromint
 
 def loadstream(filename):
     """
@@ -1382,6 +1401,86 @@ def natural_sort(l):
     convert = lambda text: int(text) if text.isdigit() else text.lower()
     alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
     return sorted(l, key=alphanum_key)
+
+
+def get_index_from_set(domain_set, assembly):
+    """Get an Index object from a set of unique, non-orderd domains.
+
+    Args:
+        domain_set (list, set, array): set of unordered unique domains,
+                where each domain is a tuple (chromosome, start, end).
+        assembly (str or Genome): genome assembly or Genome object.
+
+    Returns:
+        Index: Index object with the domains in the input set.
+    """
+
+    # Get the domains as sorted numpy arrays
+    chromstr, start, end = domain_set_to_sorted_numpy(domain_set)
+    
+    # If assembly is a string, get the Genome object
+    if isinstance(assembly, str):
+        try:
+            genome = Genome(assembly, usechr=np.unique(chromstr))
+        except:
+            raise FileNotFoundError("The input genome assembly is not valid.")
+    elif isinstance(assembly, Genome):
+        genome = assembly
+    else:
+        raise TypeError("The input assembly must be a string or a Genome object.")
+    
+    # Identify lengths and origins of the chromosomes
+    origins, lengths = [], []
+    for chrom in genome.chroms:
+        chrom_start = np.min(start[chromstr == chrom])
+        chrom_end = np.max(end[chromstr == chrom])
+        chrom_length = chrom_end - chrom_start
+        origins.append(chrom_start)
+        lengths.append(chrom_length)
+    genome = Genome(genome, origins=origins, lengths=lengths)
+            
+    # Create the Index object
+    index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+    
+    return index
+
+def domain_set_to_sorted_numpy(domains_set):
+    """Convert a set of domains to a sorted numpy array.
+    
+    The array is sorted naturally: by chromosome number and, within each chromosome, by start position.
+
+    Args:
+        domains_set (set, list or np.array): set of unordered unique domains,
+                        where each domain is a tuple (chromosome, start, end).
+
+    Returns:
+        chromstr (np.array of CHROMS_DTYPE): array of chromosome strings
+        start (np.array of START_DTYPE): array of start positions
+        end (np.array of END_DTYPE): array of end positions
+    """
+    
+    # Convert the domains from a set to a numpy array
+    domains = np.array(list(domains_set))
+    
+    # Sort by chromosome
+    chromstr, start, end = domains.T
+    chromint = chromstr_to_chromint(chromstr)  # Convert the chromosome strings to integers
+    domains = domains[np.argsort(chromint)]  # Sort the domains by chromint
+    
+    # Sort by start position within each chromosome
+    chromstr, start, end = domains.T
+    start = start.astype(int)  # cast to int to avoid problems with sorting
+    for c in np.unique(chromstr):
+        idx = chromstr == c
+        domains[idx] = domains[idx][np.argsort(start[idx])]
+    
+    # convert the domains to numpy arrays
+    chromstr, start, end = domains.T
+    chromstr = chromstr.astype(CHROMS_DTYPE)
+    start = start.astype(START_DTYPE)
+    end = end.astype(END_DTYPE)
+    
+    return chromstr, start, end
 
 
 def get_index_from_bed(
