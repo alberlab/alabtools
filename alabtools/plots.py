@@ -432,7 +432,7 @@ def unpack_pdb(data, i):
     
     x, y, z = data['x'][i], data['y'][i], data['z'][i]
     assert isinstance(x, float) and isinstance(y, float) and isinstance(z, float), 'Coordinates must be floats'
-    assert x < 1e6 and y < 1e6 and z < 1e6, 'Coordinates must have 6 or less digits above the decimal point'
+    assert x < 1e5 and y < 1e5 and z < 1e5, 'Coordinates must have 5 or less digits above the decimal point'
 
     if 'atom_name' in data:
         atom_name = data['atom_name'][i]
