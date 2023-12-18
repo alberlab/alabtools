@@ -415,24 +415,24 @@ def unpack_pdb(data, i):
         i (int): Index of the bead to get the information.
 
     Returns:
-        x (float): X coordinate of the bead. Float with 8 digits and 3 decimal places.
-        y (float): Y coordinate of the bead. Float with 8 digits and 3 decimal places.
-        z (float): Z coordinate of the bead. Float with 8 digits and 3 decimal places.
+        x (float): X coordinate of the bead. Float with 8 digits of which 3 decimal places.
+        y (float): Y coordinate of the bead. Float with 8 digits of which 3 decimal places.
+        z (float): Z coordinate of the bead. Float with 8 digits of which 3 decimal places.
         atom_name (str): Name of the atom. String of length 4.
         alternate_location_indicator (str): Alternate location indicator. String of length 1.
         residue_name (str): Name of the residue. String of length 3.
         chain_id (str): Chain identifier. String of length 1.
         residue_number (int): Residue sequence number. Integer with 4 digits.
         insertion_code (str): Code for insertion of residues. String of length 1.
-        occupancy (float): Occupancy. Float with 6 digits and 2 decimal places.
-        beta (float): Temperature/Beta. Float with 6 digits and 2 decimal places.
+        occupancy (float): Occupancy. Float with 6 digits of which 2 decimal places.
+        beta (float): Temperature/Beta. Float with 6 digits of which 2 decimal places.
         element_symbol (str): Element symbol. String of length 2.
         charge (str): Charge. String of length 2.
     """
     
     x, y, z = data['x'][i], data['y'][i], data['z'][i]
     assert isinstance(x, float) and isinstance(y, float) and isinstance(z, float), 'Coordinates must be floats'
-    assert x < 1e8 and y < 1e8 and z < 1e8, 'Coordinates must have less than 8 digits above the decimal point'
+    assert x < 1e6 and y < 1e6 and z < 1e6, 'Coordinates must have 6 or less digits above the decimal point'
 
     if 'atom_name' in data:
         atom_name = data['atom_name'][i]
@@ -474,13 +474,13 @@ def unpack_pdb(data, i):
         occupancy = data['occupancy'][i]
     else:
         occupancy = 0.
-    assert isinstance(occupancy, float) and occupancy < 1e6, 'Occupancy {} must be a float with less than 6 digits'.format(i)
+    assert isinstance(occupancy, float) and occupancy < 1e4, 'Occupancy {} must be a float with 4 or less digits above the decimal point'.format(i)
 
     if 'beta' in data:
         beta = data['beta'][i]
     else:
         beta = 0.
-    assert isinstance(beta, float) and beta < 1e6, 'Beta {} must be a float with less than 6 digits'.format(i)
+    assert isinstance(beta, float) and beta < 1e4, 'Beta {} must be a float with 6 or less digits above the decimal point'.format(i)
 
     if 'element_symbol' in data:
         element_symbol = data['element_symbol'][i]
