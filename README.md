@@ -10,9 +10,9 @@ ATTENTION: This package works only on Linux systems. It has been tested on CentO
 
 Make sure you have conda installed (https://docs.conda.io/en/latest/miniconda.html) and that you have added the conda-forge channel (https://conda-forge.org/). The conda version used for building the package is 22.9.0.
 
-Create a conda environment with a Python 3 version.
+Create a conda environment with a Python 3.7 version. We recommend the 3.7.3.
 ```bash
-conda create -n alab python=3
+conda create -n alab python=3.7.3
 conda activate alab
 ```
 
@@ -24,6 +24,7 @@ or, if it doesn't work:
 ```bash
 conda install -c conda-forge cgal=4.14
 ```
+ATTENTION: cgal 4.14 requires a version of Python less than 3.8. Newer versions of cgal lead to compile errors, as the syntax has changed.
 
 Then, install the following packages with conda:
 ```bash
