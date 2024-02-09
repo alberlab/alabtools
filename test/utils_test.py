@@ -256,18 +256,15 @@ class TestIndex(unittest.TestCase):
         y = np.random.rand(len(chromstr))
         bed = np.column_stack([chromstr, start, end, x, y])
         np.savetxt('test.bed', bed, fmt='%s', delimiter='\t', header='chrom\tstart\tend\tx\ty')
-        
         # Create the index
         genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr7', 'chrX'))
         index = get_index_from_bed('./test.bed', genome)
-        
         # Test the results
         np.testing.assert_array_equal(index.chromstr, chromstr)
         np.testing.assert_array_equal(index.start, start)
         np.testing.assert_array_equal(index.end, end)
         np.testing.assert_array_almost_equal(index.track0, x)
         np.testing.assert_array_almost_equal(index.track1, y)
-        
         # Delete the file
         os.remove('test.bed')
 
