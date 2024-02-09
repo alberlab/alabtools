@@ -1574,8 +1574,11 @@ def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
     # Get the Index object
     assert isinstance(res, (int, Index)), "The input resolution must be an integer number or an Index object."
     if isinstance(res, Index):
-        idx = res
+        idx = copy.deepcopy(res)
         res = idx.resolution()
+        # Remove custom tracks from the output index
+        for k in idx.custom_tracks:
+            idx.remove_custom_track(k)
     elif isinstance(res, int):
         idx = genome.bininfo_optimized(res)  # create an index from the genome at the given resolution
     # Make sure that the index is compatible with the genome
@@ -1589,7 +1592,7 @@ def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
     x = np.array(x).astype(float).flatten()
     x[x is None] = np.nan
     # Add the signal to the index
-    idx.add_custom_track('signal', x)
+    idx.add_custom_track('track0', x)
     return idx
 
 
