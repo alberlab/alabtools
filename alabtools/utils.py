@@ -1483,11 +1483,14 @@ def domain_set_to_sorted_numpy(domains_set):
     return chromstr, start, end
 
 
-def get_index_from_bed(file: str, genome: Genome, usecols: np.array = None) -> Index:
+def get_index_from_bed(file: str, assembly: str = None, usechr: list = None, genome: Genome = None, usecols: np.array = None) -> Index:
     """ Create an Index object from a BED file.
+    Either the pair assembly/usechr or the genome object must be provided.
     Args:
         file (str): path to the BED file.
-        genome (Genome): genome object.
+        assembly (str, optional): genome assembly. Default: None.
+        usechr (list, optional): list of chromosomes to use. Default: None.
+        genome (Genome, optional): Genome object. Default: None.
         usecols (np.array, optional): columns to use from the BED file. Default: None.
     Returns:
         Index: index object derived from the BED file. Custom tracks are added for each column in the BED file.
@@ -1503,6 +1506,11 @@ def get_index_from_bed(file: str, genome: Genome, usecols: np.array = None) -> I
             raise ValueError("The input usecols is not valid: must contain at least 3 elements to get the chromosome, start and end columns.")
         if usecols[0] != 0 or usecols[1] != 1 or usecols[2] != 2:
             raise ValueError("The input usecols is not valid: must start with [0, 1, 2] to get the chromosome, start and end columns.")
+    # Generate the genome object if not provided
+    if genome is None:
+        if assembly is None or usechr is None:
+            raise ValueError("Either the pair assembly/usechr or the genome object must be provided.")
+        genome = Genome(assembly, usechr=usechr)
     # Read the BED file with numpy
     bed = np.genfromtxt(file, usecols=usecols, dtype=str)
     # Unpack the chromosome, start and end columns

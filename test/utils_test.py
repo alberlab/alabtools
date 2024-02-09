@@ -256,15 +256,16 @@ class TestIndex(unittest.TestCase):
         y = np.random.rand(len(chromstr))
         bed = np.column_stack([chromstr, start, end, x, y])
         np.savetxt('test.bed', bed, fmt='%s', delimiter='\t', header='chrom\tstart\tend\tx\ty')
-        # Create the index
-        genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr7', 'chrX'))
-        index = get_index_from_bed('./test.bed', genome)
+        # Create the index: I add 'chr9' (not present in the BED file) to check if it raises an error
+        # I also don't use 'chrX' to check if it is correctly ignored
+        genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr7', 'chr9'))
+        index = get_index_from_bed('./test.bed', genome=genome)
         # Test the results
-        np.testing.assert_array_equal(index.chromstr, chromstr)
-        np.testing.assert_array_equal(index.start, start)
-        np.testing.assert_array_equal(index.end, end)
-        np.testing.assert_array_almost_equal(index.track0, x)
-        np.testing.assert_array_almost_equal(index.track1, y)
+        np.testing.assert_array_equal(index.chromstr, chromstr[chromstr != 'chrX'])
+        np.testing.assert_array_equal(index.start, start[chromstr != 'chrX'])
+        np.testing.assert_array_equal(index.end, end[chromstr != 'chrX'])
+        np.testing.assert_array_almost_equal(index.track0, x[chromstr != 'chrX'])
+        np.testing.assert_array_almost_equal(index.track1, y[chromstr != 'chrX'])
         # Delete the file
         os.remove('test.bed')
 
