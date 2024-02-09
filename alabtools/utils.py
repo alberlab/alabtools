@@ -945,6 +945,9 @@ class Index(object):
         if isinstance(out_res, Index):
             out_idx = copy.deepcopy(out_res)
             out_res = out_idx.resolution()
+            # Remove custom tracks from the output index
+            for k in out_idx.custom_tracks:
+                out_idx.remove_custom_track(k)
         elif isinstance(out_res, int):
             out_idx = self.genome.bininfo_optimized(out_res)  # create an out index
         else:
