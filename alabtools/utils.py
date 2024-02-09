@@ -1533,16 +1533,20 @@ def get_index_from_bed(file: str, genome: Genome, usecols: np.array = None) -> I
     return index
 
 
-def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
+def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
     """ Create an Index object from a BigWig file.
     Args:
-        bw (pyBigWig.BigWigFile): BigWig file.
+        file (str): path to the BigWig file.
         genome (str or Genome or None): genome assembly or Genome object. If None, the genome is inferred from the BigWig file.
         res (int or Index): resolution of the index, either as an integer number or as an Index object.
         usechr (list): list of chromosomes to use.
     Returns:
         idx (Index): Index object with the signal from the BigWig file added as a custom track at the given resolution. """
-    # Check that bw is a valid BigWig file
+    # Check that the input file is valid
+    assert os.path.isfile(file), "The input file does not exist."
+    assert file.endswith('.bw') or file.endswith('.bigwig'), "The input file is not a valid BigWig file: extension must be .bw or .bigwig."
+    # Open the BigWig file and check it is valid
+    bw = pyBigWig.open(file)
     assert bw.isBigWig(), "The input file is not a valid BigWig file."
     # Get the genome (either a string or a Genome object)
     assert genome is None or isinstance(genome, (str, Genome)), "The input genome must be a either None, a string or a Genome object."
