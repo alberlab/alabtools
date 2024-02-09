@@ -945,6 +945,9 @@ class Index(object):
         if isinstance(out_res, Index):
             out_idx = copy.deepcopy(out_res)
             out_res = out_idx.resolution()
+            # Remove custom tracks from the output index
+            for k in out_idx.custom_tracks:
+                out_idx.remove_custom_track(k)
         elif isinstance(out_res, int):
             out_idx = self.genome.bininfo_optimized(out_res)  # create an out index
         else:
@@ -1483,24 +1486,78 @@ def domain_set_to_sorted_numpy(domains_set):
     return chromstr, start, end
 
 
-def get_index_from_bed(
-        file,
-        genome=None,
-        usecols=None,
-):
-    return Index(file, genome, usecols)
+def get_index_from_bed(file: str, assembly: str = None, usechr: list = None, genome: Genome = None, usecols: np.array = None) -> Index:
+    """ Create an Index object from a BED file.
+    Either the pair assembly/usechr or the genome object must be provided.
+    Args:
+        file (str): path to the BED file.
+        assembly (str, optional): genome assembly. Default: None.
+        usechr (list, optional): list of chromosomes to use. Default: None.
+        genome (Genome, optional): Genome object. Default: None.
+        usecols (np.array, optional): columns to use from the BED file. Default: None.
+    Returns:
+        Index: index object derived from the BED file. Custom tracks are added for each column in the BED file.
+    """
+    # Check that the input file is valid
+    if not os.path.isfile(file):
+        raise FileNotFoundError("The input file does not exist.")
+    if not file.endswith('.bed') or file.endswith('.bedgraph'):
+        raise ValueError("The input file is not a valid BED file: extension must be .bed or .bedgraph.")
+    # Check that usecols is valid if provided
+    if usecols is not None:
+        if len(usecols) < 3:
+            raise ValueError("The input usecols is not valid: must contain at least 3 elements to get the chromosome, start and end columns.")
+        if usecols[0] != 0 or usecols[1] != 1 or usecols[2] != 2:
+            raise ValueError("The input usecols is not valid: must start with [0, 1, 2] to get the chromosome, start and end columns.")
+    # Generate the genome object if not provided
+    if genome is None:
+        if assembly is None or usechr is None:
+            raise ValueError("Either the pair assembly/usechr or the genome object must be provided.")
+        genome = Genome(assembly, usechr=usechr)
+    # Read the BED file with numpy
+    bed = np.genfromtxt(file, usecols=usecols, dtype=str)
+    # Unpack the chromosome, start and end columns
+    chromstr = bed[:, 0].astype(CHROMS_DTYPE)
+    start = bed[:, 1].astype(START_DTYPE)
+    end = bed[:, 2].astype(END_DTYPE)
+    # Subset the data to the chromosomes in the genome
+    mask = np.isin(chromstr, genome.chroms)
+    chromstr = chromstr[mask]
+    start = start[mask]
+    end = end[mask]
+    # Create the Index object
+    index = Index(chromstr, start, end, genome=genome)
+    # Add custom tracks from the remaining columns
+    for col in range(3, bed.shape[1]):
+        # Gett the column and subset it
+        x = bed[mask, col]
+        # Try casting to float, otherwise to int, otherwise to string
+        try:
+            x = x.astype(COORD_DTYPE)
+        except:
+            try:
+                x = x.astype(START_DTYPE)
+            except:
+                x = x.astype(CHROMS_DTYPE)
+        # Add the custom track to the index
+        index.add_custom_track('track{}'.format(col-3), x)
+    return index
 
 
-def get_index_from_bigwig(bw, genome, res, usechr=('#', 'X', 'Y')):
+def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
     """ Create an Index object from a BigWig file.
     Args:
-        bw (pyBigWig.BigWigFile): BigWig file.
+        file (str): path to the BigWig file.
         genome (str or Genome or None): genome assembly or Genome object. If None, the genome is inferred from the BigWig file.
         res (int or Index): resolution of the index, either as an integer number or as an Index object.
         usechr (list): list of chromosomes to use.
     Returns:
         idx (Index): Index object with the signal from the BigWig file added as a custom track at the given resolution. """
-    # Check that bw is a valid BigWig file
+    # Check that the input file is valid
+    assert os.path.isfile(file), "The input file does not exist."
+    assert file.endswith('.bw') or file.endswith('.bigwig'), "The input file is not a valid BigWig file: extension must be .bw or .bigwig."
+    # Open the BigWig file and check it is valid
+    bw = pyBigWig.open(file)
     assert bw.isBigWig(), "The input file is not a valid BigWig file."
     # Get the genome (either a string or a Genome object)
     assert genome is None or isinstance(genome, (str, Genome)), "The input genome must be a either None, a string or a Genome object."
