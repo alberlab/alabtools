@@ -1,5 +1,6 @@
 import unittest
 import random
+import os
 import numpy as np
 from alabtools.utils import *
 
@@ -243,6 +244,32 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index.chromstr, chromstr)
         np.testing.assert_array_equal(index.start, start)
         np.testing.assert_array_equal(index.end, end)
+    
+    def test_get_index_from_bed(self):
+        """ Test get_index_from_bed function."""
+        
+        # Generate a BED file and save it
+        chromstr = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr7', 'chrX']).astype('U20')
+        start = np.array([0, 100, 200, 0, 100, 0, 0]).astype(int)
+        end = start + 100
+        x = np.random.rand(len(chromstr))
+        y = np.random.rand(len(chromstr))
+        bed = np.column_stack([chromstr, start, end, x, y])
+        np.savetxt('test.bed', bed, fmt='%s', delimiter='\t', header='chrom\tstart\tend\tx\ty')
+        
+        # Create the index
+        genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr7', 'chrX'))
+        index = get_index_from_bed('./test.bed', genome)
+        
+        # Test the results
+        np.testing.assert_array_equal(index.chromstr, chromstr)
+        np.testing.assert_array_equal(index.start, start)
+        np.testing.assert_array_equal(index.end, end)
+        np.testing.assert_array_almost_equal(index.track0, x)
+        np.testing.assert_array_almost_equal(index.track1, y)
+        
+        # Delete the file
+        os.remove('test.bed')
 
 
 def shuffle_in_place(arrays):
