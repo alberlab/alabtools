@@ -1567,10 +1567,8 @@ def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
         genome = get_genome_from_bigwig(bw, usechr=usechr)
     # Make sure that the genome is compatible with the BigWig file
     # (bw.chroms() gives a dictionary with the chromosome names and respective lengths)
-    for chrom, length in zip(genome.chroms, genome.lengths):
+    for chrom in genome.chroms:
         assert chrom in bw.chroms(), "{} is not present in the BigWig file.".format(chrom)
-        assert length == bw.chroms()[chrom],\
-            "The length of {} in the genome ({}) does not match the length in the BigWig file ({}).".format(chrom, genome.lengths[chrom], bw.chroms()[chrom])
     # Get the Index object
     assert isinstance(res, (int, Index)), "The input resolution must be an integer number or an Index object."
     if isinstance(res, Index):
