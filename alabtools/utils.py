@@ -976,6 +976,49 @@ class Index(object):
             out_idx.add_custom_track(k, x1)
         return out_idx
     
+    def sliding(self, window: int, method: str = 'mean'):
+        """ Perform a sliding window operation on the index.
+        The method returns an Index object with the same segmentation as the input one,
+        but with the custom tracks smoothed using a sliding window operation.
+        The smoothing operation is specified by the input method.
+        Available methods are: 'mean', 'median', 'sum'.
+
+        Args:
+            window (int): the size of the sliding window.
+            method (str, optional): the method to use for the sliding window operation. Default: 'mean'.
+
+        Returns:
+            (Index): the smoothed index (same segmentation as the input one, but with smoothed custom tracks).
+        """
+        
+        # Check the input method
+        available_methods = ['mean', 'median', 'sum']
+        if not method in available_methods:
+            raise ValueError(f"Method {method} not available. Choose one of {available_methods}.")
+        
+        # Get the mapping for the sliding window
+        sliding_mapping = get_index_sliding_mapping(self, window)
+        
+        # Initialize the output index
+        out_index = Index(self.chromstr, self.start, self.end, copy=self.copy, genome=self.genome)
+        
+        # Loop over custom tracks perform a sliding window operation
+        for k in self.custom_tracks:
+            x0 = self.get_custom_track(k)  # original custom track
+            x1 = list()  # initialize the smoothed custom track
+            for i in range(len(self)):  # loop over the bins of the input index
+                indices = sliding_mapping[i]
+                if method == 'mean':
+                    x1.append(np.nanmean(x0[indices]))
+                elif method == 'median':
+                    x1.append(np.nanmedian(x0[indices]))
+                elif method == 'sum':
+                    x1.append(np.nansum(x0[indices]))
+            x1 = np.array(x1)
+            out_index.add_custom_track(k, x1)
+        
+        return out_index
+    
     def pop_chromosome(self, chrom):
         """Remove a chromosome from the index."""
         genome_new = self.genome.pop(chrom)
@@ -1759,6 +1802,49 @@ def get_index_mappings(idx0, idx1):
         ]
 
     return cmap, fwmap, bwmap
+
+
+def get_index_sliding_mapping(index: Index, window: int) -> dict:
+    """ Get the mapping to perform a sliding window analysis on an Index object.
+
+    Args:
+        index (Index)
+        window (int): size of the sliding window in units of the index resolution.
+                      If even, it is increased by 1.
+
+    Returns:
+        dict: dictionary that maps each segment of the index to the respective segments of their sliding windows.
+    """
+    
+    # Check that the window size is valid
+    if not isinstance(window, int):
+        raise TypeError("The input window must be an integer.")
+    if not window > 0:
+        raise ValueError("The input window must be a positive integer.")
+    if not window % 2:
+        window += 1
+    
+    # Initialize the mapping dictionary
+    mapping = {}
+    
+    # Map each segment of the index to the respective segments of their sliding windows
+    for i in range(len(index)):
+        
+        # Get the start and end positions of the sliding window of the current segment i
+        s = i - (window - 1) // 2
+        e = i + (window - 1) // 2  # the end must be included in the window
+        
+        # If s is outside the index, or outside the chromosome of i, change it to the start of the chromosome
+        if s < 0 or index.chromstr[s] != index.chromstr[i] or index.copy[s] != index.copy[i]:
+            s = np.where(np.logical_and(index.chromstr == index.chromstr[i], index.copy == index.copy[i]))[0][0]
+        # If e is outside the index, or outside the chromosome of i, change it to the end of the chromosome
+        if e >= len(index) or index.chromstr[e] != index.chromstr[i] or index.copy[e] != index.copy[i]:
+            e = np.where(np.logical_and(index.chromstr == index.chromstr[i], index.copy == index.copy[i]))[0][-1]
+        
+        # Add the mapping to the dictionary
+        mapping[i] = np.arange(s, e + 1)
+    
+    return mapping
 
 
 def region_intersect(b, e, x, y):

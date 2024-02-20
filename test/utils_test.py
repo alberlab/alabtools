@@ -268,6 +268,52 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_almost_equal(index.track1, y[chromstr != 'chrX'])
         # Delete the file
         os.remove('test.bed')
+    
+    def test_get_index_sliding(self):
+        """ Test get_index_sliding function."""
+        
+        # Initialize the Index manually
+        chromstr = np.array(
+            [
+                'chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr1',
+                'chr2', 'chr2', 'chr2', 'chr2',
+                'chr3', 'chr3', 'chr3',
+                'chrX'
+            ]
+        ).astype('U20')
+        start = np.array(
+            [
+                0, 100, 200, 300, 400, 500,
+                0, 100, 200, 300,
+                0, 100, 200,
+                0
+            ]
+        ).astype(int)
+        end = start + 100
+        index = Index(chrom=chromstr, start=start, end=end, genome=Genome('mm10', usechr=('chr1', 'chr2', 'chr3', 'chrX')))
+        
+        # Get the sliding index
+        index_sliding = get_index_sliding_mapping(index, window=3)
+        
+        # Test the results
+        real_sliding = {
+            0: np.array([0, 1]),
+            1: np.array([0, 1, 2]),
+            2: np.array([1, 2, 3]),
+            3: np.array([2, 3, 4]),
+            4: np.array([3, 4, 5]),
+            5: np.array([4, 5]),
+            6: np.array([6, 7]),
+            7: np.array([6, 7, 8]),
+            8: np.array([7, 8, 9]),
+            9: np.array([8, 9]),
+            10: np.array([10, 11]),
+            11: np.array([10, 11, 12]),
+            12: np.array([11, 12]),
+            13: np.array([13])
+        }
+        for i in real_sliding:
+            np.testing.assert_array_equal(index_sliding[i], real_sliding[i])
 
 
 def shuffle_in_place(arrays):
