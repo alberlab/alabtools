@@ -1761,6 +1761,49 @@ def get_index_mappings(idx0, idx1):
     return cmap, fwmap, bwmap
 
 
+def get_index_sliding(index: Index, window: int) -> dict:
+    """ Get the mapping to perform a sliding window analysis on an Index object.
+
+    Args:
+        index (Index)
+        window (int): size of the sliding window in units of the index resolution.
+                      If even, it is increased by 1.
+
+    Returns:
+        dict: dictionary that maps each segment of the index to the respective segments of their sliding windows.
+    """
+    
+    # Check that the window size is valid
+    if not isinstance(window, int):
+        raise TypeError("The input window must be an integer.")
+    if not window > 0:
+        raise ValueError("The input window must be a positive integer.")
+    if not window % 2:
+        window += 1
+    
+    # Initialize the mapping dictionary
+    mapping = {}
+    
+    # Map each segment of the index to the respective segments of their sliding windows
+    for i in range(len(index)):
+        
+        # Get the start and end positions of the sliding window of the current segment i
+        s = i - (window - 1) // 2
+        e = i + (window - 1) // 2  # the end must be included in the window
+        
+        # If s is outside the index, or outside the chromosome of i, change it to the start of the chromosome
+        if s < 0 or index.chromstr[s] != index.chromstr[i] or index.copy[s] != index.copy[i]:
+            s = np.where(np.logical_and(index.chromstr == index.chromstr[i], index.copy == index.copy[i]))[0][0]
+        # If e is outside the index, or outside the chromosome of i, change it to the end of the chromosome
+        if e >= len(index) or index.chromstr[e] != index.chromstr[i] or index.copy[e] != index.copy[i]:
+            e = np.where(np.logical_and(index.chromstr == index.chromstr[i], index.copy == index.copy[i]))[0][-1]
+        
+        # Add the mapping to the dictionary
+        mapping[i] = np.arange(s, e + 1)
+    
+    return mapping
+
+
 def region_intersect(b, e, x, y):
     a = x < e
     b = y > b
