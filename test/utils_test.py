@@ -293,7 +293,7 @@ class TestIndex(unittest.TestCase):
         index = Index(chrom=chromstr, start=start, end=end, genome=Genome('mm10', usechr=('chr1', 'chr2', 'chr3', 'chrX')))
         
         # Get the sliding index
-        index_sliding = get_index_sliding(index, window=3)
+        index_sliding = get_index_sliding_mapping(index, window=3)
         
         # Test the results
         real_sliding = {

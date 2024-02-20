@@ -997,7 +997,7 @@ class Index(object):
             raise ValueError(f"Method {method} not available. Choose one of {available_methods}.")
         
         # Get the mapping for the sliding window
-        sliding_mapping = get_index_sliding(self, window)
+        sliding_mapping = get_index_sliding_mapping(self, window)
         
         # Initialize the output index
         out_index = Index(self.chromstr, self.start, self.end, copy=self.copy, genome=self.genome)
@@ -1804,7 +1804,7 @@ def get_index_mappings(idx0, idx1):
     return cmap, fwmap, bwmap
 
 
-def get_index_sliding(index: Index, window: int) -> dict:
+def get_index_sliding_mapping(index: Index, window: int) -> dict:
     """ Get the mapping to perform a sliding window analysis on an Index object.
 
     Args:
