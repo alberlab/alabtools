@@ -976,6 +976,49 @@ class Index(object):
             out_idx.add_custom_track(k, x1)
         return out_idx
     
+    def sliding(self, window: int, method: str = 'mean'):
+        """ Perform a sliding window operation on the index.
+        The method returns an Index object with the same segmentation as the input one,
+        but with the custom tracks smoothed using a sliding window operation.
+        The smoothing operation is specified by the input method.
+        Available methods are: 'mean', 'median', 'sum'.
+
+        Args:
+            window (int): the size of the sliding window.
+            method (str, optional): the method to use for the sliding window operation. Default: 'mean'.
+
+        Returns:
+            (Index): the smoothed index (same segmentation as the input one, but with smoothed custom tracks).
+        """
+        
+        # Check the input method
+        available_methods = ['mean', 'median', 'sum']
+        if not method in available_methods:
+            raise ValueError(f"Method {method} not available. Choose one of {available_methods}.")
+        
+        # Get the mapping for the sliding window
+        sliding_mapping = get_index_sliding(self, window)
+        
+        # Initialize the output index
+        out_index = Index(self.chromstr, self.start, self.end, copy=self.copy, genome=self.genome)
+        
+        # Loop over custom tracks perform a sliding window operation
+        for k in self.custom_tracks:
+            x0 = self.get_custom_track(k)  # original custom track
+            x1 = list()  # initialize the smoothed custom track
+            for i in range(len(self)):  # loop over the bins of the input index
+                indices = sliding_mapping[i]
+                if method == 'mean':
+                    x1.append(np.nanmean(x0[indices]))
+                elif method == 'median':
+                    x1.append(np.nanmedian(x0[indices]))
+                elif method == 'sum':
+                    x1.append(np.nansum(x0[indices]))
+            x1 = np.array(x1)
+            out_index.add_custom_track(k, x1)
+        
+        return out_index
+    
     def pop_chromosome(self, chrom):
         """Remove a chromosome from the index."""
         genome_new = self.genome.pop(chrom)
