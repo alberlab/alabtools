@@ -1529,7 +1529,9 @@ def domain_set_to_sorted_numpy(domains_set):
     return chromstr, start, end
 
 
-def get_index_from_bed(file: str, assembly: str = None, usechr: list = None, genome: Genome = None, usecols: np.array = None) -> Index:
+def get_index_from_bed(
+    file: str, assembly: str = None, usechr: list = None, genome: Genome = None, usecols: np.array = None
+) -> Index:
     """ Create an Index object from a BED file.
     Either the pair assembly/usechr or the genome object must be provided.
     Args:
@@ -1568,6 +1570,15 @@ def get_index_from_bed(file: str, assembly: str = None, usechr: list = None, gen
     chromstr = chromstr[mask]
     start = start[mask]
     end = end[mask]
+    # Adjust the origins/lengths of the genome from the BED file
+    origins, lengths = [], []
+    for chrom in genome.chroms:
+        chrom_start = np.min(start[chromstr == chrom])
+        chrom_end = np.max(end[chromstr == chrom])
+        chrom_length = chrom_end - chrom_start
+        origins.append(chrom_start)
+        lengths.append(chrom_length)
+    genome = Genome(genome, origins=origins, lengths=lengths)
     # Create the Index object
     index = Index(chromstr, start, end, genome=genome)
     # Add custom tracks from the remaining columns
