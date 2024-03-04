@@ -1571,14 +1571,15 @@ def get_index_from_bed(
     start = start[mask]
     end = end[mask]
     # Adjust the origins/lengths of the genome from the BED file
+    chroms = np.unique(chromstr)
     origins, lengths = [], []
-    for chrom in genome.chroms:
+    for chrom in chroms:
         chrom_start = np.min(start[chromstr == chrom])
         chrom_end = np.max(end[chromstr == chrom])
         chrom_length = chrom_end - chrom_start
         origins.append(chrom_start)
         lengths.append(chrom_length)
-    genome = Genome(genome, origins=origins, lengths=lengths)
+    genome = Genome(genome, chroms=chroms, origins=origins, lengths=lengths)
     # Create the Index object
     index = Index(chromstr, start, end, genome=genome)
     # Add custom tracks from the remaining columns
