@@ -1570,8 +1570,11 @@ def get_index_from_bed(
     chromstr = chromstr[mask]
     start = start[mask]
     end = end[mask]
-    # Adjust the origins/lengths of the genome from the BED file
-    chroms = np.unique(chromstr)
+    # Adjust the chroms/origins/lengths of the genome from the BED file
+    # Get the unique chromosomes, without sorting them
+    chroms, chroms_order = np.unique(chromstr, return_index=True)  # np.unique returns the unique elements sorted
+    chroms = chroms[np.argsort(chroms_order)]  # sort the unique elements to get them in the original order
+    # Loop over the chromosomes and get the origins and lengths
     origins, lengths = [], []
     for chrom in chroms:
         chrom_start = np.min(start[chromstr == chrom])
@@ -1579,6 +1582,7 @@ def get_index_from_bed(
         chrom_length = chrom_end - chrom_start
         origins.append(chrom_start)
         lengths.append(chrom_length)
+    # Create the Genome object with the adjusted chroms/origins/lengths taken from the BED file
     genome = Genome(genome, chroms=chroms, origins=origins, lengths=lengths)
     # Create the Index object
     index = Index(chromstr, start, end, genome=genome)

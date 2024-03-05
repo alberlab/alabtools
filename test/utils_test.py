@@ -269,6 +269,8 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index.end, end[chromstr != 'chrX'])
         np.testing.assert_array_almost_equal(index.track0, x[chromstr != 'chrX'])
         np.testing.assert_array_almost_equal(index.track1, y[chromstr != 'chrX'])
+        # The chromosomes present in the genome should not contain 'chrX', because it was not given to the input genome,
+        # and should contain 'chr9', because it was not present in the BED file
         np.testing.assert_array_equal(index.genome.chroms, ['chr1', 'chr2', 'chr7'])
         np.testing.assert_array_equal(index.genome.origins, np.array([0, 100, 400]))
         np.testing.assert_array_equal(index.genome.lengths, np.array([300, 200, 100]))
