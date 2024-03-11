@@ -1546,7 +1546,7 @@ def get_index_from_bed(
     # Check that the input file is valid
     if not os.path.isfile(file):
         raise FileNotFoundError("The input file does not exist.")
-    if not file.endswith('.bed') or file.endswith('.bedgraph'):
+    if not file.endswith('.bed') or not file.endswith('.bedgraph') or not file.endswith('.bedGraph'):
         raise ValueError("The input file is not a valid BED file: extension must be .bed or .bedgraph.")
     # Check that usecols is valid if provided
     if usecols is not None:
