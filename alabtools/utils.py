@@ -1794,6 +1794,11 @@ def get_index_mappings(idx0: Index, idx1: Index) -> tuple:
     - cmap: the mapping between the two segmentations, chromosome by chromosome.
     - fwmap: the full (forward) mapping from idx0 to idx1.
     - bwmap: the full (backward) mapping from idx1 to idx0.
+    
+    The mappings are lists of lists, where elements are positions in the other segmentation.
+    For example,
+    - fwmap[i] = [j0, j1, ...] means that the i-th segment in idx0 corresponds to the j0-th, j1-th, ... segments in idx1.
+    - bwmap[j] = [i0, i1, ...] means that the j-th segment in idx1 corresponds to the i0-th, i1-th, ... segments in idx0.
 
     Args:
         idx0 (Index)
