@@ -1783,7 +1783,28 @@ def remap(s0, s1):
     return dmap, imap
 
 
-def get_index_mappings(idx0, idx1):
+def get_index_mappings(idx0: Index, idx1: Index) -> tuple:
+    """ Get the mappings between two Index objects.
+    
+    The function only works if the two indices have:
+    - the same number of chromosomes
+    - the same starting and ending points for each chromosome
+    
+    Three mappings are returned:
+    - cmap: the mapping between the two segmentations, chromosome by chromosome.
+    - fwmap: the full (forward) mapping from idx0 to idx1.
+    - bwmap: the full (backward) mapping from idx1 to idx0.
+
+    Args:
+        idx0 (Index)
+        idx1 (Index)
+
+    Returns:
+        cmap (list): the mapping between the two segmentations, chromosome by chromosome.
+        fwmap (list): the full (forward) mapping from idx0 to idx1.
+        bwmap (list): the full (backward) mapping from idx1 to idx0.
+    """
+    
     # make sure that the two subdivisions map the same chromosomes
     assert idx0.num_chrom == idx1.num_chrom
     n_chrom = idx0.num_chrom

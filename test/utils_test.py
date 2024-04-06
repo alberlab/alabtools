@@ -322,6 +322,56 @@ class TestIndex(unittest.TestCase):
         }
         for i in real_sliding:
             np.testing.assert_array_equal(index_sliding[i], real_sliding[i])
+    
+    def test_get_index_mappings(self):
+        """ Test get_index_mappings function."""
+        
+        # Create two indices, one with double the resolution of the other
+        res1, res2 = 22, 110
+        genome1, chromstr1, start1, end1, _, _, _ = generate_domains(resolution=res1)
+        index1 = Index(chrom=chromstr1, start=start1, end=end1, genome=genome1)
+        genome2, chromstr2, start2, end2, _, _, _ = generate_domains(resolution=res2)
+        index2 = Index(chrom=chromstr2, start=start2, end=end2, genome=genome2)
+        
+        print(index1.offset)
+        for i in [19, 38, 48, 76]:
+            print(i, index1.chromstr[i-1], index1.chromstr[i])
+        
+        # Get the mappings
+        cmap, fmap, bmap = get_index_mappings(index1, index2)
+        
+        # fmap maps the domains of index1 to index2: fmap[i] = j means that domain i in index1 corresponds to domain j in index2
+        # Loop over the domains of index1
+        for i in range(len(chromstr1)):
+            # Get the corresponding domain in index2
+            j = fmap[i]
+            # Since the resolution of index2 is double, only one domain in index2 should correspond to domain i in index1: check it
+            self.assertEqual(len(j), 1)
+            j = j[0]
+            # Now check that the domain of i is contained in the domain of j
+            chrom_i, start_i, end_i = index1.chromstr[i], index1.start[i], index1.end[i]
+            chrom_j, start_j, end_j = index2.chromstr[j], index2.start[j], index2.end[j]
+            self.assertEqual(chrom_i, chrom_j)
+            self.assertTrue(start_i >= start_j)
+            self.assertTrue(end_i <= end_j)
+        
+        # bmap maps the domains of index2 to index1: bmap[j] = i means that domain j in index2 corresponds to domain i in index1
+        # Loop over the domains of index2
+        for j in range(len(chromstr2)):
+            # Get the corresponding domain in index1
+            i = bmap[j]
+            # Since the resolution of index2 is double, two domains in index1 should correspond to domain j in index2
+            # (unless the domain is at the end of the chromosome, in which case only one domain should correspond): check it
+            if index2.end[j] != np.max(index2.end[index2.chromstr == index2.chromstr[j]]):
+                self.assertEqual(len(i), int(res2 / res1))
+            # Now check that all the domains of i are contained in the domain of j
+            for ii in i:
+                chrom_ii, start_ii, end_ii = index1.chromstr[ii], index1.start[ii], index1.end[ii]
+                chrom_j, start_j, end_j = index2.chromstr[j], index2.start[j], index2.end[j]
+                self.assertEqual(chrom_ii, chrom_j)
+                self.assertTrue(start_ii >= start_j)
+                self.assertTrue(end_ii <= end_j)
+        
 
 
 def shuffle_in_place(arrays):
