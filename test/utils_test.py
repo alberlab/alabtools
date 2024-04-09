@@ -185,6 +185,11 @@ class TestIndex(unittest.TestCase):
         in_res, out_res = 22, 44
         # Generate domains
         genome, chromstr, start, end, _, x, y = generate_domains(resolution=in_res)
+        # Remove consecutive domains
+        i_remove = [4, 5, 6, 7]
+        mask = np.ones(len(chromstr), dtype=bool)
+        mask[i_remove] = False
+        chromstr, start, end, x, y = chromstr[mask], start[mask], end[mask], x[mask], y[mask]
         # Create the index
         index = Index(chrom=chromstr, start=start, end=end, genome=genome)
         index.add_custom_track('x', x)
@@ -193,6 +198,11 @@ class TestIndex(unittest.TestCase):
         index_coarse = index.coarsegrain(out_res)
         # Test the results
         _, chromstr_test, start_test, end_test, _, _, _ = generate_domains(resolution=out_res)
+        # Remove the consecutive domains that match the ones in the high-resolution index
+        i_remove = [2, 3]
+        mask = np.ones(len(chromstr_test), dtype=bool)
+        mask[i_remove] = False
+        chromstr_test, start_test, end_test = chromstr_test[mask], start_test[mask], end_test[mask]
         index_test = Index(chrom=chromstr_test, start=start_test, end=end_test, genome=genome)
         x_test, y_test = [], []
         for c, s, e in zip(chromstr_test, start_test, end_test):
@@ -322,6 +332,100 @@ class TestIndex(unittest.TestCase):
         }
         for i in real_sliding:
             np.testing.assert_array_equal(index_sliding[i], real_sliding[i])
+    
+    def test_get_index_mappings(self):
+        """ Test get_index_mappings function."""
+        
+        # Create two indices, one with double the resolution of the other
+        res1, res2 = 22, 110
+        genome1, chromstr1, start1, end1, _, _, _ = generate_domains(resolution=res1)
+        index1 = Index(chrom=chromstr1, start=start1, end=end1, genome=genome1)
+        genome2, chromstr2, start2, end2, _, _, _ = generate_domains(resolution=res2)
+        index2 = Index(chrom=chromstr2, start=start2, end=end2, genome=genome2)
+        
+        # Get the mappings
+        cmap, fmap, bmap = get_index_mappings(index1, index2)
+        
+        # fmap maps the domains of index1 to index2: fmap[i] = j means that domain i in index1 corresponds to domain j in index2
+        # Loop over the domains of index1
+        for i in range(len(chromstr1)):
+            # Get the corresponding domain in index2
+            j = fmap[i]
+            # Since the resolution of index2 is double, only one domain in index2 should correspond to domain i in index1: check it
+            self.assertEqual(len(j), 1)
+            j = j[0]
+            # Now check that the domain of i is contained in the domain of j
+            chrom_i, start_i, end_i = index1.chromstr[i], index1.start[i], index1.end[i]
+            chrom_j, start_j, end_j = index2.chromstr[j], index2.start[j], index2.end[j]
+            self.assertEqual(chrom_i, chrom_j)
+            self.assertTrue(start_i >= start_j)
+            self.assertTrue(end_i <= end_j)
+        
+        # bmap maps the domains of index2 to index1: bmap[j] = i means that domain j in index2 corresponds to domain i in index1
+        # Loop over the domains of index2
+        for j in range(len(chromstr2)):
+            # Get the corresponding domain in index1
+            i = bmap[j]
+            # Since the resolution of index2 is double, two domains in index1 should correspond to domain j in index2
+            # (unless the domain is at the end of the chromosome, in which case only one domain should correspond): check it
+            if index2.end[j] != np.max(index2.end[index2.chromstr == index2.chromstr[j]]):
+                self.assertEqual(len(i), int(res2 / res1))
+            # Now check that all the domains of i are contained in the domain of j
+            for ii in i:
+                chrom_ii, start_ii, end_ii = index1.chromstr[ii], index1.start[ii], index1.end[ii]
+                chrom_j, start_j, end_j = index2.chromstr[j], index2.start[j], index2.end[j]
+                self.assertEqual(chrom_ii, chrom_j)
+                self.assertTrue(start_ii >= start_j)
+                self.assertTrue(end_ii <= end_j)
+    
+    def test_map_indices(self):
+        
+        # Create index 1
+        genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr3', 'chrX'))
+        chromstr1 = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3', 'chrX', 'chrX']).astype('U20')
+        start1 = np.array([0, 130, 270, 0, 110, 30, 0, 1000]).astype(int)
+        end1 = start1 + 100
+        idx1 = Index(chrom=chromstr1, start=start1, end=end1, genome=genome)
+        
+        # Create index 2
+        chromstr2 = np.array(['chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr2', 'chr2', 'chr3', 'chr3', 'chrX', 'chrX']).astype('U20')
+        start2 = np.array([0, 52, 105, 170, 231, 290, 3, 55, 104, 157, 28, 80, 0, 48]).astype(int)
+        end2 = start2 + 50
+        idx2 = Index(chrom=chromstr2, start=start2, end=end2, genome=genome)
+        
+        # Test the mapping idx1 -> idx2
+        map = map_indices(idx1, idx2)
+        map_test = {
+            ('chr1', 0, 100): [('chr1', 0, 50), ('chr1', 52, 102)],
+            ('chr1', 130, 230): [('chr1', 105, 155), ('chr1', 170, 220)],
+            ('chr1', 270, 370): [('chr1', 231, 281), ('chr1', 290, 340)],
+            ('chr2', 0, 100): [('chr2', 3, 53), ('chr2', 55, 105)],
+            ('chr2', 110, 210): [('chr2', 104, 154), ('chr2', 157, 207)],
+            ('chr3', 30, 130): [('chr3', 28, 78), ('chr3', 80, 130)],
+            ('chrX', 0, 100): [('chrX', 0, 50), ('chrX', 48, 98)],
+            ('chrX', 1000, 1100): [],
+        }
+        self.assertDictEqual(map, map_test)
+        
+        # Test the mapping idx2 -> idx1
+        map = map_indices(idx2, idx1)
+        map_test = {
+            ('chr1', 0, 50): [('chr1', 0, 100)],
+            ('chr1', 52, 102): [('chr1', 0, 100)],
+            ('chr1', 105, 155): [('chr1', 130, 230)],
+            ('chr1', 170, 220): [('chr1', 130, 230)],
+            ('chr1', 231, 281): [('chr1', 270, 370)],
+            ('chr1', 290, 340): [('chr1', 270, 370)],
+            ('chr2', 3, 53): [('chr2', 0, 100)],
+            ('chr2', 55, 105): [('chr2', 0, 100)],
+            ('chr2', 104, 154): [('chr2', 110, 210)],
+            ('chr2', 157, 207): [('chr2', 110, 210)],
+            ('chr3', 28, 78): [('chr3', 30, 130)],
+            ('chr3', 80, 130): [('chr3', 30, 130)],
+            ('chrX', 0, 50): [('chrX', 0, 100)],
+            ('chrX', 48, 98): [('chrX', 0, 100)]
+        }
+        self.assertDictEqual(map, map_test)
 
 
 def shuffle_in_place(arrays):
@@ -335,6 +439,8 @@ def shuffle_in_place(arrays):
     return arrays_shuffled
 
 def generate_domains(ploidy='haploid', resolution=100):
+    # Fix the random seed
+    np.random.seed(0)
     assert ploidy in ['haploid', 'diploid'], 'ploidy must be haploid or diploid'
     # Generate the Genome
     chroms = np.array(['chr1', 'chr2', 'chr7', 'chrX'])
