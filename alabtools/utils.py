@@ -1711,6 +1711,44 @@ class H5Batcher():
         return self.ds.__len__()
 
 
+def map_indices(idx1: Index, idx2: Index):
+    """ Maps the segmentations from idx1 to idx2.
+
+    Args:
+        idx1 (Index)
+        idx2 (Index)
+
+    Returns:
+    """
+    
+    if not isinstance(idx1, Index) or not isinstance(idx2, Index):
+        raise TypeError("The input indices must be Index objects.")
+    if not idx1.genome == idx2.genome:
+        raise ValueError("The input indices must have the same genome.")
+    
+    # Initialize the mappings dictionary
+    map = {}
+    
+    # Loop over the domains in idx1
+    for chrom, start, end in zip(idx1.chromstr, idx1.start, idx1.end):
+        
+        # Get the mask of the domains in idx2 that overlap with the domain in idx1
+        mask = (idx2.chromstr == chrom) & (idx2.start <= end) & (idx2.end >= start)
+        
+        # Get the domains in idx2 that overlap with the domain in idx1
+        chrom2_overlap = idx2.chromstr[mask]
+        start2_overlap = idx2.start[mask]
+        end2_overlap = idx2.end[mask]
+        
+        # Add the overlapping domains to the mappings dictionary
+        if (chrom, start, end) not in map:
+            map[(chrom, start, end)] = []
+        for chrom2, start2, end2 in zip(chrom2_overlap, start2_overlap, end2_overlap):
+            map[(chrom, start, end)].append((chrom2, start2, end2))
+        
+    return map
+        
+
 def remap(s0, s1):
     '''
     Creates forward and backward maps between two segmentations, assuming

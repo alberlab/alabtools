@@ -333,10 +333,6 @@ class TestIndex(unittest.TestCase):
         genome2, chromstr2, start2, end2, _, _, _ = generate_domains(resolution=res2)
         index2 = Index(chrom=chromstr2, start=start2, end=end2, genome=genome2)
         
-        print(index1.offset)
-        for i in [19, 38, 48, 76]:
-            print(i, index1.chromstr[i-1], index1.chromstr[i])
-        
         # Get the mappings
         cmap, fmap, bmap = get_index_mappings(index1, index2)
         
@@ -371,7 +367,54 @@ class TestIndex(unittest.TestCase):
                 self.assertEqual(chrom_ii, chrom_j)
                 self.assertTrue(start_ii >= start_j)
                 self.assertTrue(end_ii <= end_j)
+    
+    def test_map_indices(self):
         
+        # Create index 1
+        genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr3', 'chrX'))
+        chromstr1 = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3', 'chrX']).astype('U20')
+        start1 = np.array([0, 130, 270, 0, 110, 30, 0]).astype(int)
+        end1 = start1 + 100
+        idx1 = Index(chrom=chromstr1, start=start1, end=end1, genome=genome)
+        
+        # Create index 2
+        chromstr2 = np.array(['chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr2', 'chr2', 'chr3', 'chr3', 'chrX', 'chrX']).astype('U20')
+        start2 = np.array([0, 52, 105, 170, 231, 290, 3, 55, 104, 157, 28, 80, 0, 48]).astype(int)
+        end2 = start2 + 50
+        idx2 = Index(chrom=chromstr2, start=start2, end=end2, genome=genome)
+        
+        # Test the mapping idx1 -> idx2
+        map = map_indices(idx1, idx2)
+        map_test = {
+            ('chr1', 0, 100): [('chr1', 0, 50), ('chr1', 52, 102)],
+            ('chr1', 130, 230): [('chr1', 105, 155), ('chr1', 170, 220)],
+            ('chr1', 270, 370): [('chr1', 231, 281), ('chr1', 290, 340)],
+            ('chr2', 0, 100): [('chr2', 3, 53), ('chr2', 55, 105)],
+            ('chr2', 110, 210): [('chr2', 104, 154), ('chr2', 157, 207)],
+            ('chr3', 30, 130): [('chr3', 28, 78), ('chr3', 80, 130)],
+            ('chrX', 0, 100): [('chrX', 0, 50), ('chrX', 48, 98)]
+        }
+        self.assertDictEqual(map, map_test)
+        
+        # Test the mapping idx2 -> idx1
+        map = map_indices(idx2, idx1)
+        map_test = {
+            ('chr1', 0, 50): [('chr1', 0, 100)],
+            ('chr1', 52, 102): [('chr1', 0, 100)],
+            ('chr1', 105, 155): [('chr1', 130, 230)],
+            ('chr1', 170, 220): [('chr1', 130, 230)],
+            ('chr1', 231, 281): [('chr1', 270, 370)],
+            ('chr1', 290, 340): [('chr1', 270, 370)],
+            ('chr2', 3, 53): [('chr2', 0, 100)],
+            ('chr2', 55, 105): [('chr2', 0, 100)],
+            ('chr2', 104, 154): [('chr2', 110, 210)],
+            ('chr2', 157, 207): [('chr2', 110, 210)],
+            ('chr3', 28, 78): [('chr3', 30, 130)],
+            ('chr3', 80, 130): [('chr3', 30, 130)],
+            ('chrX', 0, 50): [('chrX', 0, 100)],
+            ('chrX', 48, 98): [('chrX', 0, 100)]
+        }
+        self.assertDictEqual(map, map_test)
 
 
 def shuffle_in_place(arrays):
