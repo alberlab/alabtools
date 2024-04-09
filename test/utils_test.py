@@ -185,6 +185,11 @@ class TestIndex(unittest.TestCase):
         in_res, out_res = 22, 44
         # Generate domains
         genome, chromstr, start, end, _, x, y = generate_domains(resolution=in_res)
+        # Remove consecutive domains
+        i_remove = [4, 5, 6, 7]
+        mask = np.ones(len(chromstr), dtype=bool)
+        mask[i_remove] = False
+        chromstr, start, end, x, y = chromstr[mask], start[mask], end[mask], x[mask], y[mask]
         # Create the index
         index = Index(chrom=chromstr, start=start, end=end, genome=genome)
         index.add_custom_track('x', x)
@@ -193,6 +198,11 @@ class TestIndex(unittest.TestCase):
         index_coarse = index.coarsegrain(out_res)
         # Test the results
         _, chromstr_test, start_test, end_test, _, _, _ = generate_domains(resolution=out_res)
+        # Remove the consecutive domains that match the ones in the high-resolution index
+        i_remove = [2, 3]
+        mask = np.ones(len(chromstr_test), dtype=bool)
+        mask[i_remove] = False
+        chromstr_test, start_test, end_test = chromstr_test[mask], start_test[mask], end_test[mask]
         index_test = Index(chrom=chromstr_test, start=start_test, end=end_test, genome=genome)
         x_test, y_test = [], []
         for c, s, e in zip(chromstr_test, start_test, end_test):
@@ -372,8 +382,8 @@ class TestIndex(unittest.TestCase):
         
         # Create index 1
         genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr3', 'chrX'))
-        chromstr1 = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3', 'chrX']).astype('U20')
-        start1 = np.array([0, 130, 270, 0, 110, 30, 0]).astype(int)
+        chromstr1 = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3', 'chrX', 'chrX']).astype('U20')
+        start1 = np.array([0, 130, 270, 0, 110, 30, 0, 1000]).astype(int)
         end1 = start1 + 100
         idx1 = Index(chrom=chromstr1, start=start1, end=end1, genome=genome)
         
@@ -392,7 +402,8 @@ class TestIndex(unittest.TestCase):
             ('chr2', 0, 100): [('chr2', 3, 53), ('chr2', 55, 105)],
             ('chr2', 110, 210): [('chr2', 104, 154), ('chr2', 157, 207)],
             ('chr3', 30, 130): [('chr3', 28, 78), ('chr3', 80, 130)],
-            ('chrX', 0, 100): [('chrX', 0, 50), ('chrX', 48, 98)]
+            ('chrX', 0, 100): [('chrX', 0, 50), ('chrX', 48, 98)],
+            ('chrX', 1000, 1100): [],
         }
         self.assertDictEqual(map, map_test)
         
@@ -428,6 +439,8 @@ def shuffle_in_place(arrays):
     return arrays_shuffled
 
 def generate_domains(ploidy='haploid', resolution=100):
+    # Fix the random seed
+    np.random.seed(0)
     assert ploidy in ['haploid', 'diploid'], 'ploidy must be haploid or diploid'
     # Generate the Genome
     chroms = np.array(['chr1', 'chr2', 'chr7', 'chrX'])

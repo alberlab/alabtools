@@ -808,9 +808,19 @@ class Index(object):
         '''
         return pd.unique(self.chromstr)
     
-    def get_index_hashmap(self):
-        """Creates a dictionary that maps a domain
-        (chr, start, end) to its position in the index.
+    def get_index_hashmap(self) -> dict:
+        """ Creates a dictionary that maps a domain
+        (chr, start, end) to its position in the index,
+        e.g. for a diplod index:
+            {
+                ('chr1', 0, 1000): [0, 10000],
+                ('chr1', 1000, 2000): [1, 10001],
+                ...
+            }
+
+        Returns:
+            hashmap (dict): A dictionary that maps a domain (chr, start, end)
+                            to its positions (list of int) in the index.
         """
         hashmap = {}
         for i, dom in enumerate(zip(self.chromstr,
@@ -935,12 +945,14 @@ class Index(object):
             method (str): the method to use for coarse-graining. Default: 'mean'.
         Returns:
             Index: the coarse-grained index."""
+        
         # Assert input method is implemented
         assert method in ['mean', 'median'], "The input method is not implemented."
         # Check input index is haploid and regular
         assert len(self.get_haploid()) == len(self), "The input index is not haploid."
         in_res = self.resolution()
         assert in_res is not None, "The input index does not have a regular resolution."
+        
         # Read the output index
         if isinstance(out_res, Index):
             out_idx = copy.deepcopy(out_res)
@@ -949,9 +961,27 @@ class Index(object):
             for k in out_idx.custom_tracks:
                 out_idx.remove_custom_track(k)
         elif isinstance(out_res, int):
-            out_idx = self.genome.bininfo_optimized(out_res)  # create an out index
+            # Create a new index with the output resolution
+            idx = self.genome.bininfo_optimized(out_res)
+            # Remove regions that do not overlap with the input index
+            # Get the mapping between the two indices
+            map = map_indices(idx, self)
+            # Find all domains in the map that are not in the hashmap
+            unmap_doms = []
+            for dom in map:
+                if len(map[dom]) == 0:
+                    unmap_doms.append(dom)
+            # Remove the unmapped domains from the output index
+            mask = np.ones(len(idx), dtype=bool)
+            for dom in unmap_doms:
+                c, s, e = dom
+                mask[np.logical_and(idx.chromstr == c, np.logical_and(idx.start == s, idx.end == e))] = False
+            chromstr, start, end = idx.chromstr[mask], idx.start[mask], idx.end[mask]
+            # Create the output index
+            out_idx = Index(chromstr, start, end, genome=self.genome)
         else:
             raise ValueError("out_res must be an integer number or an Index object.")
+        
         # Check output index is haploid and regular
         assert len(out_idx.get_haploid()) == len(out_idx), "The output index is not haploid."
         assert out_res is not None, "The output index does not have a regular resolution."
@@ -959,21 +989,31 @@ class Index(object):
         assert out_res > in_res, "The input resolution is larger than the index resolution."
         # Check if the final resolution is a multiple of the initial one
         assert out_res % in_res == 0, "The input resolution is not a multiple of the index resolution."
+        
         # Get mappings to coarse-grain the signals in the index
-        _, _, bmap = get_index_mappings(self, out_idx)
+        idxmap = map_indices(out_idx, self)
+        in_idxhash = self.get_index_hashmap()
+        
         # Loop over custom tracks and coarse-grain them
         for k in self.custom_tracks:
             x0 = self.get_custom_track(k)
             x1 = list()
-            for i in range(len(out_idx)):  # loop over the bins of the output index
-                indices = bmap[i]
+            # Loop over the domains of the output index
+            for dom in zip(out_idx.chromstr, out_idx.start, out_idx.end):
+                # Get the domains in the input index that overlap with the output domain
+                in_doms = idxmap[dom]
+                # Loop over these domains and compute the coarse-grained signal
+                vals = list()
+                for in_dom in in_doms:
+                    vals.extend(x0[in_idxhash[in_dom]])
                 if method == 'mean':
-                    x0_coarse = np.nanmean(x0[indices])
+                    x0_coarse = np.nanmean(vals)
                 elif method == 'median':
-                    x0_coarse = np.nanmedian(x0[indices])
+                    x0_coarse = np.nanmedian(vals)
                 x1.append(x0_coarse)
             x1 = np.array(x1)
             out_idx.add_custom_track(k, x1)
+        
         return out_idx
     
     def sliding(self, window: int, method: str = 'mean'):
@@ -1733,7 +1773,7 @@ def map_indices(idx1: Index, idx2: Index):
     for chrom, start, end in zip(idx1.chromstr, idx1.start, idx1.end):
         
         # Get the mask of the domains in idx2 that overlap with the domain in idx1
-        mask = (idx2.chromstr == chrom) & (idx2.start <= end) & (idx2.end >= start)
+        mask = (idx2.chromstr == chrom) & (idx2.start < end) & (idx2.end > start)
         
         # Get the domains in idx2 that overlap with the domain in idx1
         chrom2_overlap = idx2.chromstr[mask]
