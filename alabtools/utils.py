@@ -1752,13 +1752,21 @@ class H5Batcher():
 
 
 def map_indices(idx1: Index, idx2: Index):
-    """ Maps the segmentations from idx1 to idx2.
+    """ Maps the domains in idx1 to the domains in idx2.
+    Two domains are mapped if they overlap, i.e. they share at least one basepair.
+    
+    The mapping is returned as a dictionary of lists, in the form
+        {
+            ('chrom1', start1, end1): [('chrom2', start2, end2), ...],
+            ...
+        }
 
     Args:
-        idx1 (Index)
-        idx2 (Index)
+        idx1 (Index): index to map from
+        idx2 (Index): index to map to
 
     Returns:
+        map (dict): dictionary of lists, mapping the domains in idx1 to the domains in idx2
     """
     
     if not isinstance(idx1, Index) or not isinstance(idx2, Index):
