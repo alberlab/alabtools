@@ -1867,6 +1867,8 @@ def get_index_mappings(idx0: Index, idx1: Index) -> tuple:
     The function only works if the two indices have:
     - the same number of chromosomes
     - the same starting and ending points for each chromosome
+    - no gap regions in the segmentations
+    - regular resolution
     
     Three mappings are returned:
     - cmap: the mapping between the two segmentations, chromosome by chromosome.
