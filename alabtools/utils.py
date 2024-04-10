@@ -748,6 +748,40 @@ class Index(object):
         if len(us) == 1:
             return us[0]
         return None
+    
+    def consecutive(self, required_percent: float = 0.95) -> bool:
+        """ Check if the index is consecutive,
+        i.e. if the end of a region is equal to the start of the next one,
+        up to a certain percentage of the total index length.
+        
+        For example, if the required_percent is 0.95, the function will return
+        True if at least 95% of the regions are consecutive.
+
+        Args:
+            required_percent (float, optional):
+                    The minimum percentage of consecutive regions. Defaults to 0.95.
+
+        Returns:
+            bool: True if the index is consecutive, False otherwise.
+        """
+        
+        # Roll the start array by one position to the left, so that it can be compared to the start array
+        start_rolled = np.roll(self.start, -1)
+        
+        # Roll also the chromstr array, to identify where the chromosome changes
+        chromstr_rolled = np.roll(self.chromstr, -1)
+        mask = chromstr_rolled == self.chromstr
+        
+        # Get the start and end_rolled arrays, only where the chromosome is the same
+        start_masked = start_rolled[mask]
+        end_rolled_masked = self.end[mask]
+        
+        # Calculate the percentage of consecutive regions
+        pconsecutive = np.sum(start_masked == end_rolled_masked) / len(start_masked)
+        
+        # Return True if the percentage is greater than the required percentage, False otherwise
+        return pconsecutive >= required_percent
+
 
     def chrom_to_id(self, c):
         return self._map_chrom_id[c]
@@ -933,40 +967,54 @@ class Index(object):
             index_sorted.add_custom_track(self.custom_tracks[k], custom_track_arrays[k])
         return index_sorted
     
-    def coarsegrain(self, out_res, method='mean'):
+    def coarsegrain(self, out_res, method: str = 'mean'):
         """Coarse-grain the index by resolution.
         Only works if:
             1) the index is haploid,
             2) the index has a regular resolution (i.e. all the regions have the same size),
-            3) the input resolution is larger than the index resolution,
-            4) the input resolution is a multiple of the index resolution.
+            3) the index is consecutive (i.e. the end of a region is equal to the start of the next one),
+            4) the input resolution is larger than the index resolution,
+            5) the input resolution is a multiple of the index resolution.
         Args:
             out_res (int or Index): the output resolution, either as an integer number or as an Index object.
             method (str): the method to use for coarse-graining. Default: 'mean'.
         Returns:
             Index: the coarse-grained index."""
         
-        # Assert input method is implemented
-        assert method in ['mean', 'median'], "The input method is not implemented."
+        # Check that the input method is implemented
+        if method not in ['mean', 'median']:
+            raise ValueError(f"Method {method} not implemented. Choose between 'mean' and 'median'.")
+        
         # Check input index is haploid and regular
-        assert len(self.get_haploid()) == len(self), "The input index is not haploid."
-        in_res = self.resolution()
-        assert in_res is not None, "The input index does not have a regular resolution."
+        if len(self.get_haploid()) != len(self):
+            raise ValueError("The input index is not haploid.")
+        res = self.resolution()
+        if res is None:
+            raise ValueError("The input index does not have a regular resolution.")
+        if not self.consecutive():
+            raise ValueError("The input index is not consecutive.")
         
         # Read the output index
+        # Case 1: out_res is an Index object
         if isinstance(out_res, Index):
-            out_idx = copy.deepcopy(out_res)
+            out_idx = copy.deepcopy(out_res)  # rename to out_idx to avoid confusion
             out_res = out_idx.resolution()
             # Remove custom tracks from the output index
             for k in out_idx.custom_tracks:
                 out_idx.remove_custom_track(k)
+        
+        # Case 2: out_res is an integer number
         elif isinstance(out_res, int):
+            # If the output resolution is the same as the input one, return the input index
+            if out_res == res:
+                return copy.deepcopy(self)
             # Create a new index with the output resolution
             idx = self.genome.bininfo_optimized(out_res)
             # Remove regions that do not overlap with the input index
-            # Get the mapping between the two indices
+            # Get the mapping between the two indices:
+            #       map = { (chrom_out, start_out, end_out): [(chrom_in, start_in, end_in), ...], ...}
             map = map_indices(idx, self)
-            # Find all domains in the map that are not in the hashmap
+            # Find all domains in the output index that do not overlap with the input index
             unmap_doms = []
             for dom in map:
                 if len(map[dom]) == 0:
@@ -983,12 +1031,18 @@ class Index(object):
             raise ValueError("out_res must be an integer number or an Index object.")
         
         # Check output index is haploid and regular
-        assert len(out_idx.get_haploid()) == len(out_idx), "The output index is not haploid."
-        assert out_res is not None, "The output index does not have a regular resolution."
-        # Check if the final resolution is larger than the initial one
-        assert out_res > in_res, "The input resolution is larger than the index resolution."
-        # Check if the final resolution is a multiple of the initial one
-        assert out_res % in_res == 0, "The input resolution is not a multiple of the index resolution."
+        if len(out_idx.get_haploid()) != len(out_idx):
+            raise ValueError("The output index is not haploid.")
+        if out_res is None:
+            raise ValueError("The output index does not have a regular resolution.")
+        if not out_idx.consecutive():
+            raise ValueError("The output index is not consecutive.")
+        
+        # Check that the output resolution is a multiple of the input one
+        if out_res < res:
+            raise ValueError("The input resolution is larger than the output resolution.")
+        if out_res % res != 0:
+            raise ValueError("The input resolution is not a multiple of the output resolution.")
         
         # Get mappings to coarse-grain the signals in the index
         idxmap = map_indices(out_idx, self)
