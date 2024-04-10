@@ -180,6 +180,17 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index_sorted.get_custom_track('x'), x_srt)
         np.testing.assert_array_equal(index_sorted.get_custom_track('y'), y_srt)
     
+    def check_consecutive(self):
+        """ Test the consecutive method in Index."""
+        # Generate an index with consecutive domains
+        genome = Genome('mm10', usechr=('chr1', 'chr2', 'chr3', 'chrX'))
+        chromstr = np.array(['chr1', 'chr1', 'chr1', 'chr2', 'chr2', 'chr3', 'chr3', 'chrX', 'chrX']).astype('U20')
+        start = np.array([0, 130, 200, 0, 51, 11, 144, 0, 51]).astype(int)
+        end = np.array([130, 200, 224, 51, 153, 144, 202, 51, 200]).astype(int)
+        index = Index(chrom=chromstr, start=start, end=end, genome=genome)
+        # Test the results
+        self.assertTrue(index.consecutive())
+    
     def test_coarsegrain(self):
         """Test coarsegrain method in Index."""
         in_res, out_res = 22, 44

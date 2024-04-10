@@ -748,6 +748,40 @@ class Index(object):
         if len(us) == 1:
             return us[0]
         return None
+    
+    def consecutive(self, required_percent: float = 0.95) -> bool:
+        """ Check if the index is consecutive,
+        i.e. if the end of a region is equal to the start of the next one,
+        up to a certain percentage of the total index length.
+        
+        For example, if the required_percent is 0.95, the function will return
+        True if at least 95% of the regions are consecutive.
+
+        Args:
+            required_percent (float, optional):
+                    The minimum percentage of consecutive regions. Defaults to 0.95.
+
+        Returns:
+            bool: True if the index is consecutive, False otherwise.
+        """
+        
+        # Roll the start array by one position to the left, so that it can be compared to the start array
+        start_rolled = np.roll(self.start, -1)
+        
+        # Roll also the chromstr array, to identify where the chromosome changes
+        chromstr_rolled = np.roll(self.chromstr, -1)
+        mask = chromstr_rolled == self.chromstr
+        
+        # Get the start and end_rolled arrays, only where the chromosome is the same
+        start_masked = start_rolled[mask]
+        end_rolled_masked = self.end[mask]
+        
+        # Calculate the percentage of consecutive regions
+        pconsecutive = np.sum(start_masked == end_rolled_masked) / len(start_masked)
+        
+        # Return True if the percentage is greater than the required percentage, False otherwise
+        return pconsecutive >= required_percent
+
 
     def chrom_to_id(self, c):
         return self._map_chrom_id[c]
