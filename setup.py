@@ -76,7 +76,7 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.1.21',
+    version='1.1.21+add_consec',
     author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',
