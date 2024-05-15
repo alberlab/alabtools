@@ -193,7 +193,7 @@ class TestIndex(unittest.TestCase):
     
     def test_coarsegrain(self):
         """Test coarsegrain method in Index."""
-        in_res, out_res = 22, 44
+        in_res, out_res = 10, 20
         # Generate domains
         genome, chromstr, start, end, _, x, y = generate_domains(resolution=in_res)
         # Remove consecutive domains
