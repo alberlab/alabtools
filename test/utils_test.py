@@ -192,7 +192,8 @@ class TestIndex(unittest.TestCase):
         self.assertTrue(index.consecutive())
     
     def test_coarsegrain(self):
-        """Test coarsegrain method in Index."""
+        """Test coarsegrain method in Index.
+        This test should be rewritten to be more easy."""
         in_res, out_res = 10, 20
         # Generate domains
         genome, chromstr, start, end, _, x, y = generate_domains(resolution=in_res)
