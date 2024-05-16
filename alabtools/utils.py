@@ -1008,8 +1008,21 @@ class Index(object):
             # If the output resolution is the same as the input one, return the input index
             if out_res == res:
                 return copy.deepcopy(self)
-            # Create a new index with the output resolution
-            idx = self.genome.bininfo_optimized(out_res)
+            # Create a coarse genome: if an origin is not a multiple of the output resolution,
+            # it is moved to the closest multiple of the output resolution smaller than the original one.
+            # In that case the length is increased to the next multiple of the output resolution,
+            # so that the end of the chromosome is the same as the original one
+            origins, lengths = [], []
+            for origin, length in zip(self.genome.origins, self.genome.lengths):
+                if origin % out_res != 0:
+                    delta = origin % out_res
+                    origin = origin - delta
+                    length = length + delta
+                origins.append(origin)
+                lengths.append(length)
+            genome = Genome(self.genome.assembly, self.genome.chroms, origins, lengths)
+            # Create a new index with the output resolution using the new genome
+            idx = genome.bininfo_optimized(out_res)
             # Remove regions that do not overlap with the input index
             # Get the mapping between the two indices:
             #       map = { (chrom_out, start_out, end_out): [(chrom_in, start_in, end_in), ...], ...}
@@ -1026,7 +1039,7 @@ class Index(object):
                 mask[np.logical_and(idx.chromstr == c, np.logical_and(idx.start == s, idx.end == e))] = False
             chromstr, start, end = idx.chromstr[mask], idx.start[mask], idx.end[mask]
             # Create the output index
-            out_idx = Index(chromstr, start, end, genome=self.genome)
+            out_idx = Index(chromstr, start, end, genome=genome)
         else:
             raise ValueError("out_res must be an integer number or an Index object.")
         
@@ -1825,8 +1838,8 @@ def map_indices(idx1: Index, idx2: Index):
     
     if not isinstance(idx1, Index) or not isinstance(idx2, Index):
         raise TypeError("The input indices must be Index objects.")
-    if not idx1.genome == idx2.genome:
-        raise ValueError("The input indices must have the same genome.")
+    if not idx1.genome.assembly == idx2.genome.assembly:
+        raise ValueError("The input indices must have the same assemb;y.")
     
     # Initialize the mappings dictionary
     map = {}
