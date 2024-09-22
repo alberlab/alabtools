@@ -12,5 +12,4 @@ from .utils import Genome, Index, standardize_chromosomes
 from .analysis import HssFile
 from . import plots, analysis
 
-from . import imaging
 from . import parallel
