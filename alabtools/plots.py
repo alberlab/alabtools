@@ -387,12 +387,13 @@ def write_pdb(filename, data):
         assert k in required_keys + optional_keys, 'Data contains an invalid key: {}'.format(k)
         assert len(data[k]) == npoints, 'Data key {} has the wrong length'.format(k)
     
+    atom_ID = 1
     for i in range(npoints):
         
         x, y, z, atom_name, alternate_location_indicator, residue_name, chain_id, residue_number, insertion_code, occupancy, beta, element_symbol, charge = unpack_pdb(data, i)
         
         print('{:6s}{:5d} {:^4s}{:1s}{:3s} {:1s}{:4d}{:1s}   {:8.3f}{:8.3f}{:8.3f}{:6.2f}{:6.2f}          {:2s}{:2s}'.format('ATOM',  # ATOM identifier
-                                                                                                                             i+1,  # Atom serial number (int, 5 digits)
+                                                                                                                             atom_ID,  # Atom serial number (int, 5 digits)
                                                                                                                              atom_name,
                                                                                                                              alternate_location_indicator,
                                                                                                                              residue_name,
@@ -405,6 +406,14 @@ def write_pdb(filename, data):
                                                                                                                              element_symbol,
                                                                                                                              charge),
               file=pdb)
+        
+        # Increase the atom ID
+        atom_ID += 1
+        # If the atom ID reaches 100000, reset it to 1
+        # (only 5 digits are allowed in the PDB format)
+        if atom_ID == 100000:
+            atom_ID = 1
+    
     return pdb
 
 def unpack_pdb(data, i):
