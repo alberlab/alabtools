@@ -1581,13 +1581,19 @@ def natural_sort(l):
     return sorted(l, key=alphanum_key)
 
 
-def get_index_from_set(domain_set: set, assembly: str):
+def get_index_from_set(domain_set: set, assembly: str, extra_cols: list = [], extra_types: list = []) -> Index:
     """Get an Index object from a set of unique, non-orderd domains.
 
     Args:
         domain_set (list, set, array): set of unordered unique domains,
                 where each domain is a tuple (chromosome, start, end, geneID [optional]).
         assembly (str or Genome): genome assembly or Genome object.
+        extra_cols (list, optional): if the domains have more than 3 columns,
+            this list specifies the names of the extra columns to be added as custom tracks.
+            If not provided, the default will be ['track1', 'track2', ...].
+        extra_types (list, optional): if the domains have more than 3 columns,
+            this list specifies the data types of the extra columns.
+            If not provided, the default will be [str, str, ...].
 
     Returns:
         Index: Index object with the domains in the input set.
@@ -1623,10 +1629,27 @@ def get_index_from_set(domain_set: set, assembly: str):
     # Create the Index object
     index = Index(chrom=chromstr, start=start, end=end, genome=genome)
     
-    # If there is a 4th column in the domains, add it as a custom track
-    if domains.shape[1] > 3:
-        gene_labels = domains[:, 3].astype(str)
-        index.add_custom_track('gene_labels', gene_labels)
+    # If there are no extra columns, return the index
+    if domains.shape[1] == 3:
+        return index
+    
+    # Otherwise, we have to add the extra columns as custom tracks. Their number is nextra
+    nextra = domains.shape[1] - 3
+    # If 'extra_cols' is not provided, create a default one
+    if not extra_cols:
+        extra_cols = [f'track{i+1}' for i in range(nextra)]
+    # Check that the number of extra columns matches the number of columns in the domains
+    if len(extra_cols) != nextra:
+        raise ValueError(f"The number of extra columns ({len(extra_cols)}) does not match the number of extra columns in the domains ({nextra}).")
+    # If 'extra_types' is not provided, create a default one
+    if not extra_types:
+        extra_types = [str] * nextra
+    # Check that the number of extra types matches the number of columns in the domains
+    if len(extra_types) != nextra:
+        raise ValueError(f"The number of extra types ({len(extra_types)}) does not match the number of extra columns in the domains ({nextra}).")
+    # Add the extra columns as custom tracks
+    for i, (col, dtype) in enumerate(zip(extra_cols, extra_types)):
+        index.add_custom_track(col, domains[:, 3 + i].astype(dtype))
     
     return index
 

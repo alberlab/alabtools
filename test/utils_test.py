@@ -273,7 +273,7 @@ class TestIndex(unittest.TestCase):
         random.shuffle(domain_set)
         domain_set = set(domain_set)
         # Create the index
-        index = get_index_from_set(domain_set, assembly=genome.assembly)
+        index = get_index_from_set(domain_set, assembly=genome.assembly, extra_cols=['gene_labels'], extra_types=[str])
         # Test the results
         np.testing.assert_array_equal(index.chromstr, chromstr)
         np.testing.assert_array_equal(index.start, start)
