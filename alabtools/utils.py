@@ -842,7 +842,7 @@ class Index(object):
         '''
         return pd.unique(self.chromstr)
     
-    def get_index_hashmap(self) -> dict:
+    def get_index_hashmap(self, extra_cols: list = []) -> dict:
         """ Creates a dictionary that maps a domain
         (chr, start, end) to its position in the index,
         e.g. for a diplod index:
@@ -851,19 +851,44 @@ class Index(object):
                 ('chr1', 1000, 2000): [1, 10001],
                 ...
             }
+        
+        If `extra_cols` is provided, data from other columns will be added
+        in the definition of a domain. For example, if extra_cols=['gene_labels'],
+        the domain will be defined as:
+            ('chr1', 0, 1000, 'geneA')
+        Of course, the cols in extra cols must be present in the Index.
 
         Returns:
-            hashmap (dict): A dictionary that maps a domain (chr, start, end)
+            hashmap (dict): A dictionary that maps a domain (chr, start, end, [extra_vals...])
                             to its positions (list of int) in the index.
         """
+        
+        # Read the extra tracks if provided
+        extra_tracks = []
+        for col in extra_cols:
+            if not hasattr(self, col):
+                raise KeyError(f"Custom track '{col}' not found in the Index.")
+            extra_tracks.append(self.get_custom_track(col))
+        
+        # Initialize the hashmap as an empty dictionary
         hashmap = {}
-        for i, dom in enumerate(zip(self.chromstr,
-                                    self.start,
-                                    self.end)):
+        # Loop through all loci in the Index
+        for i in range(len(self)):
+            
+            # Define the standard domain as a tuple of (chrom, start, end)
+            dom = (self.chromstr[i], self.start[i], self.end[i])
+            
+            # Add extra columns to the domain definition
+            if extra_tracks:
+                extra_values = tuple(track[i] for track in extra_tracks)
+                dom += extra_values
+            
+            # Add the index position to the hashmap
             if dom not in hashmap:
                 hashmap[dom] = [i]
             else:
                 hashmap[dom].append(i)
+        
         return hashmap
 
     def __getitem__(self, key):
@@ -1556,13 +1581,19 @@ def natural_sort(l):
     return sorted(l, key=alphanum_key)
 
 
-def get_index_from_set(domain_set: set, assembly: str):
+def get_index_from_set(domain_set: set, assembly: str, extra_cols: list = [], extra_types: list = []) -> Index:
     """Get an Index object from a set of unique, non-orderd domains.
 
     Args:
         domain_set (list, set, array): set of unordered unique domains,
                 where each domain is a tuple (chromosome, start, end, geneID [optional]).
         assembly (str or Genome): genome assembly or Genome object.
+        extra_cols (list, optional): if the domains have more than 3 columns,
+            this list specifies the names of the extra columns to be added as custom tracks.
+            If not provided, the default will be ['track1', 'track2', ...].
+        extra_types (list, optional): if the domains have more than 3 columns,
+            this list specifies the data types of the extra columns.
+            If not provided, the default will be [str, str, ...].
 
     Returns:
         Index: Index object with the domains in the input set.
@@ -1598,10 +1629,27 @@ def get_index_from_set(domain_set: set, assembly: str):
     # Create the Index object
     index = Index(chrom=chromstr, start=start, end=end, genome=genome)
     
-    # If there is a 4th column in the domains, add it as a custom track
-    if domains.shape[1] > 3:
-        gene_labels = domains[:, 3].astype(str)
-        index.add_custom_track('gene_labels', gene_labels)
+    # If there are no extra columns, return the index
+    if domains.shape[1] == 3:
+        return index
+    
+    # Otherwise, we have to add the extra columns as custom tracks. Their number is nextra
+    nextra = domains.shape[1] - 3
+    # If 'extra_cols' is not provided, create a default one
+    if not extra_cols:
+        extra_cols = [f'track{i+1}' for i in range(nextra)]
+    # Check that the number of extra columns matches the number of columns in the domains
+    if len(extra_cols) != nextra:
+        raise ValueError(f"The number of extra columns ({len(extra_cols)}) does not match the number of extra columns in the domains ({nextra}).")
+    # If 'extra_types' is not provided, create a default one
+    if not extra_types:
+        extra_types = [str] * nextra
+    # Check that the number of extra types matches the number of columns in the domains
+    if len(extra_types) != nextra:
+        raise ValueError(f"The number of extra types ({len(extra_types)}) does not match the number of extra columns in the domains ({nextra}).")
+    # Add the extra columns as custom tracks
+    for i, (col, dtype) in enumerate(zip(extra_cols, extra_types)):
+        index.add_custom_track(col, domains[:, 3 + i].astype(dtype))
     
     return index
 
