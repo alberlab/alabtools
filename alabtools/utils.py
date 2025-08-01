@@ -1556,12 +1556,12 @@ def natural_sort(l):
     return sorted(l, key=alphanum_key)
 
 
-def get_index_from_set(domain_set, assembly):
+def get_index_from_set(domain_set: set, assembly: str):
     """Get an Index object from a set of unique, non-orderd domains.
 
     Args:
         domain_set (list, set, array): set of unordered unique domains,
-                where each domain is a tuple (chromosome, start, end).
+                where each domain is a tuple (chromosome, start, end, geneID [optional]).
         assembly (str or Genome): genome assembly or Genome object.
 
     Returns:
@@ -1569,7 +1569,10 @@ def get_index_from_set(domain_set, assembly):
     """
 
     # Get the domains as sorted numpy arrays
-    chromstr, start, end = domain_set_to_sorted_numpy(domain_set)
+    domains = domain_set_to_sorted_numpy(domain_set)
+    chromstr = domains[:, 0].astype(CHROMS_DTYPE)
+    start = domains[:, 1].astype(START_DTYPE)
+    end = domains[:, 2].astype(END_DTYPE)
     
     # If assembly is a string, get the Genome object
     if isinstance(assembly, str):
@@ -1595,45 +1598,46 @@ def get_index_from_set(domain_set, assembly):
     # Create the Index object
     index = Index(chrom=chromstr, start=start, end=end, genome=genome)
     
+    # If there is a 4th column in the domains, add it as a custom track
+    if domains.shape[1] > 3:
+        gene_labels = domains[:, 3].astype(str)
+        index.add_custom_track('gene_labels', gene_labels)
+    
     return index
 
-def domain_set_to_sorted_numpy(domains_set):
+def domain_set_to_sorted_numpy(domains_set: set) -> np.array:
     """Convert a set of domains to a sorted numpy array.
     
     The array is sorted naturally: by chromosome number and, within each chromosome, by start position.
+    
+    The input domains_set is a set of tuples, where each tuple is a domain.
+    The length of the tuples can vary, but the first three elements must be chromosome, start, and end.
 
     Args:
         domains_set (set, list or np.array): set of unordered unique domains,
-                        where each domain is a tuple (chromosome, start, end).
+                    where each domain is a tuple (chromosome, start, end, ...)
+                        
 
     Returns:
-        chromstr (np.array of CHROMS_DTYPE): array of chromosome strings
-        start (np.array of START_DTYPE): array of start positions
-        end (np.array of END_DTYPE): array of end positions
+        domains (np.array): sorted numpy array of domains, of shape (ndomains, ncols),
     """
     
     # Convert the domains from a set to a numpy array
     domains = np.array(list(domains_set))
     
     # Sort by chromosome
-    chromstr, start, end = domains.T
+    chromstr = domains[:, 0]  # Extract the chromosome strings
     chromint = chromstr_to_chromint(chromstr)  # Convert the chromosome strings to integers
     domains = domains[np.argsort(chromint)]  # Sort the domains by chromint
     
     # Sort by start position within each chromosome
-    chromstr, start, end = domains.T
-    start = start.astype(int)  # cast to int to avoid problems with sorting
+    chromstr = domains[:, 0]  # Extract again the (sorted) chromosome strings
+    start = domains[:, 1].astype(int)  # Extract the start positions
     for c in np.unique(chromstr):
         idx = chromstr == c
         domains[idx] = domains[idx][np.argsort(start[idx])]
     
-    # convert the domains to numpy arrays
-    chromstr, start, end = domains.T
-    chromstr = chromstr.astype(CHROMS_DTYPE)
-    start = start.astype(START_DTYPE)
-    end = end.astype(END_DTYPE)
-    
-    return chromstr, start, end
+    return domains
 
 
 def get_index_from_bed(
