@@ -151,10 +151,17 @@ class TestIndex(unittest.TestCase):
     def test_get_index_hashmap(self):
         """Test get_index_hashmap method in Index."""
         res = 22
+        # Generate the domains
         genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
+        # Generate random gene_labels
+        gene_labels = np.array(['gene' + str(i) for i in range(len(chromstr))])
         index = Index(chrom=chromstr, start=start, end=end, genome=genome)
-        hashmap = index.get_index_hashmap()
-        for i, dom in enumerate(zip(chromstr, start, end)):
+        # Add gene_labels as a custom track
+        index.add_custom_track('gene_labels', gene_labels)
+        # Get the index hashmap
+        hashmap = index.get_index_hashmap(extra_cols=['gene_labels'])
+        # Test the results
+        for i, dom in enumerate(zip(chromstr, start, end, gene_labels)):
             self.assertEqual(hashmap[dom], [i])
     
     def test_sort_by_chromosome(self):
