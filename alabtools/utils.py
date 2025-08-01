@@ -842,7 +842,7 @@ class Index(object):
         '''
         return pd.unique(self.chromstr)
     
-    def get_index_hashmap(self) -> dict:
+    def get_index_hashmap(self, extra_cols: list = []) -> dict:
         """ Creates a dictionary that maps a domain
         (chr, start, end) to its position in the index,
         e.g. for a diplod index:
@@ -851,19 +851,44 @@ class Index(object):
                 ('chr1', 1000, 2000): [1, 10001],
                 ...
             }
+        
+        If `extra_cols` is provided, data from other columns will be added
+        in the definition of a domain. For example, if extra_cols=['gene_labels'],
+        the domain will be defined as:
+            ('chr1', 0, 1000, 'geneA')
+        Of course, the cols in extra cols must be present in the Index.
 
         Returns:
-            hashmap (dict): A dictionary that maps a domain (chr, start, end)
+            hashmap (dict): A dictionary that maps a domain (chr, start, end, [extra_vals...])
                             to its positions (list of int) in the index.
         """
+        
+        # Read the extra tracks if provided
+        extra_tracks = []
+        for col in extra_cols:
+            if not hasattr(self, col):
+                raise KeyError(f"Custom track '{col}' not found in the Index.")
+            extra_tracks.append(self.get_custom_track(col))
+        
+        # Initialize the hashmap as an empty dictionary
         hashmap = {}
-        for i, dom in enumerate(zip(self.chromstr,
-                                    self.start,
-                                    self.end)):
+        # Loop through all loci in the Index
+        for i in range(len(self)):
+            
+            # Define the standard domain as a tuple of (chrom, start, end)
+            dom = (self.chromstr[i], self.start[i], self.end[i])
+            
+            # Add extra columns to the domain definition
+            if extra_tracks:
+                extra_values = tuple(track[i] for track in extra_tracks)
+                dom += extra_values
+            
+            # Add the index position to the hashmap
             if dom not in hashmap:
                 hashmap[dom] = [i]
             else:
                 hashmap[dom].append(i)
+        
         return hashmap
 
     def __getitem__(self, key):
