@@ -255,10 +255,12 @@ class TestIndex(unittest.TestCase):
         # Generate domains
         res = 22
         genome, chromstr, start, end, _, _, _ = generate_domains(resolution=res)
+        # Generate random gene_labels
+        gene_labels = np.array(['gene' + str(i) for i in range(len(chromstr))])
         # Create a domain set from chromstr, start, end
         domain_set = set()
-        for c, s, e in zip(chromstr, start, end):
-            domain_set.add((c, s, e))
+        for c, s, e, geneID in zip(chromstr, start, end, gene_labels):
+            domain_set.add((c, s, e, geneID))
         # Randomly shuffle the domain set
         domain_set = list(domain_set)
         random.shuffle(domain_set)
@@ -269,6 +271,7 @@ class TestIndex(unittest.TestCase):
         np.testing.assert_array_equal(index.chromstr, chromstr)
         np.testing.assert_array_equal(index.start, start)
         np.testing.assert_array_equal(index.end, end)
+        np.testing.assert_array_equal(index.gene_labels, gene_labels)
     
     def test_get_index_from_bed(self):
         """ Test get_index_from_bed function."""
