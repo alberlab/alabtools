@@ -26,7 +26,12 @@ __email__ = "nhua@usc.edu"
 import numpy as np
 import h5py
 from scipy.sparse import coo_matrix, csr_matrix, dia_matrix, isspmatrix_csr, SparseEfficiencyWarning, triu
-from scipy.sparse.sputils import isshape
+try:
+    # older SciPy
+    from scipy.sparse.sputils import isshape
+except Exception:
+    # newer SciPy
+    from scipy.sparse._sputils import isshape
 from scipy.sparse._sparsetools import coo_tocsr
 from .utils import H5Batcher
 import warnings
