@@ -49,23 +49,8 @@ extensions = [
               swig_opts=['-c++'],
               language="c++",
               include_dirs=[numpy_include]+std_include,
-              extra_compile_args=["-fopenmp"],
-              extra_link_args=["-fopenmp"]
              )
 ]
-
-if '--no-geotools' not in sys.argv:
-    extensions.append(
-        Extension("alabtools._geotools", ["alabtools/geotools/geotools.i", "alabtools/geotools/geotools.cpp"],
-                  swig_opts=['-c++'],
-                  language="c++",
-                  include_dirs=[numpy_include]+std_include,
-                  library_dirs = std_library,
-                  libraries=["CGAL", "mpfr", "gmp"],
-                  extra_compile_args=["-fopenmp"],
-                  extra_link_args=["-fopenmp"]
-                  )
-    )
 
 clscripts = [
     'bin/triplets-compact',
