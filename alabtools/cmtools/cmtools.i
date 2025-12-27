@@ -35,31 +35,5 @@ void TopmeanSummaryMatrix_func(int * Ap, int AP_size,
     TopmeanSummaryMatrix(Ap, Aj, Ax, DimA, DimB, mapping, Bi, Bj, Bx);
 }
 
-void BuildContactMap_func(float * coordinates, int nbead, int nstruct, int dims,
-                          float * radii, int radii_size,
-                          float contactRange,
-                          int * Bi, int Bi_size,
-                          int * Bj, int Bj_size,
-                          float * Bx, int Bx_size)
-{
-    BuildContactMap(coordinates, nbead, nstruct, radii, contactRange, nbead, Bi, Bj, Bx);
-}
-
-void CalculatePixelConfidence(float * matrix, int row, int col,
-                              float * confidence, int outi1, int outj1,
-                              float * expected, int outi2, int outj2)
-{
-    PixelConfidence(matrix, row, col, confidence, expected);
-}
-
-void CalculateTomogramsFromStructure(float * coordinates, int row, int col,
-                                     float * radii, int radii_size, float * values, int values_size,
-                                     float radialExpansion, float sratio,
-                                     float * Tomogram, int DimA, int DimB, int DimC)
-{
-    TomogramsFromStructure(coordinates, row,
-                           radii, values, radialExpansion, sratio,
-                           Tomogram, DimA, DimB, DimC);
-}
 
 %}
