@@ -44,7 +44,11 @@ extras_require = {
 }
 
 extensions = [
-    Extension("alabtools.numutils", ["alabtools/numutils.pyx"]),
+    Extension(
+        "alabtools.numutils",
+        ["alabtools/numutils.pyx"],
+        extra_compile_args=["-std=gnu99"],
+    ),
     Extension("alabtools._cmtools", ["alabtools/cmtools/cmtools.i", "alabtools/cmtools/cmtools.cpp"],
               swig_opts=['-c++'],
               language="c++",
