@@ -25,12 +25,10 @@ install_requires = [
     'pandas>=2.0',
     'h5py>=3.8',
     'matplotlib>=3.7',
-    'tqdm',
+    'ipyparallel>=8.0',
+    'tqdm>=4.60',
     'six>=1.16',
-    'alphashape>=1.3.1',
-    'trimesh>=3.21.5',
     'cooler>=0.8.11',
-    'mrcfile>=1.4.3',
     'pyBigWig>=0.3.22',
 ]
 tests_require = [
