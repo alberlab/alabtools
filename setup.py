@@ -18,15 +18,15 @@ except AttributeError:
 
 
 cmdclass = {}
+python_requires = '>=3.11'
 install_requires = [
-    'numpy>=1.9',
-    'scipy>=0.16',
-    'pandas>=0.17',
-    'h5py>=2.5',
-    'matplotlib>=1.5',
-    'Cython>=0.25',
+    'numpy>=1.23,<3',
+    'scipy>=1.10',
+    'pandas>=2.0',
+    'h5py>=3.8',
+    'matplotlib>=3.7',
     'tqdm',
-    'six',
+    'six>=1.16',
     'alphashape>=1.3.1',
     'trimesh>=3.21.5',
     'cooler>=0.8.11',
