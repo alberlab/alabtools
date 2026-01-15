@@ -33,7 +33,7 @@ conda install -c conda-forge \
     -y
 ```
 
-Then install another set of packages with pip. These are field-specific packages:
+Then install another set of packages with pip:
 ```bash
 pip install cooler pyBigWig
 ```
