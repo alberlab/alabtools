@@ -18,19 +18,17 @@ except AttributeError:
 
 
 cmdclass = {}
+python_requires = '>=3.11'
 install_requires = [
-    'numpy>=1.9',
-    'scipy>=0.16',
-    'pandas>=0.17',
-    'h5py>=2.5',
-    'matplotlib>=1.5',
-    'Cython>=0.25',
-    'tqdm',
-    'six',
-    'alphashape>=1.3.1',
-    'trimesh>=3.21.5',
+    'numpy>=1.23,<3',
+    'scipy>=1.10',
+    'pandas>=2.0',
+    'h5py>=3.8',
+    'matplotlib>=3.7',
+    'ipyparallel>=8.0',
+    'tqdm>=4.60',
+    'six>=1.16',
     'cooler>=0.8.11',
-    'mrcfile>=1.4.3',
     'pyBigWig>=0.3.22',
 ]
 tests_require = [
@@ -44,7 +42,11 @@ extras_require = {
 }
 
 extensions = [
-    Extension("alabtools.numutils", ["alabtools/numutils.pyx"]),
+    Extension(
+        "alabtools.numutils",
+        ["alabtools/numutils.pyx"],
+        extra_compile_args=["-std=gnu99"],
+    ),
     Extension("alabtools._cmtools", ["alabtools/cmtools/cmtools.i", "alabtools/cmtools/cmtools.cpp"],
               swig_opts=['-c++'],
               language="c++",
@@ -61,7 +63,7 @@ clscripts = [
 cmdclass.update({'build_ext': build_ext})
 setup(
     name='alabtools',
-    version='1.1.28',
+    version='1.1.29',
     author='Nan Hua, Francesco Musella',
     author_email='nhua@usc.edu',
     url='https://github.com/alberlab/alabtools',
