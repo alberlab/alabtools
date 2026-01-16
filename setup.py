@@ -72,6 +72,7 @@ setup(
     # packages=['alabtools'],  # old way, replaced by find_packages()
     packages=find_packages(),
     package_data={'alabtools': ['genomes/*', 'config/*']},
+    python_requires=python_requires,
     install_requires=install_requires,
     # tests_require=tests_require,
     # extras_require=extras_require,
