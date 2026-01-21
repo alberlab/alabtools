@@ -8,7 +8,6 @@ import sys
 
 # Add include and library directories from conda envs for swig.
 std_include = [sys.prefix + '/include', sys.prefix + '/Library/include']
-std_library = [sys.prefix + '/lib', sys.prefix + '/Library/lib']
 
 # Obtain the numpy include directory.  This logic works across numpy versions.
 try:
