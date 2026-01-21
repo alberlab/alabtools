@@ -20,7 +20,7 @@ except AttributeError:
 cmdclass = {}
 python_requires = '>=3.11'
 install_requires = [
-    'numpy>=1.23,<3',
+    'numpy>=1.23,<2.4',
     'scipy>=1.10',
     'pandas>=2.0',
     'h5py>=3.8',
