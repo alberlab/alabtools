@@ -1762,13 +1762,14 @@ def get_index_from_bed(
     return index
 
 
-def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
+def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y'), nBins=1):
     """ Create an Index object from a BigWig file.
     Args:
         file (str): path to the BigWig file.
         genome (str or Genome or None): genome assembly or Genome object. If None, the genome is inferred from the BigWig file.
         res (int or Index): resolution of the index, either as an integer number or as an Index object.
         usechr (list): list of chromosomes to use.
+        nBins (int): number of bins to use when computing the mean signal from the BigWig file. Default: 1.
     Returns:
         idx (Index): Index object with the signal from the BigWig file added as a custom track at the given resolution. """
     # Check that the input file is valid
@@ -1804,9 +1805,15 @@ def get_index_from_bigwig(file, genome, res, usechr=('#', 'X', 'Y')):
     # Get the signal from the BigWig file
     x = []
     for c, s, e in zip(idx.chromstr, idx.start, idx.end):
-        x.append(bw.stats(c, s, e, type='mean'))
+        vals = bw.stats(c, s, e, type='mean', nBins=nBins)
+        # Remove NaN and None values
+        vals = [v for v in vals if v is not None and not np.isnan(v)]
+        # Append to x, using np.nan if there are no values
+        if len(vals) == 0:
+            x.append(np.nan)
+        else:
+            x.append(np.mean(vals))
     x = np.array(x).astype(float).flatten()
-    x[x is None] = np.nan
     # Add the signal to the index
     idx.add_custom_track('track0', x)
     return idx
