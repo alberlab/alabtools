@@ -1845,10 +1845,11 @@ DEFAULT_NUCLEAR_VOLUME = _ftpi * (5000 ** 3)
 
 
 def compute_radii(index, occupancy=0.2, volume=DEFAULT_NUCLEAR_VOLUME):
-    sizes = [b.end - b.start for b in index]
-    totsize = sum(sizes)
-    prefactor = volume * occupancy / (_ftpi * totsize)
-    rr = [(prefactor * sz) ** (1. / 3.) for sz in sizes]
+    # Cast before subtraction as well as summation to avoid int32 overflow.
+    beads_bp = index.end.astype(np.int64) - index.start.astype(np.int64)
+    genome_bp = beads_bp.sum(dtype=np.int64)
+    prefactor = volume * occupancy / (_ftpi * genome_bp)
+    rr = [(prefactor * sz) ** (1. / 3.) for sz in beads_bp]
     return np.array(rr, dtype=RADII_DTYPE)
 
 
