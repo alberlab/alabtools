@@ -129,7 +129,7 @@ def bnewt(A, mask=[], tol = 1e-5, delta_lower = 0.1, delta_upper = 3, fl = 0, ch
         #update inner iteration stopping criterion
         rat      = rout/rold
         rold     = rout
-        res_norm = math.sqrt(rout)
+        res_norm = math.sqrt(rout.item())
         eta_o    = eta
         eta      = g*rat
     
