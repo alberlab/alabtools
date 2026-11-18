@@ -45,6 +45,11 @@ Then install another set of packages with pip:
 pip install cooler pyBigWig
 ```
 
+For optional triplet analysis with NumPy 2.4, also install a compatible Numba version:
+```bash
+pip install "numba>=0.64"
+```
+
 Finally, install the alabtools package:
 ```bash
 pip install git+https://github.com/alberlab/alabtools.git
