@@ -22,7 +22,7 @@ conda activate alab
 Then, install the following packages with conda forge:
 ```bash
 conda install -c conda-forge \
-    numpy<2.4 \
+    "numpy>=1.23,<2.5" \
     scipy \
     pandas \
     h5py \
@@ -37,12 +37,17 @@ conda install -c conda-forge \
     -y
 ```
 
-NOTE 1: The numpy version must be less than 2.4, otherwise some scripts will raise errors.
+NOTE 1: NumPy 2.4 is supported. Install NumPy >= 1.23 and < 2.5.
 NOTE 2: If you're having touble installing these packages simultaneously, try installing them one by one or in smaller batches. 
 
 Then install another set of packages with pip:
 ```bash
 pip install cooler pyBigWig
+```
+
+For optional triplet analysis with NumPy 2.4, also install a compatible Numba version:
+```bash
+pip install "numba>=0.64"
 ```
 
 Finally, install the alabtools package:
