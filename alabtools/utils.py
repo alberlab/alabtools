@@ -742,7 +742,7 @@ class Index(object):
         '''
         sizes = self.end - self.start
         last_beads = np.array([self.offset[i] - 1 for i in range(1, len(self.offset))])
-        mask = np.ones(len(self), np.bool)
+        mask = np.ones(len(self), np.bool_)
         mask[last_beads] = False
         us = np.unique(sizes[mask])
         if len(us) == 1:
